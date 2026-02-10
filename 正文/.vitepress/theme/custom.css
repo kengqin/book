@@ -1,0 +1,49 @@
+/* 小说阅读样式优化 */
+
+/* 正文内容区域 */
+.vp-doc {
+  font-size: 17px;
+  line-height: 2;
+}
+
+/* 限制内容最大宽度，居中显示 */
+.vp-doc .container .content {
+  max-width: 750px;
+  margin: 0 auto;
+}
+
+/* 段落样式 */
+.vp-doc p {
+  text-indent: 2em;
+  margin: 0.8em 0;
+}
+
+/* 章节标题居中 */
+.vp-doc h1 {
+  text-align: center;
+  font-size: 1.6em;
+  margin-bottom: 1.5em;
+  border-bottom: none;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .vp-doc {
+    font-size: 16px;
+    line-height: 1.9;
+  }
+
+  .vp-doc p {
+    margin: 0.6em 0;
+  }
+}
+
+/* 首页样式微调 */
+.VPHero .text {
+  font-size: 2.5em !important;
+}
+
+/* 侧边栏章节列表优化 */
+.VPSidebarItem .text {
+  font-size: 14px;
+}

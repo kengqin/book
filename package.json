@@ -1,0 +1,25 @@
+{
+  "name": "book",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "docs:dev": "vitepress dev 正文",
+    "docs:build": "vitepress build 正文",
+    "docs:preview": "vitepress preview 正文"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kengqin/eternal-path.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kengqin/eternal-path/issues"
+  },
+  "homepage": "https://github.com/kengqin/eternal-path#readme",
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}
