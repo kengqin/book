@@ -4,7 +4,7 @@ export default defineConfig({
   title: '永恒道途',
   description: '修仙小说《永恒道途》在线阅读',
   lang: 'zh-CN',
-  base: '/eternal-path/',
+  base: '/book/',
 
   themeConfig: {
     nav: [
@@ -43,7 +43,7 @@ export default defineConfig({
     outline: false,
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/kengqin/eternal-path' }
+      { icon: 'github', link: 'https://github.com/kengqin/book' }
     ],
 
     search: {
