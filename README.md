@@ -51,7 +51,7 @@ npm run docs:preview
 2. 将 **Source** 设置为 **GitHub Actions**
 3. 推送代码到 `main` 分支，等待 Actions 运行完成
 
-部署完成后，站点地址为：`https://kengqin.github.io/eternal-path/`
+部署完成后，站点地址为：`https://kengqin.github.io/book/`
 
 ## 添加新章节
 

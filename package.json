@@ -10,15 +10,15 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kengqin/eternal-path.git"
+    "url": "git+https://github.com/kengqin/book.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/kengqin/eternal-path/issues"
+    "url": "https://github.com/kengqin/book/issues"
   },
-  "homepage": "https://github.com/kengqin/eternal-path#readme",
+  "homepage": "https://github.com/kengqin/book#readme",
   "devDependencies": {
     "vitepress": "^1.6.4"
   }

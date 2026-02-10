@@ -11,7 +11,7 @@ hero:
       link: /第一卷-青云初啼/第一章-寒门少年
     - theme: alt
       text: GitHub
-      link: https://github.com/kengqin/eternal-path
+      link: https://github.com/kengqin/book
 
 features:
   - title: 第一卷 · 青云初啼
