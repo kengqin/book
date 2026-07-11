@@ -7,7 +7,8 @@
     "content:jianlai": "node scripts/split-jianlai.mjs",
     "docs:dev": "vitepress dev 正文",
     "docs:build": "vitepress build 正文",
-    "docs:preview": "vitepress preview 正文"
+    "docs:preview": "vitepress preview 正文",
+    "docs:publish": "npm run docs:build && gh-pages -d \"正文/.vitepress/dist\" -b gh-pages --dotfiles"
   },
   "repository": {
     "type": "git",
@@ -21,6 +22,7 @@
   },
   "homepage": "https://github.com/kengqin/book#readme",
   "devDependencies": {
+    "gh-pages": "^6.3.0",
     "vitepress": "^1.6.4"
   },
   "dependencies": {
