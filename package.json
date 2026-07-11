@@ -21,5 +21,8 @@
   "homepage": "https://github.com/kengqin/book#readme",
   "devDependencies": {
     "vitepress": "^1.6.4"
+  },
+  "dependencies": {
+    "lucide-vue-next": "^0.577.0"
   }
 }
