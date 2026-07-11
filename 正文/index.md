@@ -8,12 +8,12 @@ hero:
   actions:
     - theme: brand
       text: 开始阅读
-      link: /第一卷-青云初啼/第一章-寒门少年
+      link: /第一卷-山门有路/第一章-根浅而韧
     - theme: alt
       text: GitHub
       link: https://github.com/kengqin/book
 
 features:
-  - title: 第一卷 · 青云初啼
+  - title: 第一卷 · 山门有路
     details: 寒门少年陈玄，偶得上古掌天瓶，踏入青云宗修仙之路。
 ---
