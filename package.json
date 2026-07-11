@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "content:jianlai": "node scripts/split-jianlai.mjs",
     "docs:dev": "vitepress dev 正文",
     "docs:build": "vitepress build 正文",
     "docs:preview": "vitepress preview 正文"
