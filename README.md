@@ -1,60 +1,32 @@
-# 永恒道途
+# 在线小说书库
 
-修仙长篇小说《永恒道途》在线阅读站点，基于 [VitePress](https://vitepress.dev/) 构建。
+基于 VitePress 的多书阅读项目。每本书的内容与资料独立存放在 `书库/<书名>/`，平台主题和构建配置保留在 `正文/`。
 
-## 项目结构
+## 目录结构
 
-```
-book/
-├── package.json
-├── .gitignore
-├── .github/workflows/deploy.yml    # GitHub Actions 自动部署
-├── 正文/                            # VitePress 源目录 (srcDir)
-│   ├── index.md                     # 首页
-│   ├── .vitepress/
-│   │   ├── config.mts               # VitePress 配置
-│   │   └── theme/
-│   │       ├── index.ts             # 自定义主题入口
-│   │       └── custom.css           # 小说阅读样式
-│   └── 第一卷-山门有路/
-│       ├── 第一章-根浅而韧.md
-│       ├── 第二章-瓶中一滴春.md
-│       └── ...（当前共21章）
-└── 《永恒道途》*.md                  # 参考文档（不会被发布）
+```text
+书库/
+├── 剑来/
+│   ├── 原文/       # 本地原始留档，不提交 Git
+│   └── 正文/       # 拆分后的发布章节
+└── 永恒道途/
+    ├── 正文/
+    ├── 设定/
+    ├── 参考资料/
+    └── 站点/
+
+正文/               # VitePress 平台配置与公共主题
+scripts/            # 内容整理脚本
 ```
 
-## 本地开发
+## 当前展示
+
+当前站点展示《剑来》本地留档中已整理的章节。《永恒道途》已完整归档，后续可继续重构。
+
+## 常用命令
 
 ```bash
-# 安装依赖
-npm install
-
-# 启动本地开发服务器
+npm run content:jianlai
 npm run docs:dev
-
-# 构建静态站点
 npm run docs:build
-
-# 预览构建产物
-npm run docs:preview
 ```
-
-## 部署
-
-项目通过 GitHub Actions 自动部署到 GitHub Pages。
-
-每次推送到 `main` 分支后会自动触发构建和部署。
-
-### 首次部署设置
-
-1. 进入 GitHub 仓库 **Settings → Pages**
-2. 将 **Source** 设置为 **GitHub Actions**
-3. 推送代码到 `main` 分支，等待 Actions 运行完成
-
-部署完成后，站点地址为：`https://kengqin.github.io/book/`
-
-## 添加新章节
-
-1. 在 `正文/第一卷-山门有路/` 下新建 `.md` 文件，文件名格式如 `第二十一章-标题.md`
-2. 在 `正文/.vitepress/config.mts` 的 `sidebar` 配置中添加对应条目
-3. 推送到 `main` 分支，站点会自动更新
