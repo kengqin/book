@@ -3,16 +3,16 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ArrowLeft, ArrowRight, BookOpen, ChevronDown, LibraryBig, ScrollText } from 'lucide-vue-next'
 import { withBase } from 'vitepress'
 import library from '../../library.generated.json'
-import jianlaiHero from '../../../../书库/剑来/站点/jianlai-hero.jpg'
-import xuezhongHero from '../../../../书库/雪中悍刀行/站点/xuezhong-hero.png'
-import eternalHero from '../../../../书库/永恒道途/站点/eternal-path-hero.jpg'
 
 const props = defineProps<{ bookId: string }>()
 const book = computed(() => library.books.find(item => item.id === props.bookId) ?? library.books[0])
-const images: Record<string, string> = { jianlai: jianlaiHero, xuezhong: xuezhongHero, 'eternal-path': eternalHero }
-const seals: Record<string, string> = { jianlai: '剑', xuezhong: '雪', 'eternal-path': '道' }
-const image = computed(() => images[book.value.id] ?? eternalHero)
-const seal = computed(() => seals[book.value.id] ?? '书')
+const coverModules = import.meta.glob('../../../../书库/*/站点/*.{avif,gif,jpeg,jpg,png,webp}', { eager: true, import: 'default' }) as Record<string, string>
+const image = computed(() => {
+  if (!book.value.cover) return ''
+  const suffix = `/书库/${book.value.slug}/站点/${book.value.cover}`
+  return Object.entries(coverModules).find(([file]) => file.endsWith(suffix))?.[1] ?? ''
+})
+const seal = computed(() => book.value.seal || book.value.title.slice(0, 1) || '书')
 const heroShift = ref(0)
 const catalogue = ref<HTMLElement | null>(null)
 const catalogueVisible = ref(false)
@@ -88,8 +88,8 @@ onBeforeUnmount(() => {
       </div>
       <div class="chapter-list range-list">
         <a v-for="(group, index) in groups" :key="group.group" :href="withBase(group.first.link)" class="chapter-entry" :style="{ '--entry-index': index }">
-          <span class="chapter-entry__index">{{ String(group.first.number).padStart(4, '0') }}</span>
-          <span><small>{{ group.count }} CHAPTERS</small>第 {{ group.first.number }}—{{ group.last.number }} 章</span>
+          <span class="chapter-entry__index">{{ String(group.first.order).padStart(4, '0') }}</span>
+          <span><small>{{ group.count }} CHAPTERS</small>{{ group.first.label }}—{{ group.last.label }}</span>
           <ArrowRight :size="17" />
         </a>
       </div>

@@ -11,7 +11,7 @@ const normalizedQuery = computed(() => query.value.trim().toLowerCase())
 const filteredChapters = computed(() => {
   if (!normalizedQuery.value) return book.value.chapters
   return book.value.chapters.filter(chapter =>
-    String(chapter.number).includes(normalizedQuery.value) || chapter.title.toLowerCase().includes(normalizedQuery.value)
+    chapter.label.toLowerCase().includes(normalizedQuery.value) || chapter.title.toLowerCase().includes(normalizedQuery.value)
   )
 })
 const groups = computed(() => {
@@ -43,10 +43,10 @@ const groups = computed(() => {
 
     <div v-if="groups.length" class="catalogue-groups">
       <section v-for="group in groups" :key="group.group" class="catalogue-group">
-        <h2>第 {{ group.chapters[0].number }}—{{ group.chapters.at(-1)!.number }} 章</h2>
+        <h2>{{ group.chapters[0].label }}—{{ group.chapters.at(-1)!.label }}</h2>
         <div class="catalogue-links">
-          <a v-for="chapter in group.chapters" :key="chapter.number" :href="withBase(chapter.link)">
-            <span>{{ String(chapter.number).padStart(4, '0') }}</span>
+          <a v-for="chapter in group.chapters" :key="chapter.link" :href="withBase(chapter.link)">
+            <span>{{ chapter.label }}</span>
             <strong>{{ chapter.title }}</strong>
             <ArrowRight :size="15" />
           </a>

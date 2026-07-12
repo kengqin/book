@@ -3,29 +3,16 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ArrowRight, BookOpen, HardDrive, LibraryBig, Shuffle } from 'lucide-vue-next'
 import { withBase } from 'vitepress'
 import library from '../../library.generated.json'
-import jianlaiHero from '../../../../书库/剑来/站点/jianlai-hero.jpg'
-import xuezhongHero from '../../../../书库/雪中悍刀行/站点/xuezhong-hero.png'
-import eternalHero from '../../../../书库/永恒道途/站点/eternal-path-hero.jpg'
-
-const images: Record<string, string> = {
-  jianlai: jianlaiHero,
-  xuezhong: xuezhongHero,
-  'eternal-path': eternalHero
-}
-
-const filters = [
-  { id: 'all', label: '全部' },
-  { id: 'reading', label: '阅读中' },
-  { id: 'complete', label: '已完结' },
-  { id: 'original', label: '原创计划' }
-]
+const coverModules = import.meta.glob('../../../../书库/*/站点/*.{avif,gif,jpeg,jpg,png,webp}', { eager: true, import: 'default' }) as Record<string, string>
 const activeFilter = ref('all')
-const filteredBooks = computed(() => library.books.filter(book => {
-  if (activeFilter.value === 'reading') return book.status === '阅读中'
-  if (activeFilter.value === 'complete') return book.status === '全本'
-  if (activeFilter.value === 'original') return book.id === 'eternal-path'
-  return true
-}))
+const filters = computed(() => [{ id: 'all', label: '全部' }, ...[...new Set(library.books.map(book => book.status))].map(status => ({ id: status, label: status }))])
+const filteredBooks = computed(() => activeFilter.value === 'all' ? library.books : library.books.filter(book => book.status === activeFilter.value))
+
+function imageFor(book: typeof library.books[number]) {
+  if (!book.cover) return ''
+  const suffix = `/书库/${book.slug}/站点/${book.cover}`
+  return Object.entries(coverModules).find(([file]) => file.endsWith(suffix))?.[1] ?? ''
+}
 
 function moveCard(event: PointerEvent) {
   const card = event.currentTarget as HTMLElement
@@ -48,6 +35,7 @@ function resetCard(event: PointerEvent) {
 
 function openRandomBook() {
   const pool = filteredBooks.value.length ? filteredBooks.value : library.books
+  if (!pool.length) return
   const book = pool[Math.floor(Math.random() * pool.length)]
   window.location.href = withBase(book.topicLink)
 }
@@ -70,7 +58,7 @@ onBeforeUnmount(() => document.body.classList.remove('is-eternal-home'))
       <p>STORIES · WORLDS · JOURNEYS</p>
       <h1><span>小说</span><strong>书库</strong></h1>
       <span>择一卷，入江湖。为每一个故事，留一扇通往远方的门。</span>
-      <button class="library-hero-cta" type="button" @click="openRandomBook"><Shuffle :size="17" /> 随机进入一本书 <ArrowRight :size="17" /></button>
+      <button class="library-hero-cta" type="button" :disabled="!library.books.length" @click="openRandomBook"><Shuffle :size="17" /> 随机进入一本书 <ArrowRight :size="17" /></button>
     </div>
 
     <div class="library-toolbar">
@@ -85,7 +73,7 @@ onBeforeUnmount(() => document.body.classList.remove('is-eternal-home'))
 
     <TransitionGroup tag="section" name="book-grid" class="book-gallery" aria-label="小说列表">
       <a v-for="(book, index) in filteredBooks" :key="book.id" class="book-tile" :href="withBase(book.topicLink)" :style="{ '--tile-index': index }" @pointermove="moveCard" @pointerleave="resetCard">
-        <div class="book-tile__media" :style="{ backgroundImage: `url(${images[book.id]})` }">
+        <div class="book-tile__media" :style="{ backgroundImage: imageFor(book) ? `url(${imageFor(book)})` : undefined }">
           <div class="book-tile__shade" />
           <div class="book-tile__glow" />
           <span class="book-tile__index">{{ String(index + 1).padStart(2, '0') }}</span>

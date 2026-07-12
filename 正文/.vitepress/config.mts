@@ -14,9 +14,9 @@ for (const book of library.books) {
   for (const [group, chapters] of groups) {
     const routePrefix = `/${book.slug}/正文/${group}/`
     sidebar[routePrefix] = [{
-      text: `${book.title} · 第 ${chapters[0].number}—${chapters.at(-1)!.number} 章`,
+      text: `${book.title} · ${chapters[0].label}—${chapters.at(-1)!.label}`,
       items: chapters.map(chapter => ({
-        text: `第${chapter.number}章 ${chapter.title}`,
+        text: `${chapter.label} ${chapter.title}`,
         link: chapter.link
       }))
     }]
@@ -34,6 +34,7 @@ export default defineConfig({
     '**/原文/**',
     '**/参考资料/**',
     '**/站点/**',
+    '**/book.json',
     '**/README.md',
     '**/AGENTS.md'
   ],
@@ -42,7 +43,7 @@ export default defineConfig({
     nav: [
       { text: '书库', link: '/' },
       { text: '本地书架', link: '/本地书架/' },
-      { text: '永恒道途', link: '/永恒道途/' }
+      ...library.books.map(book => ({ text: book.title, link: book.topicLink }))
     ],
     sidebar,
     outline: false,

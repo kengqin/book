@@ -4,6 +4,8 @@ import path from 'node:path'
 const workspace = path.resolve(import.meta.dirname, '..')
 const libraryRoot = path.join(workspace, '书库')
 const manifestPath = path.join(workspace, '正文', '.vitepress', 'library.generated.json')
+const metadataFilename = 'book.json'
+const chineseNumberPattern = '零〇一二两三四五六七八九十百千万两'
 
 const digits = new Map([
   ['零', 0], ['〇', 0], ['一', 1], ['二', 2], ['两', 2], ['三', 3],
@@ -11,23 +13,8 @@ const digits = new Map([
 ])
 const units = new Map([['十', 10], ['百', 100], ['千', 1000], ['万', 10000]])
 
-const books = [
-  {
-    id: 'jianlai', slug: '剑来', title: '剑来', author: '烽火戏诸侯', status: '阅读中',
-    description: '大千世界，无奇不有。天道崩塌，唯有一剑。'
-  },
-  {
-    id: 'xuezhong', slug: '雪中悍刀行', title: '雪中悍刀行', author: '烽火戏诸侯', status: '全本',
-    description: '庙堂与江湖交错，白马出凉州，一刀走过风雪与人间。'
-  },
-  {
-    id: 'eternal-path', slug: '永恒道途', title: '永恒道途', author: '原创长篇', status: '暂停重构',
-    description: '寒门少年陈玄携掌天瓶踏上仙途，一步一步，走出自己的大道。'
-  }
-]
-
 function chineseNumberToInt(value) {
-  if (/^\d+$/.test(value)) return Number(value)
+  if (/^\d+$/u.test(value)) return Number(value)
   let total = 0
   let section = 0
   let current = 0
@@ -52,33 +39,119 @@ function chineseNumberToInt(value) {
   return total + section + current
 }
 
+function optionalString(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function safeTitle(value) {
   return value.replace(/[<>:"/\\|?*]/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/g, '')
+}
+
+function readBookMetadata(bookRoot, slug) {
+  const file = path.join(bookRoot, metadataFilename)
+  if (!fs.existsSync(file)) {
+    return { id: slug, slug, title: slug, author: '佚名', status: '连载中', category: '其他', description: '', cover: '', seal: slug.slice(0, 1) }
+  }
+
+  let source
+  try {
+    source = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch (error) {
+    throw new Error(`无法读取书籍元数据：${file}（${error instanceof Error ? error.message : 'JSON 格式错误'}）`)
+  }
+  if (!source || Array.isArray(source) || typeof source !== 'object') throw new Error(`书籍元数据必须是对象：${file}`)
+
+  const cover = optionalString(source.cover)
+  if (cover.includes('..') || path.isAbsolute(cover)) throw new Error(`封面路径不允许越出站点目录：${file}`)
+  return {
+    id: optionalString(source.id) || slug,
+    slug,
+    title: optionalString(source.title) || slug,
+    author: optionalString(source.author) || '佚名',
+    status: optionalString(source.status) || '连载中',
+    category: optionalString(source.category) || '其他',
+    description: optionalString(source.description),
+    cover,
+    seal: optionalString(source.seal).slice(0, 1) || slug.slice(0, 1)
+  }
+}
+
+function discoverBooks() {
+  const ids = new Set()
+  return fs.readdirSync(libraryRoot, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => {
+      const bookRoot = path.join(libraryRoot, entry.name)
+      if (!fs.existsSync(path.join(bookRoot, '正文'))) return null
+      const book = readBookMetadata(bookRoot, entry.name)
+      if (ids.has(book.id)) throw new Error(`书籍 id 重复：${book.id}`)
+      ids.add(book.id)
+      return book
+    })
+    .filter(Boolean)
+}
+
+function parseChapterHeading(content, file) {
+  const heading = content.match(/^#\s+(.+?)\s*$/mu)?.[1]?.trim()
+  if (!heading) throw new Error(`缺少一级章节标题：${file}`)
+
+  const separator = '[\\s　:：、，.．—-]+'
+  const numbered = heading.match(new RegExp(`^第\\s*([0-9]+|[${chineseNumberPattern}]+)\\s*([章回节])(?:${separator}(.+))?$`, 'u'))
+  if (numbered) {
+    return {
+      label: `第${numbered[1]}${numbered[2]}`,
+      number: chineseNumberToInt(numbered[1]),
+      title: safeTitle(numbered[3] || `第${numbered[1]}${numbered[2]}`)
+    }
+  }
+
+  const special = heading.match(new RegExp(`^((?:序章|楔子|引子|后记|尾声|大结局)|(?:番外(?:篇)?|收官章|终章)[0-9${chineseNumberPattern}]*)(?:${separator}(.+))?$`, 'u'))
+  if (special) return { label: special[1], number: null, title: safeTitle(special[2] || special[1]) }
+
+  throw new Error(`无法识别章节标题：${file}（当前标题：${heading}）`)
+}
+
+function volumeOrder(group) {
+  const match = group.match(new RegExp(`^第\\s*([0-9]+|[${chineseNumberPattern}]+)\\s*卷`, 'u'))
+  return match ? chineseNumberToInt(match[1]) : Number.MAX_SAFE_INTEGER
+}
+
+function specialOrder(label) {
+  if (/^(序章|楔子|引子)$/u.test(label)) return -1
+  if (/^(番外|后记|尾声|收官章|终章|大结局)/u.test(label)) return 1
+  return 0
+}
+
+function compareChapters(left, right) {
+  const leftVolume = volumeOrder(left.group)
+  const rightVolume = volumeOrder(right.group)
+  if (leftVolume !== rightVolume) return leftVolume - rightVolume
+  if (left.group !== right.group) return left.group.localeCompare(right.group, 'zh-Hans-CN', { numeric: true })
+  const leftSpecial = specialOrder(left.label)
+  const rightSpecial = specialOrder(right.label)
+  if (leftSpecial !== rightSpecial) return leftSpecial - rightSpecial
+  if (left.number !== null && right.number !== null && left.number !== right.number) return left.number - right.number
+  return left.file.localeCompare(right.file, 'zh-Hans-CN', { numeric: true })
 }
 
 function scanChapters(book) {
   const root = path.join(libraryRoot, book.slug, '正文')
   if (!fs.existsSync(root)) return []
 
-  return fs.readdirSync(root, { recursive: true, withFileTypes: true })
+  const files = fs.readdirSync(root, { recursive: true, withFileTypes: true })
     .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
     .map(entry => path.join(entry.parentPath, entry.name))
-    .map(file => {
-      const content = fs.readFileSync(file, 'utf8')
-      const heading = content.match(/^#\s+第([零〇一二两三四五六七八九十百千万\d]+)章\s+(.+)$/m)
-      if (!heading) throw new Error(`无法读取《${book.title}》章节标题：${file}`)
-      const number = chineseNumberToInt(heading[1])
-      const relativeFile = path.relative(root, file).split(path.sep).join('/')
-      return {
-        number,
-        numberText: heading[1],
-        title: safeTitle(heading[2]),
-        group: relativeFile.split('/')[0],
-        file: relativeFile,
-        link: `/${book.slug}/正文/${relativeFile.replace(/\.md$/, '')}`
-      }
-    })
-    .sort((a, b) => a.number - b.number)
+
+  return files.map(file => {
+    const chapter = parseChapterHeading(fs.readFileSync(file, 'utf8'), file)
+    const relativeFile = path.relative(root, file).split(path.sep).join('/')
+    return {
+      ...chapter,
+      group: relativeFile.includes('/') ? relativeFile.split('/')[0] : '正文',
+      file: relativeFile,
+      link: `/${book.slug}/正文/${relativeFile.replace(/\.md$/, '')}`
+    }
+  }).sort(compareChapters).map((chapter, index) => ({ ...chapter, order: index + 1 }))
 }
 
 const bookHome = bookId => `---
@@ -103,7 +176,7 @@ footer: false
 `
 
 export function writeLibraryManifest() {
-  const manifestBooks = books.map(book => {
+  const manifestBooks = discoverBooks().map(book => {
     const chapters = scanChapters(book)
     if (!chapters.length) return null
     const bookRoot = path.join(libraryRoot, book.slug)
@@ -115,7 +188,7 @@ export function writeLibraryManifest() {
       catalogueLink: `/${book.slug}/目录`,
       firstLink: chapters[0].link,
       chapterCount: chapters.length,
-      range: `第 ${chapters[0].number}—${chapters.at(-1).number} 章`,
+      range: `${chapters[0].label}—${chapters.at(-1).label}`,
       chapters
     }
   }).filter(Boolean)

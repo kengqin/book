@@ -571,13 +571,6 @@ body { transition: background-color .35s ease, color .35s ease; }
   transition: color .2s ease, background-color .2s ease, border-color .2s ease;
 }
 .catalogue-all:hover { color: #fff; border-color: var(--eternal-jade); background: var(--eternal-jade); }
-.jianlai-home .volume-seal strong { font-size: 29px; }
-.jianlai-home .eternal-hero__veil { background: linear-gradient(90deg, rgba(20, 25, 24, .63) 0%, rgba(20, 25, 24, .30) 34%, rgba(20, 25, 24, .02) 64%); }
-.xuezhong-home .eternal-hero { background-position: center; }
-.xuezhong-home .eternal-hero__veil { background: linear-gradient(90deg, rgba(17, 24, 28, .74) 0%, rgba(17, 24, 28, .43) 36%, rgba(17, 24, 28, .08) 68%); }
-.xuezhong-home .eternal-kicker { color: #d5b36a; }
-.xuezhong-home .volume-seal { border-color: #8f382e; color: #8f382e; }
-
 /* Long-form reading */
 html[data-reader-palette="light"] { --reader-bg: #f7f8f7; --reader-surface: #fff; --reader-text: #242a2a; --reader-muted: #6c7372; }
 html[data-reader-palette="paper"] { --reader-bg: #e9e5d9; --reader-surface: #f5f1e7; --reader-text: #2f312d; --reader-muted: #746f64; }

@@ -7,7 +7,7 @@ import LocalReader from './LocalReader.vue'
 import ThemeEditor from './ThemeEditor.vue'
 import { clearLibrary, deleteBook, exportLibrary, getAsset, getBook, getBooks, getChapter, getChapters, getLibraryStats, importLibraryBackup, updateBookProgress, updateBookTheme } from './db'
 import { getThemePreset } from './themes'
-import type { LocalBook, LocalChapter, ThemeSettings } from './types'
+import { formatChapterLabel, type LocalBook, type LocalChapter, type ThemeSettings } from './types'
 
 const books = ref<LocalBook[]>([])
 const selectedBook = ref<LocalBook>()
@@ -27,7 +27,7 @@ let toastTimer: ReturnType<typeof setTimeout> | undefined
 const filteredChapters = computed(() => {
   const needle = query.value.trim().toLowerCase()
   if (!needle) return chapters.value
-  return chapters.value.filter(chapter => String(chapter.number).includes(needle) || chapter.title.toLowerCase().includes(needle) || chapter.volume.toLowerCase().includes(needle))
+  return chapters.value.filter(chapter => String(chapter.number).includes(needle) || chapter.originalLabel.toLowerCase().includes(needle) || chapter.title.toLowerCase().includes(needle) || chapter.volume.toLowerCase().includes(needle))
 })
 const chapterGroups = computed(() => {
   const groups = new Map<string, LocalChapter[]>()
@@ -207,7 +207,7 @@ onBeforeUnmount(() => {
     </main>
 
     <main v-else class="local-book-detail"><section class="local-book-hero" :style="{ '--book-accent': selectedBook.theme.accent, '--book-bg': selectedBook.theme.background, '--book-text': selectedBook.theme.text, backgroundColor: selectedBook.theme.background, backgroundImage: coverFor(selectedBook) ? `linear-gradient(rgba(0,0,0,${selectedBook.theme.overlay / 100}),rgba(0,0,0,${selectedBook.theme.overlay / 100})),url(${coverFor(selectedBook)})` : undefined, backgroundPosition: `${selectedBook.theme.positionX}% ${selectedBook.theme.positionY}%` }"><button type="button" class="local-back" @click="showShelf()"><ArrowLeft :size="16" /> 本地书架</button><div><p>LOCAL BOOK · {{ selectedBook.chapterCount }} CHAPTERS</p><h1>{{ selectedBook.title }}</h1><span>{{ selectedBook.author }}</span><blockquote>{{ selectedBook.description || '这本书暂时没有简介。' }}</blockquote><div><button type="button" class="local-button-primary" @click="openChapter(selectedBook.currentChapter)"><BookOpen :size="17" /> {{ selectedBook.progress ? '继续阅读' : '开始阅读' }}</button><button type="button" @click="themeOpen = true"><Palette :size="17" /> 主题配置</button><button type="button" @click="startImport(selectedBook)"><RefreshCw :size="17" /> 重新解析</button><button type="button" @click="removeBook(selectedBook)"><Trash2 :size="17" /> 删除</button></div></div></section>
-      <section class="local-catalogue"><header><div><p>TABLE OF CONTENTS</p><h2>章节目录</h2></div><label><Search :size="17" /><input v-model="query" placeholder="搜索章号、章名或卷名" /><button v-if="query" type="button" @click="query = ''"><X :size="15" /></button></label></header><div v-if="chapterGroups.length" class="local-volume-list"><section v-for="group in chapterGroups" :key="group.name"><h3>{{ group.name }} <span>{{ group.items.length }} 章</span></h3><div><button v-for="chapter in group.items" :key="chapter.id" type="button" @click="openChapter(chapter.number)"><small>{{ String(chapter.number).padStart(4, '0') }}</small><span>{{ chapter.title }}</span><ArrowRight :size="14" /></button></div></section></div><p v-else class="local-no-result">没有找到匹配章节</p></section>
+      <section class="local-catalogue"><header><div><p>TABLE OF CONTENTS</p><h2>章节目录</h2></div><label><Search :size="17" /><input v-model="query" placeholder="搜索章号、章名或卷名" /><button v-if="query" type="button" @click="query = ''"><X :size="15" /></button></label></header><div v-if="chapterGroups.length" class="local-volume-list"><section v-for="group in chapterGroups" :key="group.name"><h3>{{ group.name }} <span>{{ group.items.length }} 章</span></h3><div><button v-for="chapter in group.items" :key="chapter.id" type="button" @click="openChapter(chapter.number)"><small>{{ formatChapterLabel(chapter) }}</small><span>{{ chapter.title }}</span><ArrowRight :size="14" /></button></div></section></div><p v-else class="local-no-result">没有找到匹配章节</p></section>
     </main>
   </div>
 

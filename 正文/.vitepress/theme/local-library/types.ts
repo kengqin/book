@@ -74,6 +74,13 @@ export interface LocalAsset {
   blob: Blob
 }
 
+export function formatChapterLabel(chapter: Pick<ParsedChapter, 'number' | 'originalLabel'>) {
+  const label = chapter.originalLabel.trim()
+  if (/^\d+$/u.test(label)) return `第${Number(label)}章`
+  if (/^[零〇一二两三四五六七八九十百千万两]+$/u.test(label)) return `第${label}章`
+  return label || `第${chapter.number}章`
+}
+
 export interface ParserRequest {
   buffer: ArrayBuffer
   filename: string
