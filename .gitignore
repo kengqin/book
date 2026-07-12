@@ -1,7 +1,10 @@
 node_modules/
 正文/.vitepress/dist/
 正文/.vitepress/cache/
+正文/.vitepress/library.generated.json
 参考资料/原文留档/
 书库/剑来/原文/
+书库/雪中悍刀行/原文/
+书库/雪中悍刀行/正文/
 书库/永恒道途/参考资料/*.txt
 书库/*剑来

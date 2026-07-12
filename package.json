@@ -5,8 +5,10 @@
   "main": "index.js",
   "scripts": {
     "content:jianlai": "node scripts/split-jianlai.mjs",
-    "docs:dev": "vitepress dev 正文",
-    "docs:build": "vitepress build 正文",
+    "content:xuezhong": "node scripts/split-xuezhong.mjs",
+    "content:library": "node scripts/generate-library.mjs",
+    "docs:dev": "npm run content:library && vitepress dev 正文",
+    "docs:build": "npm run content:library && vitepress build 正文",
     "docs:preview": "vitepress preview 正文",
     "docs:publish": "npm run docs:build && gh-pages -d \"正文/.vitepress/dist\" -b gh-pages --dotfiles"
   },
@@ -26,6 +28,7 @@
     "vitepress": "^1.6.4"
   },
   "dependencies": {
+    "idb": "^8.0.3",
     "lucide-vue-next": "^0.577.0"
   }
 }

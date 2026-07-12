@@ -1,12 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { writeLibraryManifest } from './generate-library.mjs'
 
 const workspace = path.resolve(import.meta.dirname, '..')
 const bookDir = path.join(workspace, '书库', '剑来')
 const sourceDir = path.join(bookDir, '原文')
-const docsDir = path.join(workspace, '正文')
 const outputDir = path.join(bookDir, '正文')
-const libraryManifestPath = path.join(docsDir, '.vitepress', 'library.generated.json')
 const dryRun = process.argv.includes('--dry-run')
 
 const sources = [
@@ -204,87 +203,5 @@ const manifest = chapters.map(chapter => {
   }
 })
 
-const groups = [...new Set(manifest.map(chapter => chapter.group))]
-const bookHome = bookId => `---
-layout: page
-sidebar: false
-aside: false
-footer: false
-bookHome: ${bookId}
----
-
-<BookHome book-id="${bookId}" />
-`
-
-const bookCatalogue = bookId => `---
-layout: page
-sidebar: false
-aside: false
-footer: false
----
-
-<BookCatalogue book-id="${bookId}" />
-`
-
-const eternalRoot = path.join(workspace, '书库', '永恒道途')
-const eternalChaptersRoot = path.join(eternalRoot, '正文')
-const eternalFiles = fs.readdirSync(eternalChaptersRoot, { recursive: true, withFileTypes: true })
-  .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
-  .map(entry => path.join(entry.parentPath, entry.name))
-
-const eternalChapters = eternalFiles.map(file => {
-  const content = fs.readFileSync(file, 'utf8')
-  const heading = content.match(/^#\s+第([零〇一二两三四五六七八九十百千万\d]+)章\s+(.+)$/m)
-  if (!heading) throw new Error(`无法读取《永恒道途》章节标题：${file}`)
-  const number = chineseNumberToInt(heading[1])
-  const relativeFile = path.relative(eternalChaptersRoot, file).split(path.sep).join('/')
-  return {
-    number,
-    numberText: heading[1],
-    title: safeTitle(heading[2]),
-    group: relativeFile.split('/')[0],
-    file: relativeFile,
-    link: `/永恒道途/正文/${relativeFile.replace(/\.md$/, '')}`
-  }
-}).sort((a, b) => a.number - b.number)
-
-const library = {
-  books: [
-    {
-      id: 'jianlai',
-      slug: '剑来',
-      title: '剑来',
-      author: '烽火戏诸侯',
-      status: '阅读中',
-      description: '大千世界，无奇不有。天道崩塌，唯有一剑。',
-      topicLink: '/剑来/',
-      catalogueLink: '/剑来/目录',
-      firstLink: manifest[0].link,
-      chapterCount: manifest.length,
-      range: `第 ${first}—${last} 章`,
-      chapters: manifest
-    },
-    {
-      id: 'eternal-path',
-      slug: '永恒道途',
-      title: '永恒道途',
-      author: '原创长篇',
-      status: '暂停重构',
-      description: '寒门少年陈玄携掌天瓶踏上仙途，一步一步，走出自己的大道。',
-      topicLink: '/永恒道途/',
-      catalogueLink: '/永恒道途/目录',
-      firstLink: eternalChapters[0].link,
-      chapterCount: eternalChapters.length,
-      range: `第 ${eternalChapters[0].number}—${eternalChapters.at(-1).number} 章`,
-      chapters: eternalChapters
-    }
-  ]
-}
-
-fs.writeFileSync(path.join(workspace, '书库', 'index.md'), `---\nlayout: page\nsidebar: false\naside: false\nfooter: false\nlibraryHome: true\n---\n\n<LibraryHome />\n`, 'utf8')
-fs.writeFileSync(path.join(bookDir, 'index.md'), bookHome('jianlai'), 'utf8')
-fs.writeFileSync(path.join(bookDir, '目录.md'), bookCatalogue('jianlai'), 'utf8')
-fs.writeFileSync(path.join(eternalRoot, 'index.md'), bookHome('eternal-path'), 'utf8')
-fs.writeFileSync(path.join(eternalRoot, '目录.md'), bookCatalogue('eternal-path'), 'utf8')
-fs.writeFileSync(libraryManifestPath, `${JSON.stringify(library, null, 2)}\n`, 'utf8')
+writeLibraryManifest()
 process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`)

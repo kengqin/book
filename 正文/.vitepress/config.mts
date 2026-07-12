@@ -41,7 +41,7 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: '书库', link: '/' },
-      { text: '剑来', link: '/剑来/' },
+      { text: '本地书架', link: '/本地书架/' },
       { text: '永恒道途', link: '/永恒道途/' }
     ],
     sidebar,

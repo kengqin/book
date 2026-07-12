@@ -9,6 +9,9 @@
 ├── 剑来/
 │   ├── 原文/       # 本地原始留档，不提交 Git
 │   └── 正文/       # 拆分后的发布章节
+├── 雪中悍刀行/
+│   ├── 原文/       # 本地原始留档，不提交 Git
+│   └── 正文/       # 本地拆分章节，不提交 Git
 └── 永恒道途/
     ├── 正文/
     ├── 设定/
@@ -27,6 +30,8 @@ scripts/            # 内容整理脚本
 
 ```bash
 npm run content:jianlai
+npm run content:xuezhong
+npm run content:library
 npm run docs:dev
 npm run docs:build
 ```

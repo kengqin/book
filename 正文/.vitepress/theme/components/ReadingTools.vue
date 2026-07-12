@@ -11,7 +11,7 @@ const progress = ref(0)
 const fontSize = ref(18)
 const lineHeight = ref(2.05)
 const palette = ref<Palette>('paper')
-const isHome = computed(() => Boolean(route.data.frontmatter.libraryHome || route.data.frontmatter.bookHome))
+const isHome = computed(() => Boolean(route.data.frontmatter.libraryHome || route.data.frontmatter.bookHome || route.data.frontmatter.localLibrary))
 
 const applySettings = () => {
   const root = document.documentElement
