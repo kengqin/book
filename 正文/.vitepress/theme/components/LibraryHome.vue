@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ArrowRight, BookOpen, HardDrive, LibraryBig, Shuffle } from 'lucide-vue-next'
+import { ArrowRight, BookOpen, HardDrive, LibraryBig, Shuffle, Upload } from 'lucide-vue-next'
 import { withBase } from 'vitepress'
 import library from '../../library.generated.json'
+import { getThemePreset } from '../local-library/themes'
 const coverModules = import.meta.glob('../../../../书库/*/站点/*.{avif,gif,jpeg,jpg,png,webp}', { eager: true, import: 'default' }) as Record<string, string>
 const activeFilter = ref('all')
+const localShelfVisual = getThemePreset('amber-library').image || ''
 const filters = computed(() => [{ id: 'all', label: '全部' }, ...[...new Set(library.books.map(book => book.status))].map(status => ({ id: status, label: status }))])
 const filteredBooks = computed(() => activeFilter.value === 'all' ? library.books : library.books.filter(book => book.status === activeFilter.value))
 
@@ -49,24 +51,40 @@ onBeforeUnmount(() => document.body.classList.remove('is-eternal-home'))
     <a class="library-brand" :href="withBase('/')"><LibraryBig :size="22" /><strong>小说书库</strong></a>
     <div class="library-nav__actions">
       <span>{{ library.books.length }} BOOKS</span>
-      <a :href="withBase('/本地书架/')"><HardDrive :size="15" /> 本地书架</a>
+      <a class="library-nav__shelf" :href="withBase('/本地书架/')"><HardDrive :size="15" /> 我的书架 <ArrowRight :size="14" /></a>
     </div>
   </header>
 
   <main class="library-home">
-    <div class="library-heading">
+    <section class="library-heading">
       <p>STORIES · WORLDS · JOURNEYS</p>
       <h1><span>小说</span><strong>书库</strong></h1>
-      <span>择一卷，入江湖。为每一个故事，留一扇通往远方的门。</span>
-      <button class="library-hero-cta" type="button" :disabled="!library.books.length" @click="openRandomBook"><Shuffle :size="17" /> 随机进入一本书 <ArrowRight :size="17" /></button>
-    </div>
+      <span>本地收藏与线上专题，都在这里继续阅读。</span>
+    </section>
 
+    <section class="library-shelf-feature" :style="{ '--shelf-image': localShelfVisual ? `url(${localShelfVisual})` : 'none' }">
+      <div class="library-shelf-feature__copy">
+        <p><HardDrive :size="15" /> PRIVATE LIBRARY</p>
+        <h2>我的本地书架</h2>
+        <span>导入 TXT 后自动拆章、记住进度和主题设置，内容只保存在当前浏览器。</span>
+        <div>
+          <a class="library-shelf-primary" :href="withBase('/本地书架/?import=1')"><Upload :size="17" /> 导入 TXT <ArrowRight :size="16" /></a>
+          <a class="library-shelf-secondary" :href="withBase('/本地书架/')">进入书架 <ArrowRight :size="16" /></a>
+        </div>
+      </div>
+      <div class="library-shelf-feature__meta" aria-hidden="true">
+        <span>LOCAL</span><b>TXT</b><small>PRIVATE · OFFLINE</small>
+      </div>
+    </section>
+
+    <section class="library-static-section">
     <div class="library-toolbar">
-      <span class="library-toolbar__label">SELECT A STORY</span>
+      <span class="library-toolbar__label">ONLINE COLLECTION</span>
       <div class="library-toolbar__controls">
         <div class="library-filters" role="group" aria-label="按状态筛选小说">
           <button v-for="filter in filters" :key="filter.id" type="button" :class="{ active: activeFilter === filter.id }" @click="activeFilter = filter.id">{{ filter.label }}</button>
         </div>
+        <button class="library-random-button" type="button" title="随机进入一本书" :disabled="!library.books.length" @click="openRandomBook"><Shuffle :size="15" /></button>
         <span>{{ filteredBooks.length }} / {{ library.books.length }}</span>
       </div>
     </div>
@@ -86,5 +104,6 @@ onBeforeUnmount(() => document.body.classList.remove('is-eternal-home'))
         </div>
       </a>
     </TransitionGroup>
+    </section>
   </main>
 </template>

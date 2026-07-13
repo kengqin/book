@@ -103,12 +103,24 @@ async function syncLocation() {
   const params = new URLSearchParams(window.location.search)
   const bookId = params.get('book')
   const chapter = Number(params.get('chapter'))
-  if (!bookId) return showShelf(false)
+  const shouldImport = params.get('import') === '1'
+  if (!bookId) {
+    await showShelf(false)
+    if (shouldImport) startImport()
+    return
+  }
   await openBook(bookId, false)
   if (chapter) await openChapter(chapter, false)
 }
 
 function startImport(existing?: LocalBook) {
+  if (!existing) {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('import') === '1') {
+      url.searchParams.delete('import')
+      history.replaceState({}, '', url)
+    }
+  }
   importExisting.value = existing
   importOpen.value = true
 }
