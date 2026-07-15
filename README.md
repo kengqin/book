@@ -2,6 +2,8 @@
 
 基于 VitePress 的多书阅读项目。每本书的内容与资料独立存放在 `书库/<书名>/`，平台主题和构建配置保留在 `正文/`。
 
+桌面端采用 Tauri 2、Vue 3 和 SQLite，并与在线端共享小说解析和阅读内核。架构与使用方式参见 [桌面端架构设计方案](docs/桌面端架构设计方案.md) 和 [桌面端使用说明](docs/桌面端使用说明.md)。
+
 ## 目录结构
 
 ```text
@@ -45,7 +47,19 @@ scripts/            # 通用书库清单生成脚本
 npm run content:library
 npm run docs:dev
 npm run docs:build
+npm test
+npm run desktop:dev
+npm run desktop:web:build
+npm run desktop:build
 ```
+
+桌面端版本记录见 [CHANGELOG.md](CHANGELOG.md)，发布步骤见
+[桌面端发布说明](docs/桌面端发布说明.md)，机器可读版本清单位于
+`releases/releases.json`。推送 `v*` Tag 后，GitHub Actions 会构建签名安装包、
+发布 GitHub Release 并生成自动更新所需的 `latest.json`。
+
+桌面端开发环境当前使用 `D:\Software\Rust` 中的 Rust 工具链，以及
+`D:\Software\VisualStudio\2022\BuildTools` 中的 Visual C++ Build Tools。
 
 ## 本地发布
 

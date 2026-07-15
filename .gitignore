@@ -1,4 +1,9 @@
 node_modules/
+apps/*/dist/
+apps/*/src-tauri/target/
+apps/*/src-tauri/gen/
+*.key
+*.key.pub
 正文/.vitepress/dist/
 正文/.vitepress/cache/
 正文/.vitepress/library.generated.json

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "repository": "kengqin/book",
+  "latest": "0.1.0",
+  "releases": [
+    {
+      "version": "0.1.0",
+      "date": "2026-07-15",
+      "title": "首个桌面版本",
+      "channel": "stable",
+      "databaseSchema": 2,
+      "published": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.0",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.0/%E5%B0%8F%E8%AF%B4%E4%B9%A6%E5%BA%93_0.1.0_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "Windows 桌面端与可自定义安装目录的 NSIS 安装包",
+            "TXT 导入、编码识别、章节解析与 SQLite 本地书库",
+            "书籍详情、章节目录、阅读器、搜索和阅读进度恢复",
+            "JSON 备份恢复、自定义数据目录和自定义数据库文件",
+            "版本中心、自动更新和历史版本安装入口"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,961 @@
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+    sync::RwLock,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use rusqlite::{params, Connection, OptionalExtension, Transaction, MAIN_DB};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::models::{
+    BackupPayload, BackupResult, BookRecord, ChapterRecord, ChapterSummary, SaveImportedBookInput,
+    SearchResult,
+};
+
+#[derive(Clone)]
+struct ActiveDatabase {
+    data_directory: PathBuf,
+    database_path: PathBuf,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DataDirectoryConfig {
+    data_directory: String,
+    #[serde(default)]
+    database_path: Option<String>,
+}
+
+pub struct DatabaseState {
+    default_data_directory: PathBuf,
+    config_path: PathBuf,
+    active: RwLock<ActiveDatabase>,
+}
+
+impl DatabaseState {
+    pub fn initialize(default_data_directory: PathBuf) -> Result<Self, String> {
+        fs::create_dir_all(&default_data_directory).map_err(|error| error.to_string())?;
+        let config_path = default_data_directory.join("config.json");
+        let active = load_configured_database(&config_path).unwrap_or_else(|| ActiveDatabase {
+            data_directory: default_data_directory.clone(),
+            database_path: default_data_directory.join("library.db"),
+        });
+        fs::create_dir_all(&active.data_directory).map_err(|error| error.to_string())?;
+        let state = Self {
+            default_data_directory,
+            config_path,
+            active: RwLock::new(active),
+        };
+        let connection = state.connect()?;
+        migrate(&connection)?;
+        Ok(state)
+    }
+
+    pub fn connect(&self) -> Result<Connection, String> {
+        let database_path = self
+            .active
+            .read()
+            .map_err(|_| "无法读取当前数据目录".to_string())?
+            .database_path
+            .clone();
+        let connection = Connection::open(database_path).map_err(|error| error.to_string())?;
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;\nPRAGMA busy_timeout = 5000;",
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(connection)
+    }
+
+    pub fn storage_paths(&self) -> Result<(PathBuf, PathBuf), String> {
+        let active = self
+            .active
+            .read()
+            .map_err(|_| "无法读取当前数据目录".to_string())?;
+        Ok((active.data_directory.clone(), active.database_path.clone()))
+    }
+
+    pub fn change_data_directory(&self, data_directory: PathBuf) -> Result<(), String> {
+        if !data_directory.is_absolute() {
+            return Err("数据目录必须是绝对路径".to_string());
+        }
+        fs::create_dir_all(&data_directory).map_err(|error| error.to_string())?;
+        let current = self
+            .active
+            .read()
+            .map_err(|_| "无法读取当前数据目录".to_string())?
+            .clone();
+        if current.data_directory == data_directory {
+            return Ok(());
+        }
+
+        let target_database = data_directory.join("library.db");
+        if target_database.exists() {
+            let target = Connection::open(&target_database).map_err(|error| error.to_string())?;
+            migrate(&target)?;
+        } else {
+            let source = self.connect()?;
+            source
+                .backup(MAIN_DB, &target_database, None)
+                .map_err(|error| error.to_string())?;
+            let target = Connection::open(&target_database).map_err(|error| error.to_string())?;
+            migrate(&target)?;
+        }
+
+        let config = DataDirectoryConfig {
+            data_directory: data_directory.display().to_string(),
+            database_path: Some(target_database.display().to_string()),
+        };
+        fs::write(
+            &self.config_path,
+            serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        let mut active = self
+            .active
+            .write()
+            .map_err(|_| "无法更新当前数据目录".to_string())?;
+        *active = ActiveDatabase {
+            data_directory,
+            database_path: target_database,
+        };
+        Ok(())
+    }
+
+    pub fn reset_to_default_directory(&self) -> Result<(), String> {
+        let current = self
+            .active
+            .read()
+            .map_err(|_| "无法读取当前数据目录".to_string())?
+            .clone();
+        if current.data_directory == self.default_data_directory {
+            return Ok(());
+        }
+        fs::create_dir_all(&self.default_data_directory).map_err(|error| error.to_string())?;
+        let target_database = self.default_data_directory.join("library.db");
+        let source = self.connect()?;
+        source
+            .backup(MAIN_DB, &target_database, None)
+            .map_err(|error| error.to_string())?;
+        let target = Connection::open(&target_database).map_err(|error| error.to_string())?;
+        migrate(&target)?;
+
+        let config = DataDirectoryConfig {
+            data_directory: self.default_data_directory.display().to_string(),
+            database_path: Some(target_database.display().to_string()),
+        };
+        fs::write(
+            &self.config_path,
+            serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        let mut active = self
+            .active
+            .write()
+            .map_err(|_| "无法更新当前数据目录".to_string())?;
+        *active = ActiveDatabase {
+            data_directory: self.default_data_directory.clone(),
+            database_path: target_database,
+        };
+        Ok(())
+    }
+
+    pub fn change_database_file(&self, database_path: PathBuf) -> Result<(), String> {
+        if !database_path.is_absolute() {
+            return Err("数据库文件必须使用绝对路径".to_string());
+        }
+        let data_directory = database_path
+            .parent()
+            .ok_or_else(|| "无法定位数据库所在目录".to_string())?
+            .to_path_buf();
+        fs::create_dir_all(&data_directory).map_err(|error| error.to_string())?;
+        let current = self
+            .active
+            .read()
+            .map_err(|_| "无法读取当前数据库文件".to_string())?
+            .clone();
+        if current.database_path == database_path {
+            return Ok(());
+        }
+
+        if database_path.exists() {
+            let target = Connection::open(&database_path).map_err(|error| error.to_string())?;
+            migrate(&target)?;
+        } else {
+            let source = self.connect()?;
+            source
+                .backup(MAIN_DB, &database_path, None)
+                .map_err(|error| error.to_string())?;
+            let target = Connection::open(&database_path).map_err(|error| error.to_string())?;
+            migrate(&target)?;
+        }
+
+        let config = DataDirectoryConfig {
+            data_directory: data_directory.display().to_string(),
+            database_path: Some(database_path.display().to_string()),
+        };
+        fs::write(
+            &self.config_path,
+            serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        let mut active = self
+            .active
+            .write()
+            .map_err(|_| "无法更新当前数据库文件".to_string())?;
+        *active = ActiveDatabase {
+            data_directory,
+            database_path,
+        };
+        Ok(())
+    }
+}
+
+fn load_configured_database(config_path: &Path) -> Option<ActiveDatabase> {
+    let source = fs::read(config_path).ok()?;
+    let config: DataDirectoryConfig = serde_json::from_slice(&source).ok()?;
+    let data_directory = PathBuf::from(config.data_directory);
+    if !data_directory.is_absolute() {
+        return None;
+    }
+    let database_path = config
+        .database_path
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| data_directory.join("library.db"));
+    Some(ActiveDatabase {
+        data_directory,
+        database_path,
+    })
+}
+
+fn migrate(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS books (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                author TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                source_name TEXT NOT NULL DEFAULT '',
+                source_size INTEGER NOT NULL DEFAULT 0,
+                encoding TEXT NOT NULL DEFAULT '',
+                chapter_count INTEGER NOT NULL DEFAULT 0,
+                total_words INTEGER NOT NULL DEFAULT 0,
+                volumes_json TEXT NOT NULL DEFAULT '[]',
+                theme_json TEXT NOT NULL,
+                parse_options_json TEXT NOT NULL,
+                current_chapter INTEGER NOT NULL DEFAULT 1,
+                progress REAL NOT NULL DEFAULT 0,
+                chapter_progress REAL NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                last_read_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS chapters (
+                id TEXT PRIMARY KEY,
+                book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+                number INTEGER NOT NULL,
+                original_label TEXT NOT NULL,
+                title TEXT NOT NULL,
+                volume TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL,
+                word_count INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(book_id, number)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_books_last_read_at ON books(last_read_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_chapters_book_number ON chapters(book_id, number);
+            "#,
+        )
+        .map_err(|error| error.to_string())?;
+
+    let has_chapter_progress = {
+        let mut statement = connection
+            .prepare("PRAGMA table_info(books)")
+            .map_err(|error| error.to_string())?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        columns.iter().any(|column| column == "chapter_progress")
+    };
+    if !has_chapter_progress {
+        connection
+            .execute(
+                "ALTER TABLE books ADD COLUMN chapter_progress REAL NOT NULL DEFAULT 0",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    connection
+        .execute_batch("PRAGMA user_version = 2")
+        .map_err(|error| error.to_string())
+}
+
+fn now_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or_default()
+}
+
+fn json<T: serde::Serialize>(value: &T) -> Result<String, String> {
+    serde_json::to_string(value).map_err(|error| error.to_string())
+}
+
+fn parse_json<T: serde::de::DeserializeOwned>(value: String) -> Result<T, rusqlite::Error> {
+    serde_json::from_str(&value).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            value.len(),
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })
+}
+
+fn map_book(row: &rusqlite::Row<'_>) -> Result<BookRecord, rusqlite::Error> {
+    Ok(BookRecord {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        author: row.get(2)?,
+        description: row.get(3)?,
+        source_name: row.get(4)?,
+        source_size: row.get(5)?,
+        encoding: row.get(6)?,
+        chapter_count: row.get(7)?,
+        total_words: row.get(8)?,
+        volumes: parse_json(row.get(9)?)?,
+        theme: parse_json(row.get(10)?)?,
+        parse_options: parse_json(row.get(11)?)?,
+        current_chapter: row.get(12)?,
+        progress: row.get(13)?,
+        chapter_progress: row.get(14)?,
+        created_at: row.get(15)?,
+        updated_at: row.get(16)?,
+        last_read_at: row.get(17)?,
+    })
+}
+
+const BOOK_COLUMNS: &str = "id, title, author, description, source_name, source_size, encoding, chapter_count, total_words, volumes_json, theme_json, parse_options_json, current_chapter, progress, chapter_progress, created_at, updated_at, last_read_at";
+
+pub fn save_imported_book(
+    connection: &mut Connection,
+    input: SaveImportedBookInput,
+) -> Result<BookRecord, String> {
+    if input.result.chapters.is_empty() {
+        return Err("没有可保存的章节".to_string());
+    }
+
+    let transaction = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+    let id = input
+        .existing_id
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let previous = find_book_in_transaction(&transaction, &id)?;
+    let now = now_millis();
+    let chapter_count = input.result.chapters.len() as i64;
+    let total_words: i64 = input
+        .result
+        .chapters
+        .iter()
+        .map(|chapter| chapter.word_count)
+        .sum();
+    let volumes: Vec<String> = input
+        .result
+        .chapters
+        .iter()
+        .map(|chapter| chapter.volume.trim())
+        .filter(|volume| !volume.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let current_chapter = previous
+        .as_ref()
+        .map(|book| book.current_chapter.min(chapter_count).max(1))
+        .unwrap_or(1);
+    let progress = previous.as_ref().map(|book| book.progress).unwrap_or(0.0);
+    let chapter_progress = previous
+        .as_ref()
+        .map(|book| book.chapter_progress)
+        .unwrap_or(0.0);
+    let created_at = previous.as_ref().map(|book| book.created_at).unwrap_or(now);
+    let last_read_at = previous
+        .as_ref()
+        .map(|book| book.last_read_at)
+        .unwrap_or(now);
+    let author = if input.result.metadata.author.trim().is_empty() {
+        "佚名".to_string()
+    } else {
+        input.result.metadata.author.trim().to_string()
+    };
+
+    transaction
+        .execute("DELETE FROM chapters WHERE book_id = ?1", params![id])
+        .map_err(|error| error.to_string())?;
+    transaction
+        .execute(
+            &format!(
+                "INSERT INTO books ({BOOK_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)\n                 ON CONFLICT(id) DO UPDATE SET title=excluded.title, author=excluded.author, description=excluded.description, source_name=excluded.source_name, source_size=excluded.source_size, encoding=excluded.encoding, chapter_count=excluded.chapter_count, total_words=excluded.total_words, volumes_json=excluded.volumes_json, theme_json=excluded.theme_json, parse_options_json=excluded.parse_options_json, current_chapter=excluded.current_chapter, progress=excluded.progress, chapter_progress=excluded.chapter_progress, updated_at=excluded.updated_at, last_read_at=excluded.last_read_at"
+            ),
+            params![
+                id,
+                input.result.metadata.title.trim(),
+                author,
+                input.result.metadata.description.trim(),
+                input.result.metadata.source_name,
+                input.result.metadata.source_size,
+                input.result.metadata.encoding,
+                chapter_count,
+                total_words,
+                json(&volumes)?,
+                json(&input.theme)?,
+                json(&input.options)?,
+                current_chapter,
+                progress,
+                chapter_progress,
+                created_at,
+                now,
+                last_read_at
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+
+    {
+        let mut statement = transaction
+            .prepare(
+                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, content, word_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )
+            .map_err(|error| error.to_string())?;
+        for chapter in &input.result.chapters {
+            statement
+                .execute(params![
+                    format!("{}:{}", id, chapter.number),
+                    id,
+                    chapter.number,
+                    chapter.original_label,
+                    chapter.title,
+                    chapter.volume,
+                    chapter.content,
+                    chapter.word_count
+                ])
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
+    transaction.commit().map_err(|error| error.to_string())?;
+    get_book(connection, &id)?.ok_or_else(|| "保存后无法读取书籍".to_string())
+}
+
+fn find_book_in_transaction(
+    transaction: &Transaction<'_>,
+    id: &str,
+) -> Result<Option<BookRecord>, String> {
+    transaction
+        .query_row(
+            &format!("SELECT {BOOK_COLUMNS} FROM books WHERE id = ?1"),
+            params![id],
+            map_book,
+        )
+        .optional()
+        .map_err(|error| error.to_string())
+}
+
+pub fn list_books(connection: &Connection) -> Result<Vec<BookRecord>, String> {
+    let mut statement = connection
+        .prepare(&format!(
+            "SELECT {BOOK_COLUMNS} FROM books ORDER BY last_read_at DESC, updated_at DESC"
+        ))
+        .map_err(|error| error.to_string())?;
+    let books = statement
+        .query_map([], map_book)
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(books)
+}
+
+pub fn get_book(connection: &Connection, id: &str) -> Result<Option<BookRecord>, String> {
+    connection
+        .query_row(
+            &format!("SELECT {BOOK_COLUMNS} FROM books WHERE id = ?1"),
+            params![id],
+            map_book,
+        )
+        .optional()
+        .map_err(|error| error.to_string())
+}
+
+pub fn list_chapters(
+    connection: &Connection,
+    book_id: &str,
+) -> Result<Vec<ChapterSummary>, String> {
+    let mut statement = connection
+        .prepare("SELECT id, book_id, number, original_label, title, volume, word_count FROM chapters WHERE book_id = ?1 ORDER BY number")
+        .map_err(|error| error.to_string())?;
+    let chapters = statement
+        .query_map(params![book_id], |row| {
+            Ok(ChapterSummary {
+                id: row.get(0)?,
+                book_id: row.get(1)?,
+                number: row.get(2)?,
+                original_label: row.get(3)?,
+                title: row.get(4)?,
+                volume: row.get(5)?,
+                word_count: row.get(6)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(chapters)
+}
+
+pub fn get_chapter(
+    connection: &Connection,
+    book_id: &str,
+    number: i64,
+) -> Result<Option<ChapterRecord>, String> {
+    connection
+        .query_row(
+            "SELECT id, book_id, number, original_label, title, volume, content, word_count FROM chapters WHERE book_id = ?1 AND number = ?2",
+            params![book_id, number],
+            |row| {
+                Ok(ChapterRecord {
+                    id: row.get(0)?,
+                    book_id: row.get(1)?,
+                    number: row.get(2)?,
+                    original_label: row.get(3)?,
+                    title: row.get(4)?,
+                    volume: row.get(5)?,
+                    content: row.get(6)?,
+                    word_count: row.get(7)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| error.to_string())
+}
+
+pub fn save_progress(
+    connection: &Connection,
+    book_id: &str,
+    chapter_number: i64,
+    chapter_progress: f64,
+) -> Result<(), String> {
+    let chapter_count: i64 = connection
+        .query_row(
+            "SELECT chapter_count FROM books WHERE id = ?1",
+            params![book_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    let normalized_progress = chapter_progress.clamp(0.0, 100.0);
+    let normalized_chapter = chapter_number.max(1);
+    let overall = (((normalized_chapter - 1) as f64 + normalized_progress / 100.0)
+        / chapter_count.max(1) as f64
+        * 100.0)
+        .clamp(0.0, 100.0);
+    connection
+        .execute(
+            "UPDATE books SET current_chapter = ?2, progress = ?3, chapter_progress = ?4, last_read_at = ?5 WHERE id = ?1",
+            params![book_id, normalized_chapter, overall, normalized_progress, now_millis()],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+pub fn delete_book(connection: &Connection, book_id: &str) -> Result<(), String> {
+    connection
+        .execute("DELETE FROM books WHERE id = ?1", params![book_id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+pub fn search(connection: &Connection, query: &str) -> Result<Vec<SearchResult>, String> {
+    let needle = query.trim();
+    if needle.is_empty() {
+        return Ok(Vec::new());
+    }
+    let pattern = format!("%{needle}%");
+    let mut statement = connection
+        .prepare(
+            "SELECT c.book_id, b.title, c.number, c.title, substr(c.content, 1, 180) FROM chapters c JOIN books b ON b.id = c.book_id WHERE b.title LIKE ?1 OR b.author LIKE ?1 OR c.title LIKE ?1 OR c.content LIKE ?1 ORDER BY b.last_read_at DESC, c.number LIMIT 100",
+        )
+        .map_err(|error| error.to_string())?;
+    let results = statement
+        .query_map(params![pattern], |row| {
+            Ok(SearchResult {
+                book_id: row.get(0)?,
+                book_title: row.get(1)?,
+                chapter_number: row.get(2)?,
+                chapter_title: row.get(3)?,
+                snippet: row.get(4)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(results)
+}
+
+fn list_all_chapters(connection: &Connection) -> Result<Vec<ChapterRecord>, String> {
+    let mut statement = connection
+        .prepare("SELECT id, book_id, number, original_label, title, volume, content, word_count FROM chapters ORDER BY book_id, number")
+        .map_err(|error| error.to_string())?;
+    let chapters = statement
+        .query_map([], |row| {
+            Ok(ChapterRecord {
+                id: row.get(0)?,
+                book_id: row.get(1)?,
+                number: row.get(2)?,
+                original_label: row.get(3)?,
+                title: row.get(4)?,
+                volume: row.get(5)?,
+                content: row.get(6)?,
+                word_count: row.get(7)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(chapters)
+}
+
+pub fn export_backup(connection: &Connection, target_path: &Path) -> Result<BackupResult, String> {
+    let books = list_books(connection)?;
+    let chapters = list_all_chapters(connection)?;
+    let payload = BackupPayload {
+        format: "novel-library-backup".to_string(),
+        version: 1,
+        created_at: now_millis(),
+        books,
+        chapters,
+    };
+    let source = serde_json::to_vec(&payload).map_err(|error| error.to_string())?;
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    fs::write(target_path, source).map_err(|error| error.to_string())?;
+    Ok(BackupResult {
+        path: target_path.display().to_string(),
+        books: payload.books.len(),
+        chapters: payload.chapters.len(),
+    })
+}
+
+pub fn import_backup(
+    connection: &mut Connection,
+    source_path: &Path,
+) -> Result<BackupResult, String> {
+    let source = fs::read(source_path).map_err(|error| error.to_string())?;
+    let payload: BackupPayload =
+        serde_json::from_slice(&source).map_err(|error| format!("备份格式错误：{error}"))?;
+    if payload.format != "novel-library-backup" || payload.version != 1 {
+        return Err("不支持的小说书库备份版本".to_string());
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+
+    for book in &payload.books {
+        transaction
+            .execute("DELETE FROM chapters WHERE book_id = ?1", params![book.id])
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                &format!(
+                    "INSERT INTO books ({BOOK_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)\n                     ON CONFLICT(id) DO UPDATE SET title=excluded.title, author=excluded.author, description=excluded.description, source_name=excluded.source_name, source_size=excluded.source_size, encoding=excluded.encoding, chapter_count=excluded.chapter_count, total_words=excluded.total_words, volumes_json=excluded.volumes_json, theme_json=excluded.theme_json, parse_options_json=excluded.parse_options_json, current_chapter=excluded.current_chapter, progress=excluded.progress, chapter_progress=excluded.chapter_progress, created_at=excluded.created_at, updated_at=excluded.updated_at, last_read_at=excluded.last_read_at"
+                ),
+                params![
+                    book.id,
+                    book.title,
+                    book.author,
+                    book.description,
+                    book.source_name,
+                    book.source_size,
+                    book.encoding,
+                    book.chapter_count,
+                    book.total_words,
+                    json(&book.volumes)?,
+                    json(&book.theme)?,
+                    json(&book.parse_options)?,
+                    book.current_chapter,
+                    book.progress,
+                    book.chapter_progress,
+                    book.created_at,
+                    book.updated_at,
+                    book.last_read_at
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+
+    {
+        let mut statement = transaction
+            .prepare(
+                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, content, word_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(id) DO UPDATE SET book_id=excluded.book_id, number=excluded.number, original_label=excluded.original_label, title=excluded.title, volume=excluded.volume, content=excluded.content, word_count=excluded.word_count",
+            )
+            .map_err(|error| error.to_string())?;
+        for chapter in &payload.chapters {
+            statement
+                .execute(params![
+                    chapter.id,
+                    chapter.book_id,
+                    chapter.number,
+                    chapter.original_label,
+                    chapter.title,
+                    chapter.volume,
+                    chapter.content,
+                    chapter.word_count
+                ])
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(BackupResult {
+        path: source_path.display().to_string(),
+        books: payload.books.len(),
+        chapters: payload.chapters.len(),
+    })
+}
+
+pub fn database_exists(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{ParseOptions, ParseResult, ParsedChapter, ParsedMetadata, ThemeSettings};
+
+    fn sample_import() -> SaveImportedBookInput {
+        SaveImportedBookInput {
+            result: ParseResult {
+                metadata: ParsedMetadata {
+                    title: "桌面测试书".to_string(),
+                    author: "测试作者".to_string(),
+                    description: "数据库验收".to_string(),
+                    encoding: "utf-8".to_string(),
+                    source_name: "desktop-test.txt".to_string(),
+                    source_size: 128,
+                },
+                chapters: vec![
+                    ParsedChapter {
+                        number: 1,
+                        original_label: "一".to_string(),
+                        title: "开始".to_string(),
+                        volume: "第一卷".to_string(),
+                        content: "第一章正文。".to_string(),
+                        word_count: 6,
+                    },
+                    ParsedChapter {
+                        number: 2,
+                        original_label: "二".to_string(),
+                        title: "继续".to_string(),
+                        volume: "第一卷".to_string(),
+                        content: "第二章包含青石长阶。".to_string(),
+                        word_count: 10,
+                    },
+                ],
+                warnings: Vec::new(),
+            },
+            theme: ThemeSettings {
+                preset: "ink".to_string(),
+                accent: "#c9a866".to_string(),
+                background: "#101719".to_string(),
+                text: "#f1f2ef".to_string(),
+                overlay: 48.0,
+                position_x: 50.0,
+                position_y: 50.0,
+                cover_asset_id: None,
+            },
+            options: ParseOptions {
+                encoding: "auto".to_string(),
+                chapter_pattern: String::new(),
+                ad_patterns: String::new(),
+                merge_wrapped: true,
+                remove_ads: true,
+            },
+            existing_id: None,
+        }
+    }
+
+    #[test]
+    fn creates_schema_in_memory() {
+        let connection = Connection::open_in_memory().expect("open database");
+        migrate(&connection).expect("migrate database");
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("read version");
+        assert_eq!(version, 2);
+    }
+
+    #[test]
+    fn completes_import_read_progress_search_and_delete_flow() {
+        let mut connection = Connection::open_in_memory().expect("open database");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON")
+            .expect("enable foreign keys");
+        migrate(&connection).expect("migrate database");
+
+        let book = save_imported_book(&mut connection, sample_import()).expect("save book");
+        assert_eq!(book.chapter_count, 2);
+        assert_eq!(book.total_words, 16);
+        assert_eq!(list_books(&connection).expect("list books").len(), 1);
+        assert_eq!(
+            list_chapters(&connection, &book.id)
+                .expect("list chapters")
+                .len(),
+            2
+        );
+        assert_eq!(
+            get_chapter(&connection, &book.id, 2)
+                .expect("get chapter")
+                .expect("chapter exists")
+                .title,
+            "继续"
+        );
+
+        save_progress(&connection, &book.id, 2, 50.0).expect("save progress");
+        let updated = get_book(&connection, &book.id)
+            .expect("get book")
+            .expect("book exists");
+        assert_eq!(updated.current_chapter, 2);
+        assert_eq!(updated.progress, 75.0);
+        assert_eq!(updated.chapter_progress, 50.0);
+
+        let results = search(&connection, "青石长阶").expect("search library");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].chapter_number, 2);
+
+        delete_book(&connection, &book.id).expect("delete book");
+        assert!(get_book(&connection, &book.id)
+            .expect("get deleted book")
+            .is_none());
+        assert!(list_chapters(&connection, &book.id)
+            .expect("list deleted chapters")
+            .is_empty());
+    }
+
+    #[test]
+    fn exports_and_restores_portable_backup() {
+        let mut source = Connection::open_in_memory().expect("open source database");
+        source
+            .execute_batch("PRAGMA foreign_keys = ON")
+            .expect("enable foreign keys");
+        migrate(&source).expect("migrate source database");
+        save_imported_book(&mut source, sample_import()).expect("save source book");
+
+        let backup_path =
+            std::env::temp_dir().join(format!("novel-library-backup-test-{}.json", Uuid::new_v4()));
+        let exported = export_backup(&source, &backup_path).expect("export backup");
+        assert_eq!(exported.books, 1);
+        assert_eq!(exported.chapters, 2);
+
+        let mut target = Connection::open_in_memory().expect("open target database");
+        target
+            .execute_batch("PRAGMA foreign_keys = ON")
+            .expect("enable foreign keys");
+        migrate(&target).expect("migrate target database");
+        let imported = import_backup(&mut target, &backup_path).expect("import backup");
+        assert_eq!(imported.books, 1);
+        assert_eq!(imported.chapters, 2);
+        assert_eq!(list_books(&target).expect("list restored books").len(), 1);
+        assert_eq!(
+            search(&target, "青石长阶")
+                .expect("search restored database")
+                .len(),
+            1
+        );
+
+        fs::remove_file(backup_path).expect("remove backup fixture");
+    }
+
+    #[test]
+    fn switches_data_directory_and_remembers_selection() {
+        let root =
+            std::env::temp_dir().join(format!("novel-library-directory-test-{}", Uuid::new_v4()));
+        let default_directory = root.join("default");
+        let custom_directory = root.join("custom");
+        let custom_database = root.join("database").join("my-library.sqlite");
+        let state = DatabaseState::initialize(default_directory.clone()).expect("initialize state");
+        save_imported_book(
+            &mut state.connect().expect("connect default"),
+            sample_import(),
+        )
+        .expect("save default book");
+
+        state
+            .change_data_directory(custom_directory.clone())
+            .expect("change directory");
+        assert_eq!(
+            state.storage_paths().expect("read paths").0,
+            custom_directory
+        );
+        assert_eq!(
+            list_books(&state.connect().expect("connect custom"))
+                .expect("list custom books")
+                .len(),
+            1
+        );
+
+        let reloaded = DatabaseState::initialize(default_directory).expect("reload state");
+        assert_eq!(
+            reloaded.storage_paths().expect("read reloaded paths").0,
+            custom_directory
+        );
+        assert_eq!(
+            list_books(&reloaded.connect().expect("connect reloaded"))
+                .expect("list reloaded books")
+                .len(),
+            1
+        );
+
+        reloaded
+            .change_database_file(custom_database.clone())
+            .expect("change database file");
+        assert_eq!(
+            reloaded.storage_paths().expect("read database path").1,
+            custom_database
+        );
+        assert_eq!(
+            list_books(&reloaded.connect().expect("connect custom file"))
+                .expect("list custom file books")
+                .len(),
+            1
+        );
+
+        save_progress(
+            &reloaded.connect().expect("connect selected"),
+            &list_books(&reloaded.connect().expect("read selected"))
+                .expect("list selected")
+                .remove(0)
+                .id,
+            2,
+            50.0,
+        )
+        .expect("update selected progress");
+        reloaded
+            .reset_to_default_directory()
+            .expect("reset default directory");
+        assert_eq!(
+            list_books(&reloaded.connect().expect("connect reset")).expect("list reset books")[0]
+                .progress,
+            75.0
+        );
+
+        drop(reloaded);
+        drop(state);
+        fs::remove_dir_all(root).expect("remove directory fixture");
+    }
+}

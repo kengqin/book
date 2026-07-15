@@ -7,7 +7,7 @@ import LocalReader from './LocalReader.vue'
 import ThemeEditor from './ThemeEditor.vue'
 import { clearLibrary, deleteBook, exportLibrary, getAsset, getBook, getBooks, getChapter, getChapters, getLibraryStats, importLibraryBackup, updateBookProgress, updateBookTheme } from './db'
 import { getThemePreset } from './themes'
-import { formatChapterLabel, type LocalBook, type LocalChapter, type ThemeSettings } from './types'
+import { calculateOverallProgress, formatChapterLabel, type LocalBook, type LocalChapter, type ThemeSettings } from './types'
 
 const books = ref<LocalBook[]>([])
 const selectedBook = ref<LocalBook>()
@@ -189,7 +189,7 @@ async function clearAll() {
 
 async function saveProgress(chapter: number, progress: number) {
   if (!selectedBook.value) return
-  const overallProgress = Math.min(100, ((chapter - 1) + progress / 100) / Math.max(1, selectedBook.value.chapterCount) * 100)
+  const overallProgress = calculateOverallProgress(chapter, progress, selectedBook.value.chapterCount)
   selectedBook.value = { ...selectedBook.value, currentChapter: chapter, progress: overallProgress }
   await updateBookProgress(selectedBook.value.id, chapter, progress)
 }
