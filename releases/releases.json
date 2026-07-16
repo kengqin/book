@@ -1,8 +1,40 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.3.1",
+  "latest": "0.3.2",
   "releases": [
+    {
+      "version": "0.3.2",
+      "date": "2026-07-16",
+      "title": "更新状态一致性修复",
+      "channel": "stable",
+      "databaseSchema": 5,
+      "published": true,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.2",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.2/NovelLibrary_0.3.2_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "修复新版本已出现在历史记录中，但顶部状态仍错误显示“当前已是最新版本”的问题",
+            "更新检查先读取在线版本清单，再直接校验对应版本的固定更新元数据，避免最新版本地址短暂缓存不同步",
+            "更新元数据尚在同步时明确显示“新版已发布”，并保留导航更新提示"
+          ]
+        },
+        {
+          "title": "兼容",
+          "items": [
+            "在线版本记录增加缓存破除，重新进入版本页面即可读取最新公开说明",
+            "数据库 Schema 升级至 5，已有 EPUB 自动补齐章节类型和原始章号，TXT、阅读进度、笔记和自定义数据目录保持不变",
+            "下载进度、取消下载、安装并重启和历史版本安装流程保持不变"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "旧版本若仍显示过期状态，可重新启动应用或点击“检查”；升级到 0.3.2 后将使用固定版本元数据进行一致性校验。"
+      ]
+    },
     {
       "version": "0.3.1",
       "date": "2026-07-16",

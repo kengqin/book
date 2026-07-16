@@ -2,13 +2,14 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { BookOpen, FilePlus2, RefreshCw, Trash2 } from 'lucide-vue-next'
-import { defaultParseOptions, defaultTheme } from '@novel-library/reader-core'
-import { deleteDesktopBook, listDesktopBooks, saveDesktopBook, type DesktopBook } from '../services/desktop-library'
+import { defaultParseOptions, defaultTheme, isNumberedChapter } from '@novel-library/reader-core'
+import { deleteDesktopBook, listDesktopBooks, listDesktopChapters, saveDesktopBook, type DesktopBook } from '../services/desktop-library'
 import { parseNovelFile } from '../services/parse-novel-file'
 import { parseEpubFile } from '../services/parse-epub-file'
 
 const router = useRouter()
 const books = ref<DesktopBook[]>([])
+const chapterCounts = ref<Record<string, number>>({})
 const loading = ref(true)
 const error = ref('')
 const importing = ref(false)
@@ -21,6 +22,11 @@ async function loadBooks() {
   error.value = ''
   try {
     books.value = await listDesktopBooks()
+    const entries = await Promise.all(books.value.map(async book => {
+      const chapters = await listDesktopChapters(book.id)
+      return [book.id, chapters.filter(isNumberedChapter).length] as const
+    }))
+    chapterCounts.value = Object.fromEntries(entries)
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -95,7 +101,7 @@ onMounted(loadBooks)
       <article v-for="book in books" :key="book.id">
         <button type="button" class="book-seal" @click="router.push(`/book/${book.id}`)"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></button>
         <button type="button" class="book-copy" @click="router.push(`/book/${book.id}`)"><strong>{{ book.title }}</strong><span>{{ book.author || '佚名' }}</span></button>
-        <span><b class="format-badge">{{ book.sourceFormat.toUpperCase() }}</b> {{ book.chapterCount }} 章</span>
+        <span><b class="format-badge">{{ book.sourceFormat.toUpperCase() }}</b> {{ chapterCounts[book.id] ?? book.chapterCount }} 章</span>
         <span>{{ book.totalWords.toLocaleString() }} 字</span>
         <div class="book-progress" :title="`阅读进度 ${book.progress.toFixed(1)}%`"><span :style="{ width: `${book.progress}%` }" /></div>
         <div class="row-actions"><button type="button" class="icon-button" title="继续阅读" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" /></button><button type="button" class="icon-button danger-icon" title="删除书籍" @click="removeBook(book)"><Trash2 :size="16" /></button></div>

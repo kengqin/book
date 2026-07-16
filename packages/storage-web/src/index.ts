@@ -68,7 +68,7 @@ export async function saveImportedBook(input: SaveImportedBookInput) {
   const coverBlob = input.cover ?? (input.theme.coverAssetId ? previousCover?.blob : undefined)
   const coverAssetId = coverBlob ? `${id}:cover` : undefined
   const theme = { ...input.theme, coverAssetId }
-  const volumes = [...new Set(input.result.chapters.map(chapter => chapter.volume).filter(Boolean))]
+  const volumes = [...new Set(input.result.chapters.filter(chapter => chapter.kind !== 'frontmatter').map(chapter => chapter.volume).filter(Boolean))]
   const book: LocalBook = {
     id,
     title: input.result.metadata.title,

@@ -8,6 +8,10 @@ fn default_content_format() -> String {
     "text".to_string()
 }
 
+fn default_chapter_kind() -> String {
+    "chapter".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParseOptions {
@@ -53,6 +57,8 @@ pub struct ParsedChapter {
     pub original_label: String,
     pub title: String,
     pub volume: String,
+    #[serde(default = "default_chapter_kind")]
+    pub kind: String,
     pub content: String,
     #[serde(default)]
     pub content_text: String,
@@ -114,6 +120,8 @@ pub struct ChapterSummary {
     pub original_label: String,
     pub title: String,
     pub volume: String,
+    #[serde(default = "default_chapter_kind")]
+    pub kind: String,
     pub word_count: i64,
     #[serde(default = "default_content_format")]
     pub content_format: String,
@@ -128,6 +136,8 @@ pub struct ChapterRecord {
     pub original_label: String,
     pub title: String,
     pub volume: String,
+    #[serde(default = "default_chapter_kind")]
+    pub kind: String,
     pub content: String,
     #[serde(default)]
     pub content_text: String,
@@ -150,6 +160,8 @@ pub struct SearchResult {
     pub book_id: String,
     pub book_title: String,
     pub chapter_number: i64,
+    pub original_label: String,
+    pub kind: String,
     pub chapter_title: String,
     pub snippet: String,
 }

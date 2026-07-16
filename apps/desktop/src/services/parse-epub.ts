@@ -7,7 +7,7 @@ import {
   type Table,
   type TOCItem
 } from '@abfcode/spine'
-import type { ParsedChapter, ParserResponse, ParseResult } from '@novel-library/reader-core'
+import type { ChapterKind, ParsedChapter, ParserResponse, ParseResult } from '@novel-library/reader-core'
 
 type ProgressListener = (message: Extract<ParserResponse, { type: 'progress' }>) => void
 
@@ -120,22 +120,78 @@ function blocksHtml(blocks: Block[], book: Book, imageCache: Map<string, string>
   return output.join('')
 }
 
-function chapterVolume(chapters: ReturnType<Book['chapters']>, index: number) {
-  let parent = chapters[index].parent
-  let volume = ''
-  while (parent >= 0) {
-    volume = chapters[parent].title || volume
-    parent = chapters[parent].parent
+const chapterHeadingPattern = /^\s*第\s*([0-9零〇一二两三四五六七八九十百千万]+)\s*[章回节]\s*[:：、.．—-]?\s*(.*)$/u
+const volumeHeadingPattern = /^(?:第\s*[0-9零〇一二两三四五六七八九十百千万]+\s*[卷部篇册集]|[卷部篇册集]\s*[0-9零〇一二两三四五六七八九十百千万]+)/u
+
+function inlineText(inlines: Inline[] | undefined) {
+  return (inlines || []).map(inline => inline.text || inline.alt || '').join('')
+}
+
+function tableText(table: Table): string {
+  return table.rows.map(row => row.cells.map(cell => {
+    const nested = (cell.tables || []).map(tableText).join('\n')
+    return [inlineText(cell.inlines), nested].filter(Boolean).join('\n')
+  }).join('\t')).join('\n')
+}
+
+function blockText(block: Block) {
+  if (block.kind === 'table' && block.table) return tableText(block.table)
+  if (block.kind === 'figure') {
+    return [
+      inlineText(block.figure?.images),
+      inlineText(block.figure?.caption)
+    ].filter(Boolean).join('\n')
   }
-  return volume
+  return inlineText(block.inlines)
+}
+
+function blocksText(blocks: Block[]) {
+  return blocks.map(blockText).map(value => value.trim()).filter(Boolean).join('\n\n')
+}
+
+function normalizeHeading(value: string) {
+  return value.replace(/\s+/gu, '').trim()
+}
+
+function parseChapterHeading(value: string) {
+  const match = value.match(chapterHeadingPattern)
+  if (!match) return null
+  return {
+    label: match[1],
+    title: match[2].replace(/\s+/gu, ' ').trim() || value.replace(/\s+/gu, ' ').trim()
+  }
+}
+
+function isVolumeTitle(value: string) {
+  return volumeHeadingPattern.test(value.replace(/\s+/gu, ' ').trim())
+}
+
+function firstChapterHeading(blocks: Block[]) {
+  for (const block of blocks) {
+    if (block.kind !== 'heading') continue
+    const heading = parseChapterHeading(blockText(block))
+    if (heading) return heading
+  }
+  return null
+}
+
+function stripContentPrefix(blocks: Block[], sourceTitle: string, chapterHeading: ReturnType<typeof parseChapterHeading>) {
+  const target = normalizeHeading(sourceTitle)
+  const headingIndex = blocks.findIndex(block => {
+    if (block.kind !== 'heading') return false
+    const text = blockText(block)
+    if (chapterHeading && parseChapterHeading(text)) return true
+    return normalizeHeading(text) === target
+  })
+  return headingIndex >= 0 ? blocks.slice(headingIndex + 1) : blocks
 }
 
 function volumeMap(items: TOCItem[], parentLabel = '', output = new Map<string, string>()) {
   for (const item of items) {
     const href = item.href.split('#')[0]
-    const volume = item.children.length ? item.label : parentLabel
+    const volume = item.children.length && isVolumeTitle(item.label) ? item.label : parentLabel
     if (href && volume) output.set(href, volume)
-    if (item.children.length) volumeMap(item.children, item.label || parentLabel, output)
+    if (item.children.length) volumeMap(item.children, volume, output)
   }
   return output
 }
@@ -149,13 +205,6 @@ function chapterTitleMap(items: TOCItem[], output = new Map<string, string>()) {
   return output
 }
 
-function cleanChapterTitle(value: string, index: number) {
-  const cleaned = value
-    .replace(/^\s*第\s*[0-9零〇一二两三四五六七八九十百千万]+\s*[章回节]\s*[:：、.．—-]?\s*/u, '')
-    .trim()
-  return cleaned || value.trim() || `章节 ${index + 1}`
-}
-
 export function parseEpubBuffer(buffer: ArrayBuffer, filename: string, onProgress: ProgressListener = () => {}): ParseResult {
   onProgress({ type: 'progress', progress: 8, message: '正在读取 EPUB 容器' })
   const book = parse(new Uint8Array(buffer), { blockAttributes: false })
@@ -166,23 +215,40 @@ export function parseEpubBuffer(buffer: ArrayBuffer, filename: string, onProgres
   const imageCache = new Map<string, string>()
   const volumes = volumeMap(book.toc)
   const chapterTitles = chapterTitleMap(book.toc)
+  let seenNumberedChapter = false
   const chapters: ParsedChapter[] = sourceChapters.map((chapter, index) => {
     const blocks = book.blocksInRange(chapter.start, chapter.end)
-    const content = blocksHtml(blocks, book, imageCache)
     if (index % 25 === 0 || index === sourceChapters.length - 1) {
       const progress = 24 + Math.round(((index + 1) / sourceChapters.length) * 66)
       onProgress({ type: 'progress', progress, message: `正在解析章节 ${index + 1} / ${sourceChapters.length}` })
     }
-    const title = chapterTitles.get(chapter.href.split('#')[0]) || chapter.title || ''
+    const href = chapter.href.split('#')[0]
+    const sourceTitle = (chapterTitles.get(href) || chapter.title || '').replace(/\s+/gu, ' ').trim()
+    const chapterHeading = parseChapterHeading(sourceTitle) || firstChapterHeading(blocks)
+    const mappedVolume = volumes.get(href) || ''
+    let kind: ChapterKind
+    if (chapterHeading) {
+      kind = 'chapter'
+      seenNumberedChapter = true
+    } else if (mappedVolume && normalizeHeading(sourceTitle) === normalizeHeading(mappedVolume)) {
+      kind = 'volume'
+    } else if (!seenNumberedChapter && !mappedVolume) {
+      kind = 'frontmatter'
+    } else {
+      kind = 'appendix'
+    }
+    const contentBlocks = stripContentPrefix(blocks, sourceTitle, chapterHeading)
+    const contentText = blocksText(contentBlocks)
     return {
       number: index + 1,
-      originalLabel: String(index + 1),
-      title: cleanChapterTitle(title, index),
-      volume: chapterVolume(sourceChapters, index) || volumes.get(chapter.href.split('#')[0]) || '',
-      content,
-      contentText: chapter.text,
+      originalLabel: chapterHeading?.label || sourceTitle || String(index + 1),
+      title: chapterHeading?.title || sourceTitle || '未命名内容',
+      volume: kind === 'frontmatter' ? '前置内容' : !mappedVolume && kind === 'appendix' ? '附加内容' : mappedVolume,
+      kind,
+      content: blocksHtml(contentBlocks, book, imageCache),
+      contentText,
       contentFormat: 'html',
-      wordCount: chapter.text.replace(/\s/g, '').length
+      wordCount: contentText.replace(/\s/g, '').length
     }
   })
 
