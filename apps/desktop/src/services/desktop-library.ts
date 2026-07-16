@@ -17,6 +17,7 @@ export interface DesktopChapterSummary {
 
 export interface DesktopChapter extends DesktopChapterSummary {
   content: string
+  contentText: string
 }
 
 export interface DesktopSearchResult {
@@ -40,6 +41,11 @@ export interface DesktopBackupResult {
   books: number
   chapters: number
   notes: number
+}
+
+export interface DesktopExternalFile {
+  name: string
+  bytes: number[]
 }
 
 export function listDesktopBooks() {
@@ -101,4 +107,8 @@ export function exportDesktopBackup(targetPath: string) {
 
 export function importDesktopBackup(sourcePath: string) {
   return invoke<DesktopBackupResult>('import_backup', { sourcePath })
+}
+
+export function readDesktopExternalFile(path: string) {
+  return invoke<DesktopExternalFile>('read_external_file', { path })
 }

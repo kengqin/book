@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>NovelLibrary.VisualStudio</RootNamespace>
+    <AssemblyName>NovelLibrary.VisualStudio</AssemblyName>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>bin\</PackageOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Shell.17.0" Version="17.10.34928" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.10.2185" />
+  </ItemGroup>
+  <ItemGroup>
+    <VSIXSourceItem Include="source.extension.vsixmanifest" />
+  </ItemGroup>
+</Project>

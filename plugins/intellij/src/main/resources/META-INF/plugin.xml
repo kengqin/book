@@ -1,0 +1,14 @@
+<idea-plugin>
+  <id>com.kengqin.novellibrary.reader</id>
+  <name>Novel Library Reader</name>
+  <vendor email="support@novellibrary.local">Novel Library</vendor>
+  <description>Read and sync local novels from NovelLibrary while coding.</description>
+  <depends>com.intellij.modules.platform</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="小说" anchor="right" factoryClass="com.kengqin.novellibrary.NovelToolWindowFactory" />
+  </extensions>
+  <actions>
+    <action id="NovelLibrary.OpenReader" class="com.kengqin.novellibrary.OpenReaderAction" text="小说书库: 打开阅读面板" description="Open the Novel Library reader" />
+    <action id="NovelLibrary.ImportFile" class="com.kengqin.novellibrary.ImportFileAction" text="小说书库: 导入当前文件" />
+  </actions>
+</idea-plugin>

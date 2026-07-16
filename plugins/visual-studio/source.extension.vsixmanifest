@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+  <Metadata><Identity Id="NovelLibrary.VisualStudio" Version="0.4.0" Language="en-US" Publisher="Novel Library" /><DisplayName>Novel Library Reader</DisplayName><Description xml:space="preserve">Read and sync local novels from NovelLibrary while coding.</Description><License>LICENSE</License></Metadata>
+  <Installation><InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,18.0)" /><InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0,18.0)" /><InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0,18.0)" /></Installation>
+  <Assets><Asset Type="Microsoft.VisualStudio.VsPackage" d:Path="|MainAssembly|" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011" /></Assets>
+</PackageManifest>

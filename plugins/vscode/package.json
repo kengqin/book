@@ -1,0 +1,29 @@
+{
+  "name": "novel-library-reader",
+  "displayName": "Novel Library Reader",
+  "description": "Read and sync local novels from NovelLibrary while coding.",
+  "version": "0.4.0",
+  "publisher": "novel-library",
+  "license": "MIT",
+  "engines": { "vscode": ">=1.85.0" },
+  "categories": ["Other"],
+  "main": "extension.js",
+  "activationEvents": ["onStartupFinished", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.importFile"],
+  "contributes": {
+    "commands": [
+      { "command": "novelLibrary.openReader", "title": "小说书库: 打开阅读面板" },
+      { "command": "novelLibrary.importFile", "title": "小说书库: 导入当前文件" },
+      { "command": "novelLibrary.openDesktop", "title": "小说书库: 打开桌面端" }
+    ],
+    "keybindings": [
+      { "command": "novelLibrary.openReader", "key": "ctrl+alt+n" },
+      { "command": "novelLibrary.openDesktop", "key": "ctrl+alt+o" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "novelLibrary.importFile", "when": "resourceExtname == .txt || resourceExtname == .epub", "group": "navigation@90" }
+      ]
+    }
+  },
+  "scripts": { "validate": "node --check extension.js && node --check bridge.js" }
+}

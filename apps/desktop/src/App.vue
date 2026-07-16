@@ -1,15 +1,33 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onBeforeUnmount, onMounted } from 'vue'
 import { isTauri } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { useRouter } from 'vue-router'
 import { BookOpen, Download, LibraryBig, Search, Settings, Wrench } from 'lucide-vue-next'
 import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
 import { availableUpdate, checkForUpdates, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
 
-onMounted(() => {
+const router = useRouter()
+let unlistenImport: UnlistenFn | undefined
+let unlistenOpen: UnlistenFn | undefined
+
+onMounted(async () => {
   if (!isTauri()) return
+  unlistenImport = await listen<{ path: string; existingId?: string }>('bridge-import-requested', async event => {
+    await router.push('/library')
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent('novel-library-import', { detail: event.payload })), 0)
+  })
+  unlistenOpen = await listen<{ bookId: string; chapterNumber?: number }>('bridge-open-requested', event => {
+    void router.push(`/read/${event.payload.bookId}/${event.payload.chapterNumber || 1}`)
+  })
   void initializeUpdateEvents().then(() => {
     if (isAutoCheckEnabled()) void checkForUpdates(true)
   })
+})
+
+onBeforeUnmount(() => {
+  unlistenImport?.()
+  unlistenOpen?.()
 })
 </script>
 

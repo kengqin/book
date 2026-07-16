@@ -272,6 +272,16 @@ button { letter-spacing: 0; }
 .desktop-reader-content footer button span { display: grid; gap: 4px; }
 .desktop-reader-content footer small { opacity: .65; }
 .desktop-reader-content footer button:disabled { opacity: .35; cursor: not-allowed; }
+.desktop-reader--compact { min-height: 100%; }
+.desktop-reader--compact .desktop-reader-toolbar { position: sticky; }
+.desktop-reader-compact-content { width: min(620px, calc(100% - 40px)); min-height: calc(100vh - 64px); margin: 0 auto; padding: 38px 0 48px; }
+.desktop-reader-compact-content article { width: 100%; }
+.desktop-reader-compact-content h1 { margin-bottom: 24px; font-size: 22px; }
+.compact-reader-window { min-height: 210px; display: grid; align-content: center; gap: 3px; padding: 25px 28px; border: 1px solid rgba(45,48,44,.18); background: rgba(255,255,255,.38); box-shadow: 0 10px 28px rgba(34,42,37,.08); }
+.compact-reader-window p { min-height: 1.8em; margin: 0; font-family: "Noto Serif SC", SimSun, serif; font-size: var(--reader-font-size); line-height: var(--reader-line-height); white-space: pre-wrap; }
+.compact-reader-window small { margin-top: 12px; color: #7b827c; font-family: Inter, sans-serif; font-size: 9px; text-align: right; }
+.desktop-reader--night .compact-reader-window { border-color: #3b4743; background: rgba(44,54,50,.72); }
+.desktop-reader-compact-content footer { margin-top: 42px; }
 
 @media (max-width: 900px) {
   html, body, #app { min-width: 640px; }

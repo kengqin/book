@@ -1,8 +1,9 @@
+mod bridge;
 mod database;
 mod models;
 mod updater;
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use database::DatabaseState;
 use models::{
@@ -219,6 +220,42 @@ fn import_backup(
     database::import_backup(&mut state.connect()?, std::path::Path::new(&source_path))
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExternalFile {
+    name: String,
+    bytes: Vec<u8>,
+}
+
+#[tauri::command]
+fn read_external_file(path: String) -> Result<ExternalFile, String> {
+    let source = PathBuf::from(&path);
+    if !source.is_absolute() || !source.is_file() {
+        return Err("文件不存在或路径不是绝对路径".to_string());
+    }
+    let metadata = fs::metadata(&source).map_err(|error| error.to_string())?;
+    if metadata.len() > 512 * 1024 * 1024 {
+        return Err("文件超过 512 MB，暂不支持导入".to_string());
+    }
+    let name = source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "无法读取文件名".to_string())?
+        .to_string();
+    let extension = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if extension != "txt" && extension != "epub" {
+        return Err("只支持导入 TXT 或 EPUB 文件".to_string());
+    }
+    Ok(ExternalFile {
+        name,
+        bytes: fs::read(source).map_err(|error| error.to_string())?,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -230,6 +267,7 @@ pub fn run() {
             let data_directory = desktop_data_directory(app.handle())?;
             let database = DatabaseState::initialize(data_directory)?;
             app.manage(database);
+            bridge::start(app.handle().clone())?;
             app.manage(UpdateDownloadState::default());
             Ok(())
         })
@@ -258,6 +296,7 @@ pub fn run() {
             change_database_file,
             export_backup,
             import_backup,
+            read_external_file,
             updater::check_application_update,
             updater::download_application_update,
             updater::cancel_application_update_download,
