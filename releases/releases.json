@@ -12,7 +12,7 @@
       "published": true,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.2",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.2/NovelLibrary_0.3.2_x64-setup.exe",
-      "sha256": "",
+      "sha256": "32d5b224c32fda22447e7b5bdbc62d2a881cd5948eda644f2ac5d127adfa70f9",
       "sections": [
         {
           "title": "修复",
