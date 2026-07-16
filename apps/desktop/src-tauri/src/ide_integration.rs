@@ -212,6 +212,9 @@ fn scan_executables(root: &Path, names: &[&str], depth: usize, output: &mut Vec<
         return;
     };
     for entry in entries.flatten() {
+        if entry.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            continue;
+        }
         let path = entry.path();
         if path.is_dir() {
             scan_executables(&path, names, depth - 1, output);
@@ -329,19 +332,19 @@ fn detect_targets() -> Vec<IdeTarget> {
     let mut jetbrains_roots = vec![
         std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
-            .map(|path| path.join("JetBrains").join("Toolbox").join("apps")),
+            .map(|path| (path.join("JetBrains").join("Toolbox").join("apps"), 6)),
         std::env::var_os("ProgramFiles")
             .map(PathBuf::from)
-            .map(|path| path.join("JetBrains")),
+            .map(|path| (path.join("JetBrains"), 4)),
         std::env::var_os("ProgramFiles(x86)")
             .map(PathBuf::from)
-            .map(|path| path.join("JetBrains")),
+            .map(|path| (path.join("JetBrains"), 4)),
     ]
     .into_iter()
     .flatten()
     .collect::<Vec<_>>();
-    jetbrains_roots.extend(jetbrains_registry_roots());
-    for root in jetbrains_roots {
+    jetbrains_roots.extend(jetbrains_registry_roots().into_iter().map(|path| (path, 3)));
+    for (root, depth) in jetbrains_roots {
         scan_executables(
             &root,
             &[
@@ -354,7 +357,7 @@ fn detect_targets() -> Vec<IdeTarget> {
                 "goland64.exe",
                 "rubymine64.exe",
             ],
-            8,
+            depth,
             &mut jetbrains,
         );
     }
@@ -400,31 +403,6 @@ fn detect_targets() -> Vec<IdeTarget> {
 }
 
 fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
-    let Ok((executable, prefix)) = cli_command(target) else {
-        return (false, None);
-    };
-    let output = hidden_command(executable)
-        .args(prefix)
-        .arg("--list-extensions")
-        .arg("--show-versions")
-        .output();
-    let prefix = format!("{identifier}@");
-    if let Ok(output) = output {
-        if let Some(state) = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .find_map(|line| {
-                if line == identifier {
-                    Some((true, None))
-                } else {
-                    line.strip_prefix(&prefix)
-                        .map(|version| (true, Some(version.to_string())))
-                }
-            })
-        {
-            return state;
-        }
-    }
     let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else {
         return (false, None);
     };
@@ -454,17 +432,22 @@ fn xml_tag_value(payload: &str, tag: &str) -> Option<String> {
 }
 
 fn jetbrains_plugin_state(identifier: &str) -> (bool, Option<String>) {
-    let roots = [
-        std::env::var_os("APPDATA").map(PathBuf::from),
-        std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
-    ];
-    for root in roots
-        .into_iter()
-        .flatten()
+    let Some(root) = std::env::var_os("APPDATA")
+        .map(PathBuf::from)
         .map(|path| path.join("JetBrains"))
-    {
+    else {
+        return (false, None);
+    };
+    let Ok(products) = fs::read_dir(root) else {
+        return (false, None);
+    };
+    for product in products.flatten() {
+        if product.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            continue;
+        }
+        let root = product.path().join("plugins");
         let mut plugin_files = Vec::new();
-        scan_files_named(&root, "plugin.xml", 5, &mut plugin_files);
+        scan_files_named(&root, "plugin.xml", 4, &mut plugin_files);
         for file in plugin_files {
             let Ok(payload) = fs::read_to_string(file) else {
                 continue;
@@ -485,6 +468,9 @@ fn scan_files_named(root: &Path, name: &str, depth: usize, output: &mut Vec<Path
         return;
     };
     for entry in entries.flatten() {
+        if entry.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            continue;
+        }
         let path = entry.path();
         if path.is_dir() {
             scan_files_named(&path, name, depth - 1, output);

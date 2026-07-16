@@ -258,26 +258,32 @@ fn read_external_file(path: String) -> Result<ExternalFile, String> {
 }
 
 #[tauri::command]
-fn get_ide_integration_status(
+async fn get_ide_integration_status(
     app: tauri::AppHandle,
 ) -> Result<ide_integration::IdeIntegrationStatus, String> {
-    ide_integration::status(&app)
+    tauri::async_runtime::spawn_blocking(move || ide_integration::status(&app))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn install_ide_plugin(
+async fn install_ide_plugin(
     app: tauri::AppHandle,
     input: ide_integration::InstallIdePluginInput,
 ) -> Result<ide_integration::IdeInstallResult, String> {
-    ide_integration::install(&app, input)
+    tauri::async_runtime::spawn_blocking(move || ide_integration::install(&app, input))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn uninstall_ide_plugin(
+async fn uninstall_ide_plugin(
     app: tauri::AppHandle,
     input: ide_integration::UninstallIdePluginInput,
 ) -> Result<ide_integration::IdeInstallResult, String> {
-    ide_integration::uninstall(&app, input)
+    tauri::async_runtime::spawn_blocking(move || ide_integration::uninstall(&app, input))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

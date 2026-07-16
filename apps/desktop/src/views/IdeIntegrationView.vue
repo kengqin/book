@@ -16,6 +16,7 @@ const busyTarget = ref('')
 const error = ref('')
 const message = ref('')
 const query = ref('')
+const detectionTimeoutMs = 8000
 const availableCount = computed(() => status.value.plugins.filter(plugin => plugin.available).length)
 const visiblePlugins = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
@@ -27,11 +28,23 @@ function targetsFor(plugin: BundledIdePlugin) {
   return status.value.targets.filter(target => target.kind === plugin.kind)
 }
 
+async function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('IDE 检测超过 8 秒，已停止等待，请稍后重试')), milliseconds)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 async function refresh() {
   detecting.value = true
   error.value = ''
   try {
-    status.value = await getIdeIntegrationStatus()
+    status.value = await withTimeout(getIdeIntegrationStatus(), detectionTimeoutMs)
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -83,7 +96,7 @@ onMounted(refresh)
 
     <div class="ide-plugin-toolbar">
       <label class="ide-plugin-search"><Search :size="16" /><input v-model="query" type="search" placeholder="搜索支持的 IDE 或插件" /></label>
-      <span>{{ availableCount }} / {{ status.plugins.length }} 个插件包可用</span>
+      <span>{{ detecting ? '正在校验插件包与本机 IDE' : `${availableCount} / ${status.plugins.length} 个插件包可用` }}</span>
     </div>
 
     <div class="ide-plugin-catalog">
@@ -91,7 +104,7 @@ onMounted(refresh)
         <header>
           <span class="ide-target-icon"><Code2 :size="20" /></span>
           <div class="ide-plugin-heading"><strong>{{ plugin.label }}</strong><small>{{ plugin.description }}</small><span>插件版本 v{{ plugin.version }} · {{ plugin.packageType }} · ID {{ plugin.identifier }}</span></div>
-          <span class="ide-package-state" :class="{ ready: plugin.available }">{{ plugin.available ? `安装包已内置 · ${plugin.packageType}` : '安装包缺失' }}</span>
+          <span class="ide-package-state" :class="{ ready: plugin.available }">{{ plugin.available ? `安装包已内置 · ${plugin.packageType}` : detecting ? '正在校验安装包' : '安装包缺失' }}</span>
         </header>
         <div class="ide-plugin-supported"><span>支持：</span>{{ plugin.supportedIdes.join('、') }}</div>
         <div v-if="targetsFor(plugin).length" class="ide-target-list">
