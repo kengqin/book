@@ -1,7 +1,8 @@
 use std::{
     collections::hash_map::DefaultHasher,
-    fs,
+    fs::{self, File},
     hash::{Hash, Hasher},
+    io::{self, Read},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -38,6 +39,12 @@ struct PluginDefinition {
     package_type: String,
     supported_ides: Vec<String>,
     file: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JetBrainsProductInfo {
+    data_directory_name: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -412,17 +419,38 @@ fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option
         home.join(".vscode").join("extensions")
     };
     let folder_prefix = format!("{identifier}-");
-    fs::read_dir(extension_root)
+    let version = fs::read_dir(extension_root)
         .ok()
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|entry| entry.file_name().into_string().ok())
-        .find_map(|name| {
-            name.strip_prefix(&folder_prefix)
-                .map(|version| (true, Some(version.to_string())))
-        })
-        .unwrap_or((false, None))
+        .filter_map(|name| name.strip_prefix(&folder_prefix).map(str::to_string))
+        .max_by(|left, right| compare_versions(left, right));
+    (version.is_some(), version)
+}
+
+fn compare_versions(left: &str, right: &str) -> std::cmp::Ordering {
+    let parse = |value: &str| {
+        value
+            .split(['.', '-', '+'])
+            .map(|part| part.parse::<u64>().unwrap_or_default())
+            .collect::<Vec<_>>()
+    };
+    let left = parse(left);
+    let right = parse(right);
+    let length = left.len().max(right.len());
+    for index in 0..length {
+        let ordering = left
+            .get(index)
+            .copied()
+            .unwrap_or_default()
+            .cmp(&right.get(index).copied().unwrap_or_default());
+        if !ordering.is_eq() {
+            return ordering;
+        }
+    }
+    std::cmp::Ordering::Equal
 }
 
 fn xml_tag_value(payload: &str, tag: &str) -> Option<String> {
@@ -431,33 +459,137 @@ fn xml_tag_value(payload: &str, tag: &str) -> Option<String> {
     Some(payload[start..end].trim().to_string())
 }
 
-fn jetbrains_plugin_state(identifier: &str) -> (bool, Option<String>) {
-    let Some(root) = std::env::var_os("APPDATA")
+fn jetbrains_plugin_root(target: &IdeTarget) -> Result<PathBuf, String> {
+    let executable = PathBuf::from(&target.path);
+    let install_root = executable
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| "无法定位 JetBrains IDE 安装目录".to_string())?;
+    let payload = fs::read(install_root.join("product-info.json"))
+        .map_err(|error| format!("无法读取 JetBrains 产品信息：{error}"))?;
+    let product: JetBrainsProductInfo = serde_json::from_slice(&payload)
+        .map_err(|error| format!("JetBrains 产品信息无效：{error}"))?;
+    if product.data_directory_name.trim().is_empty()
+        || product.data_directory_name.contains(['/', '\\'])
+        || product.data_directory_name.contains("..")
+    {
+        return Err("JetBrains 插件目录名称无效".to_string());
+    }
+    let app_data = std::env::var_os("APPDATA")
         .map(PathBuf::from)
-        .map(|path| path.join("JetBrains"))
-    else {
-        return (false, None);
-    };
-    let Ok(products) = fs::read_dir(root) else {
-        return (false, None);
-    };
-    for product in products.flatten() {
-        if product.file_type().is_ok_and(|kind| kind.is_symlink()) {
+        .ok_or_else(|| "APPDATA 不可用".to_string())?;
+    Ok(app_data
+        .join("JetBrains")
+        .join(product.data_directory_name)
+        .join("plugins"))
+}
+
+fn jetbrains_plugin_location(
+    target: &IdeTarget,
+    identifier: &str,
+) -> Option<(PathBuf, Option<String>)> {
+    let root = jetbrains_plugin_root(target).ok()?;
+    let plugins = fs::read_dir(&root).ok()?;
+    for plugin in plugins.flatten() {
+        if !plugin.path().is_dir() || plugin.file_type().is_ok_and(|kind| kind.is_symlink()) {
             continue;
         }
-        let root = product.path().join("plugins");
-        let mut plugin_files = Vec::new();
-        scan_files_named(&root, "plugin.xml", 4, &mut plugin_files);
-        for file in plugin_files {
-            let Ok(payload) = fs::read_to_string(file) else {
-                continue;
-            };
+        let mut metadata = Vec::new();
+        scan_files_named(&plugin.path(), "plugin.xml", 4, &mut metadata);
+        let mut jars = Vec::new();
+        scan_files_with_extension(&plugin.path(), "jar", 4, &mut jars);
+        let payloads = metadata
+            .into_iter()
+            .filter_map(|file| fs::read_to_string(file).ok())
+            .chain(jars.into_iter().filter_map(read_plugin_xml_from_jar));
+        for payload in payloads {
             if xml_tag_value(&payload, "id").as_deref() == Some(identifier) {
-                return (true, xml_tag_value(&payload, "version"));
+                return Some((plugin.path(), xml_tag_value(&payload, "version")));
             }
         }
     }
-    (false, None)
+    None
+}
+
+fn read_plugin_xml_from_jar(path: PathBuf) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let mut entry = archive.by_name("META-INF/plugin.xml").ok()?;
+    let mut payload = String::new();
+    entry.read_to_string(&mut payload).ok()?;
+    Some(payload)
+}
+
+fn install_jetbrains_plugin(target: &IdeTarget, plugin_path: &Path) -> Result<String, String> {
+    let plugin_root = jetbrains_plugin_root(target)?;
+    fs::create_dir_all(&plugin_root)
+        .map_err(|error| format!("无法创建 JetBrains 插件目录：{error}"))?;
+
+    let archive_file = File::open(plugin_path).map_err(|error| error.to_string())?;
+    let mut archive = zip::ZipArchive::new(archive_file)
+        .map_err(|error| format!("JetBrains 插件包无效：{error}"))?;
+    let temporary = plugin_root.join(format!(".novel-library-install-{}", std::process::id()));
+    if temporary.exists() {
+        fs::remove_dir_all(&temporary).map_err(|error| error.to_string())?;
+    }
+    fs::create_dir_all(&temporary).map_err(|error| error.to_string())?;
+
+    let extract_result = (|| -> Result<String, String> {
+        let mut top_level: Option<String> = None;
+        for index in 0..archive.len() {
+            let mut entry = archive
+                .by_index(index)
+                .map_err(|error| format!("无法读取 JetBrains 插件包：{error}"))?;
+            let enclosed = entry
+                .enclosed_name()
+                .ok_or_else(|| "JetBrains 插件包包含不安全路径".to_string())?;
+            let first = enclosed
+                .components()
+                .next()
+                .and_then(|value| value.as_os_str().to_str())
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "JetBrains 插件包目录结构无效".to_string())?;
+            if top_level.as_deref().is_some_and(|value| value != first) {
+                return Err("JetBrains 插件包必须只有一个顶层目录".to_string());
+            }
+            top_level.get_or_insert_with(|| first.to_string());
+            if entry
+                .unix_mode()
+                .is_some_and(|mode| mode & 0o170000 == 0o120000)
+            {
+                return Err("JetBrains 插件包不能包含符号链接".to_string());
+            }
+            let destination = temporary.join(enclosed);
+            if entry.is_dir() {
+                fs::create_dir_all(&destination).map_err(|error| error.to_string())?;
+            } else {
+                if let Some(parent) = destination.parent() {
+                    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                }
+                let mut output = File::create(&destination).map_err(|error| error.to_string())?;
+                io::copy(&mut entry, &mut output).map_err(|error| error.to_string())?;
+            }
+        }
+        top_level.ok_or_else(|| "JetBrains 插件包为空".to_string())
+    })();
+
+    let top_level = match extract_result {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&temporary);
+            return Err(error);
+        }
+    };
+    let staged = temporary.join(&top_level);
+    let destination = plugin_root.join(&top_level);
+    if destination.exists() {
+        fs::remove_dir_all(&destination)
+            .map_err(|error| format!("无法替换已安装的 JetBrains 插件：{error}"))?;
+    }
+    fs::rename(&staged, &destination)
+        .map_err(|error| format!("无法写入 JetBrains 插件目录：{error}"))?;
+    let _ = fs::remove_dir_all(&temporary);
+    Ok("本地插件已部署，重启 IDE 后生效".to_string())
 }
 
 fn scan_files_named(root: &Path, name: &str, depth: usize, output: &mut Vec<PathBuf>) {
@@ -484,6 +616,35 @@ fn scan_files_named(root: &Path, name: &str, depth: usize, output: &mut Vec<Path
     }
 }
 
+fn scan_files_with_extension(
+    root: &Path,
+    extension: &str,
+    depth: usize,
+    output: &mut Vec<PathBuf>,
+) {
+    if depth == 0 || !root.is_dir() {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            scan_files_with_extension(&path, extension, depth - 1, output);
+        } else if path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+        {
+            output.push(path);
+        }
+    }
+}
+
 fn apply_installed_states(targets: &mut [IdeTarget], plugins: &[PluginDefinition]) {
     for target in targets {
         if let Some(plugin) = plugins.iter().find(|plugin| plugin.kind == target.kind) {
@@ -492,9 +653,10 @@ fn apply_installed_states(targets: &mut [IdeTarget], plugins: &[PluginDefinition
                 target.installed = installed;
                 target.installed_version = version;
             } else if target.kind == "jetbrains" {
-                let (installed, version) = jetbrains_plugin_state(&plugin.identifier);
-                target.installed = installed;
-                target.installed_version = version;
+                let state = jetbrains_plugin_location(target, &plugin.identifier);
+                target.installed = state.is_some();
+                target.installed_version = state.and_then(|(_, version)| version);
+                target.can_uninstall = target.installed;
             }
         }
     }
@@ -560,10 +722,7 @@ fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, Strin
                 .arg("--force")
                 .output()
         }
-        "jetbrains" => hidden_command(&executable)
-            .arg("installPlugins")
-            .arg(plugin_path)
-            .output(),
+        "jetbrains" => return install_jetbrains_plugin(target, plugin_path),
         "visual-studio" => hidden_command(&executable)
             .arg("/quiet")
             .arg(plugin_path)
@@ -608,6 +767,18 @@ pub fn uninstall(
 ) -> Result<IdeInstallResult, String> {
     let (_directory, plugin, target) =
         resolve_target_plugin(app, &input.target_id, &input.plugin_id)?;
+    if target.kind == "jetbrains" {
+        let (directory, _) = jetbrains_plugin_location(&target, &plugin.identifier)
+            .ok_or_else(|| "未找到已安装的 JetBrains 插件".to_string())?;
+        fs::remove_dir_all(&directory)
+            .map_err(|error| format!("无法卸载 JetBrains 插件：{error}"))?;
+        return Ok(IdeInstallResult {
+            target: target.label,
+            plugin: plugin.label,
+            installed: false,
+            message: "插件目录已删除，重启 IDE 后生效".to_string(),
+        });
+    }
     if !target.can_uninstall {
         return Err("此 IDE 请在其内置插件管理器中卸载".to_string());
     }
@@ -631,8 +802,10 @@ pub fn uninstall(
 
 #[cfg(test)]
 mod tests {
-    use super::target_id;
-    use std::path::Path;
+    use super::{
+        compare_versions, detect_targets, read_plugin_xml_from_jar, target_id, xml_tag_value,
+    };
+    use std::{collections::HashSet, fs::File, io::Write, path::Path, time::Instant};
 
     #[test]
     fn creates_stable_target_ids() {
@@ -640,5 +813,65 @@ mod tests {
         let second = target_id("vscode", Path::new("C:/Code/code.cmd"));
         assert_eq!(first, second);
         assert_ne!(first, target_id("jetbrains", Path::new("C:/Code/code.cmd")));
+    }
+
+    #[test]
+    fn reads_jetbrains_metadata_from_plugin_jar() {
+        let path = std::env::temp_dir().join(format!("novel-library-{}.jar", uuid::Uuid::new_v4()));
+        let file = File::create(&path).expect("create test plugin jar");
+        let mut archive = zip::ZipWriter::new(file);
+        archive
+            .start_file(
+                "META-INF/plugin.xml",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .expect("start plugin metadata");
+        archive
+            .write_all(b"<idea-plugin><id>com.kengqin.novellibrary.reader</id><version>0.4.1</version></idea-plugin>")
+            .expect("write plugin metadata");
+        archive.finish().expect("finish plugin jar");
+
+        let payload = read_plugin_xml_from_jar(path.clone()).expect("read plugin metadata");
+        assert_eq!(
+            xml_tag_value(&payload, "id").as_deref(),
+            Some("com.kengqin.novellibrary.reader")
+        );
+        assert_eq!(xml_tag_value(&payload, "version").as_deref(), Some("0.4.1"));
+        std::fs::remove_file(path).expect("remove test plugin jar");
+    }
+
+    #[test]
+    fn compares_numeric_plugin_versions() {
+        assert!(compare_versions("0.4.2", "0.4.1").is_gt());
+        assert!(compare_versions("0.4.10", "0.4.2").is_gt());
+        assert!(compare_versions("1.0", "1.0.0").is_eq());
+    }
+
+    #[test]
+    fn detects_only_existing_unique_ide_targets_promptly() {
+        let started = Instant::now();
+        let targets = detect_targets();
+        let mut ids = HashSet::new();
+        for target in &targets {
+            assert!(
+                Path::new(&target.path).is_file(),
+                "missing IDE target: {}",
+                target.path
+            );
+            assert!(
+                ids.insert(&target.id),
+                "duplicate IDE target: {}",
+                target.path
+            );
+        }
+        assert!(
+            started.elapsed().as_secs() < 8,
+            "IDE detection exceeded UI timeout"
+        );
+        eprintln!(
+            "detected {} IDE target(s) in {:?}",
+            targets.len(),
+            started.elapsed()
+        );
     }
 }

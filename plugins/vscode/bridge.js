@@ -15,7 +15,8 @@ async function request(route, options = {}) {
   const bridge = readBridge()
   const response = await fetch(`http://127.0.0.1:${bridge.port}${route}`, {
     ...options,
-    headers: { Authorization: `Bearer ${bridge.token}`, ...(options.headers || {}) }
+    signal: options.signal || AbortSignal.timeout(5000),
+    headers: { Authorization: `Bearer ${bridge.token}`, Connection: 'close', ...(options.headers || {}) }
   })
   const payload = await response.json()
   if (!response.ok) throw new Error(payload.error || `Bridge request failed: ${response.status}`)

@@ -5,23 +5,23 @@
       "id": "vscode",
       "label": "小说书库 · VS Code / Cursor 阅读器",
       "kind": "vscode",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "identifier": "novel-library.novel-library-reader",
-      "description": "在 VS Code 和 Cursor 编辑器内阅读小说，固定显示 5 行，支持快捷键滚动、切章和桌面端进度同步。",
+      "description": "在 VS Code 和 Cursor 代码行内阅读小说，固定显示 5 行，支持快捷键滚动、切章和桌面端进度同步。",
       "packageType": "VSIX",
       "supportedIdes": ["Visual Studio Code", "Cursor"],
-      "file": "novel-library-reader-0.4.1.vsix"
+      "file": "novel-library-reader-0.4.2.vsix"
     },
     {
       "id": "intellij",
-      "label": "小说书库 · IntelliJ IDEA 阅读器",
+      "label": "小说书库 · JetBrains 阅读器",
       "kind": "jetbrains",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "identifier": "com.kengqin.novellibrary.reader",
-      "description": "适用于 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 的小说阅读插件。",
+      "description": "在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中固定阅读 5 行小说，支持快捷键滚动、切章和桌面端进度同步。",
       "packageType": "ZIP",
       "supportedIdes": ["IntelliJ IDEA", "PyCharm", "WebStorm", "Android Studio", "Rider", "CLion", "GoLand", "RubyMine"],
-      "file": "novel-library-intellij-0.4.0.zip"
+      "file": "novel-library-intellij-0.4.1.zip"
     },
     {
       "id": "visual-studio",

@@ -1,14 +1,29 @@
 <idea-plugin>
   <id>com.kengqin.novellibrary.reader</id>
-  <name>Novel Library Reader</name>
+  <name>小说书库阅读器</name>
   <vendor email="support@novellibrary.local">Novel Library</vendor>
-  <description>Read and sync local novels from NovelLibrary while coding.</description>
+  <description>在 JetBrains IDE 中显示 5 行小说内容，通过快捷键滚动、切章并与小说书库桌面端同步。</description>
   <depends>com.intellij.modules.platform</depends>
   <extensions defaultExtensionNs="com.intellij">
-    <toolWindow id="小说" anchor="right" factoryClass="com.kengqin.novellibrary.NovelToolWindowFactory" />
+    <toolWindow id="小说书库" anchor="right" factoryClass="com.kengqin.novellibrary.NovelToolWindowFactory" />
+    <postStartupActivity implementation="com.kengqin.novellibrary.NovelStartupActivity" />
   </extensions>
   <actions>
-    <action id="NovelLibrary.OpenReader" class="com.kengqin.novellibrary.OpenReaderAction" text="小说书库: 打开阅读面板" description="Open the Novel Library reader" />
+    <action id="NovelLibrary.OpenReader" class="com.kengqin.novellibrary.OpenReaderAction" text="小说书库: 打开阅读面板" description="Open the Novel Library reader">
+      <keyboard-shortcut first-keystroke="ctrl alt N" keymap="$default" />
+    </action>
+    <action id="NovelLibrary.PreviousLine" class="com.kengqin.novellibrary.PreviousLineAction" text="小说书库: 上一行">
+      <keyboard-shortcut first-keystroke="ctrl alt UP" keymap="$default" />
+    </action>
+    <action id="NovelLibrary.NextLine" class="com.kengqin.novellibrary.NextLineAction" text="小说书库: 下一行">
+      <keyboard-shortcut first-keystroke="ctrl alt DOWN" keymap="$default" />
+    </action>
+    <action id="NovelLibrary.PreviousChapter" class="com.kengqin.novellibrary.PreviousChapterAction" text="小说书库: 上一章">
+      <keyboard-shortcut first-keystroke="ctrl alt LEFT" keymap="$default" />
+    </action>
+    <action id="NovelLibrary.NextChapter" class="com.kengqin.novellibrary.NextChapterAction" text="小说书库: 下一章">
+      <keyboard-shortcut first-keystroke="ctrl alt RIGHT" keymap="$default" />
+    </action>
     <action id="NovelLibrary.ImportFile" class="com.kengqin.novellibrary.ImportFileAction" text="小说书库: 导入当前文件" />
   </actions>
 </idea-plugin>

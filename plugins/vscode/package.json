@@ -1,17 +1,19 @@
 {
   "name": "novel-library-reader",
-  "displayName": "Novel Library Reader",
-  "description": "Read and sync local novels from NovelLibrary while coding.",
-  "version": "0.4.1",
+  "displayName": "小说书库阅读器",
+  "description": "在 VS Code 和 Cursor 代码行内阅读本地小说，并与小说书库桌面端同步。",
+  "version": "0.4.2",
   "publisher": "novel-library",
   "license": "MIT",
   "engines": { "vscode": ">=1.85.0" },
   "categories": ["Other"],
   "main": "extension.js",
-  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.importFile"],
+  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.selectBook", "onCommand:novelLibrary.selectChapter", "onCommand:novelLibrary.importFile"],
   "contributes": {
     "commands": [
-      { "command": "novelLibrary.openReader", "title": "小说书库: 在编辑器中打开阅读" },
+      { "command": "novelLibrary.openReader", "title": "小说书库: 显示或隐藏代码内阅读" },
+      { "command": "novelLibrary.selectBook", "title": "小说书库: 选择小说" },
+      { "command": "novelLibrary.selectChapter", "title": "小说书库: 选择章节" },
       { "command": "novelLibrary.nextLine", "title": "小说书库: 下一行" },
       { "command": "novelLibrary.previousLine", "title": "小说书库: 上一行" },
       { "command": "novelLibrary.nextChapter", "title": "小说书库: 下一章" },
@@ -37,9 +39,6 @@
         { "id": "novelLibrary.reader", "name": "小说阅读器", "visibility": "visible" }
       ]
     },
-    "viewsWelcome": [
-      { "view": "novelLibrary.reader", "contents": "小说书库已安装。点击这里打开编辑器内阅读。", "when": "true" }
-    ],
     "menus": {
       "editor/context": [
         { "command": "novelLibrary.importFile", "when": "resourceExtname == .txt || resourceExtname == .epub", "group": "navigation@90" }

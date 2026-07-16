@@ -28,10 +28,20 @@ Bridge 监听 `127.0.0.1` 的动态端口，并在 `%APPDATA%/NovelLibrary/bridg
 
 ## 适配器
 
-- `plugins/intellij`：Kotlin + IntelliJ Platform Gradle Plugin，一个包覆盖多个 JetBrains IDE。
-- `plugins/vscode`：无构建依赖的 CommonJS 扩展，提供 Webview 阅读面板、导入命令和快捷键。
-- `plugins/visual-studio`：Visual Studio 2022 VSIX 工程和 C# Bridge 客户端。
+- `plugins/intellij`：`0.4.1`，Kotlin + IntelliJ Platform Gradle Plugin，提供工具窗口、5 行行尾 Inlay、启动自动加载和快捷键，一个包覆盖多个 JetBrains IDE。
+- `plugins/vscode`：`0.4.2`，CommonJS 扩展，提供活动栏、含真实正文的侧边栏、5 行行尾 Decoration、选书选章、导入命令和快捷键。
+- `plugins/visual-studio`：`0.4.0`，Visual Studio 2022 官方 VSIX，提供 WPF 工具窗口、5 行行尾 Adornment、选书选章和快捷键。
+
+插件读取章节列表后优先过滤 `frontmatter` 和 `volume`，自动从 `kind=chapter` 的正文开始；附近空正文最多向前搜索 30 项。Bridge 请求最长 5 秒，避免 IDE 或桌面端失去响应。
+
+## 安装
+
+桌面端资源目录固定包含 `novel-library-reader-0.4.2.vsix`、`novel-library-intellij-0.4.1.zip`、`novel-library-visual-studio-0.4.0.vsix` 和清单。工具页默认展示全部支持插件并提供搜索，检测到每个 IDE 后由用户单独选择安装目标。已安装实例展示实际版本和卸载操作。
+
+JetBrains ZIP 根据目标产品 `product-info.json` 部署到准确插件目录，不调用只支持 Marketplace ID 的 `installPlugins`。检测和安装子进程均隐藏命令行窗口。命令行入口支持交互选择，也支持 `-Only ... -AllTargets` 自动化验收。
 
 ## 验收
 
-仓库根目录运行 `npm test`、`npm run desktop:web:build`、`npm run plugins:validate`，桌面端目录运行 `cargo fmt --all -- --check` 和 `cargo test`。JetBrains 和 Visual Studio 的最终包构建需要对应官方 IDE/SDK 工具链；当前环境没有安装这些工具，因此提交前必须在 Windows 发布机完成两类 VSIX/ZIP 的真实构建和安装测试。
+仓库根目录运行 `npm test`、`npm run desktop:web:build`、`npm run plugins:validate`，桌面端目录运行 `cargo fmt --all -- --check` 和 `cargo test`。还必须执行 JetBrains `clean buildPlugin`、Visual Studio `dotnet build -c Release` 和官方 VSIX 结构校验。
+
+2026-07-16 本机验收：VS Code `1.129.0` 与 Cursor `3.5.17` 均成功安装 `0.4.2`，隔离宿主通过真实 Bridge 验证 `诡秘之主 / 绯红 / 5 行` 和下一行同步；IntelliJ IDEA `2025.3.2` 成功加载 `0.4.1`。NSIS 安装到隔离目录后真实包含清单与三份插件，并能完整卸载。Visual Studio 官方 VSIX 已 0 警告构建并校验清单、DLL、`.pkgdef` 和命令注册，但本机未安装 Visual Studio，因此安装、工具窗口和卸载仍须在有 VS 2022 的发布机完成。

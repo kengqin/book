@@ -9,26 +9,48 @@ if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
 if (-not $Output) { $Output = Join-Path $Root 'plugins\visual-studio\bin\novel-library-visual-studio-0.4.0.vsix' }
 
 $projectRoot = Join-Path $Root 'plugins\visual-studio'
-$assembly = Join-Path $projectRoot 'bin\Release\net472\NovelLibrary.VisualStudio.dll'
-$manifest = Join-Path $projectRoot 'source.extension.vsixmanifest'
-$license = Join-Path $projectRoot 'LICENSE'
-foreach ($required in @($assembly, $manifest, $license)) {
-  if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-    throw "Visual Studio VSIX input is missing: $required"
-  }
+$artifact = Join-Path $projectRoot 'bin\novel-library-visual-studio-0.4.0.vsix'
+if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
+  throw "Official Visual Studio VSIX is missing. Build NovelLibrary.VisualStudio.csproj first: $artifact"
 }
 
-$stage = Join-Path ([System.IO.Path]::GetTempPath()) ("novel-library-vsix-" + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Force -Path $stage | Out-Null
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::OpenRead($artifact)
 try {
-  Copy-Item -LiteralPath $assembly -Destination (Join-Path $stage 'NovelLibrary.VisualStudio.dll')
-  Copy-Item -LiteralPath $manifest -Destination (Join-Path $stage 'extension.vsixmanifest')
-  Copy-Item -LiteralPath $license -Destination (Join-Path $stage 'LICENSE')
-  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Output) | Out-Null
-  if (Test-Path -LiteralPath $Output) { Remove-Item -LiteralPath $Output -Force }
-  Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $Output -CompressionLevel Optimal
-  if (-not (Test-Path -LiteralPath $Output -PathType Leaf)) { throw "VSIX was not created: $Output" }
-  Write-Host "Created Visual Studio VSIX: $Output"
+  $entries = @($archive.Entries | ForEach-Object FullName)
+  $requiredEntries = @(
+    '[Content_Types].xml',
+    'extension.vsixmanifest',
+    'NovelLibrary.VisualStudio.dll',
+    'NovelLibrary.VisualStudio.pkgdef',
+    'LICENSE'
+  )
+  foreach ($entry in $requiredEntries) {
+    if ($entries -notcontains $entry) { throw "Official VSIX is missing required entry: $entry" }
+  }
+
+  $manifestEntry = $archive.GetEntry('extension.vsixmanifest')
+  $manifestReader = [System.IO.StreamReader]::new($manifestEntry.Open())
+  try { [xml]$manifest = $manifestReader.ReadToEnd() } finally { $manifestReader.Dispose() }
+  $identity = $manifest.PackageManifest.Metadata.Identity
+  if ($identity.Id -ne 'NovelLibrary.VisualStudio' -or $identity.Version -ne '0.4.0') {
+    throw "Unexpected Visual Studio extension identity: $($identity.Id)@$($identity.Version)"
+  }
+
+  $pkgdefEntry = $archive.GetEntry('NovelLibrary.VisualStudio.pkgdef')
+  $pkgdefReader = [System.IO.StreamReader]::new($pkgdefEntry.Open())
+  try { $pkgdef = $pkgdefReader.ReadToEnd() } finally { $pkgdefReader.Dispose() }
+  if ($pkgdef -notmatch '\$RootKey\$\\Menus' -or $pkgdef -notmatch 'NovelLibrary\.VisualStudio\.dll') {
+    throw 'Visual Studio package registration or command table registration is missing'
+  }
 } finally {
-  if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+  $archive.Dispose()
 }
+
+$artifactPath = [System.IO.Path]::GetFullPath($artifact)
+$outputPath = [System.IO.Path]::GetFullPath($Output)
+if ($artifactPath -ne $outputPath) {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $outputPath) | Out-Null
+  Copy-Item -LiteralPath $artifactPath -Destination $outputPath -Force
+}
+Write-Host "Validated official Visual Studio VSIX: $outputPath"

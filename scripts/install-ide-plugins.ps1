@@ -4,6 +4,7 @@ param(
   [ValidateSet('', 'All', 'VSCode', 'JetBrains', 'VisualStudio')]
   [string]$Only = '',
   [switch]$SkipBuild,
+  [switch]$AllTargets,
   [switch]$WhatIf
 )
 
@@ -38,6 +39,16 @@ function Find-Executable([string[]]$Names) {
   return $null
 }
 
+function Find-Gradle {
+  $command = Find-Executable @('gradle.bat', 'gradle')
+  if ($command) { return $command }
+  $wrapperRoot = Join-Path $env:USERPROFILE '.gradle\wrapper\dists'
+  if (-not (Test-Path $wrapperRoot)) { return $null }
+  return Get-ChildItem $wrapperRoot -Recurse -Filter 'gradle.bat' -File -ErrorAction SilentlyContinue |
+    Sort-Object FullName -Descending |
+    Select-Object -First 1 -ExpandProperty FullName
+}
+
 function Select-InstallGroup {
   if ($Only) { return $Only }
   Write-Host ''
@@ -58,7 +69,7 @@ function Select-InstallGroup {
 
 function Package-VSCode {
   $source = Join-Path $Root 'plugins\vscode'
-  $output = Join-Path $artifactRoot 'novel-library-reader-0.4.1.vsix'
+  $output = Join-Path $artifactRoot 'novel-library-reader-0.4.2.vsix'
   New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
   $npx = Find-Executable @('npx.cmd', 'npx')
   if (-not $npx) { throw 'npx was not found; cannot package the VS Code/Cursor extension' }
@@ -75,7 +86,7 @@ function Find-JetBrainsPlugin {
 }
 
 function Build-JetBrainsPlugin {
-  $gradle = Find-Executable @('gradle.bat', 'gradle')
+  $gradle = Find-Gradle
   if (-not $gradle) { throw 'Gradle was not found. Install Gradle or provide a built JetBrains ZIP in plugins/intellij/build/distributions' }
   Invoke-External $gradle @('buildPlugin') (Join-Path $Root 'plugins\intellij')
   return Find-JetBrainsPlugin
@@ -90,8 +101,45 @@ function Get-JetBrainsExecutables {
   $executables = foreach ($rootPath in $roots) {
     Get-ChildItem $rootPath -Recurse -File -Include idea64.exe,pycharm64.exe,webstorm64.exe,studio64.exe,rider64.exe,clion64.exe,goland64.exe,rubymine64.exe -ErrorAction SilentlyContinue
   }
+  $registryApps = @(
+    Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+    Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+    Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue
+  ) | Where-Object {
+    $_.InstallLocation -and ($_.Publisher -match 'JetBrains' -or $_.DisplayName -match 'IntelliJ|PyCharm|WebStorm|Android Studio|Rider|CLion|GoLand|RubyMine')
+  }
+  foreach ($app in $registryApps) {
+    $bin = Join-Path $app.InstallLocation 'bin'
+    if (Test-Path $bin) {
+      $executables += Get-ChildItem $bin -File -ErrorAction SilentlyContinue | Where-Object Name -in @('idea64.exe', 'pycharm64.exe', 'webstorm64.exe', 'studio64.exe', 'rider64.exe', 'clion64.exe', 'goland64.exe', 'rubymine64.exe')
+    }
+  }
   $executables = @($executables | Sort-Object FullName -Unique)
   return $executables
+}
+
+function Install-JetBrainsArchive([System.IO.FileInfo]$Executable, [string]$PluginPath) {
+  $installRoot = Split-Path -Parent (Split-Path -Parent $Executable.FullName)
+  $productInfoPath = Join-Path $installRoot 'product-info.json'
+  if (-not (Test-Path $productInfoPath)) { throw "JetBrains product-info.json not found: $installRoot" }
+  $productInfo = Get-Content -Raw $productInfoPath | ConvertFrom-Json
+  $dataDirectory = [string]$productInfo.dataDirectoryName
+  if (-not $dataDirectory -or $dataDirectory -match '[\\/]' -or $dataDirectory.Contains('..')) { throw 'Invalid JetBrains data directory name' }
+  $pluginRoot = Join-Path $env:APPDATA "JetBrains\$dataDirectory\plugins"
+  $temporary = Join-Path $pluginRoot ".novel-library-install-$PID"
+  New-Item -ItemType Directory -Force $pluginRoot | Out-Null
+  if (Test-Path $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force }
+  New-Item -ItemType Directory -Force $temporary | Out-Null
+  try {
+    Expand-Archive -LiteralPath $PluginPath -DestinationPath $temporary -Force
+    $entries = @(Get-ChildItem $temporary -Force)
+    if ($entries.Count -ne 1 -or -not $entries[0].PSIsContainer) { throw 'JetBrains plugin archive must contain exactly one top-level directory' }
+    $destination = Join-Path $pluginRoot $entries[0].Name
+    if (Test-Path $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
+    Move-Item -LiteralPath $entries[0].FullName -Destination $destination
+  } finally {
+    if (Test-Path $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force }
+  }
 }
 
 function Install-JetBrains([string]$PluginPath) {
@@ -100,7 +148,7 @@ function Install-JetBrains([string]$PluginPath) {
   Write-Host 'Detected JetBrains IDEs:'
   for ($index = 0; $index -lt $executables.Count; $index++) { Write-Host "  $($index + 1). $($executables[$index].BaseName)" }
   Write-Host '  A. All JetBrains IDEs'
-  $selection = if ($WhatIf) { 'A' } else { Read-Host 'Enter comma-separated numbers, or A for all' }
+  $selection = if ($WhatIf -or $AllTargets) { 'A' } else { Read-Host 'Enter comma-separated numbers, or A for all' }
   $targets = if ($selection -eq 'A' -or $selection -eq 'a') {
     $executables
   } else {
@@ -111,8 +159,8 @@ function Install-JetBrains([string]$PluginPath) {
   }
   if (-not $targets.Count) { throw 'No JetBrains IDE was selected' }
   foreach ($executable in $targets) {
-    if ($WhatIf) { Write-Host "WHATIF: $($executable.FullName) installPlugins $PluginPath"; continue }
-    Start-Process -FilePath $executable.FullName -ArgumentList @('installPlugins', $PluginPath) -Wait -WindowStyle Hidden
+    if ($WhatIf) { Write-Host "WHATIF: deploy $PluginPath to $($executable.FullName) plugin directory"; continue }
+    Install-JetBrainsArchive $executable $PluginPath
   }
   return "$($targets.Count) JetBrains IDE(s)"
 }
@@ -135,11 +183,16 @@ function Find-VisualStudioPlugin {
 }
 
 function Build-VisualStudioPlugin {
-  $msbuild = Find-Executable @('msbuild.exe', 'msbuild')
-  if (-not $msbuild) { throw 'MSBuild was not found. Run this script from Visual Studio Developer PowerShell' }
+  $dotnet = Find-Executable @('dotnet.exe', 'dotnet')
+  if (-not $dotnet) {
+    $localDotnet = Join-Path $Root '.release-local\dotnet\dotnet.exe'
+    if (Test-Path $localDotnet) { $dotnet = $localDotnet }
+  }
+  if (-not $dotnet) { throw '.NET SDK was not found; cannot build the Visual Studio extension' }
   $project = Join-Path $Root 'plugins\visual-studio\NovelLibrary.VisualStudio.csproj'
-  Invoke-External $msbuild @($project, '/p:Configuration=Release') $Root
-  return Find-VisualStudioPlugin
+  Invoke-External $dotnet @('build', $project, '--configuration', 'Release') $Root
+  & (Join-Path $Root 'scripts\package-visual-studio-plugin.ps1') -Root $Root
+  return Join-Path $Root 'plugins\visual-studio\bin\novel-library-visual-studio-0.4.0.vsix'
 }
 
 function Install-VSCode([string]$PluginPath) {
@@ -148,7 +201,7 @@ function Install-VSCode([string]$PluginPath) {
   Write-Host 'Detected VS Code-compatible IDEs:'
   for ($index = 0; $index -lt $executables.Count; $index++) { Write-Host "  $($index + 1). $($executables[$index])" }
   Write-Host '  A. All'
-  $selection = if ($WhatIf) { 'A' } else { Read-Host 'Enter comma-separated numbers, or A for all' }
+  $selection = if ($WhatIf -or $AllTargets) { 'A' } else { Read-Host 'Enter comma-separated numbers, or A for all' }
   $targets = if ($selection -eq 'A' -or $selection -eq 'a') {
     $executables
   } else {
@@ -174,7 +227,7 @@ $Only = Select-InstallGroup
 
 if ($Only -in @('All', 'VSCode')) {
   try {
-    $plugin = if ($SkipBuild) { Join-Path $artifactRoot 'novel-library-reader-0.4.1.vsix' } else { Package-VSCode }
+    $plugin = if ($SkipBuild) { Join-Path $artifactRoot 'novel-library-reader-0.4.2.vsix' } else { Package-VSCode }
     if (-not (Test-Path $plugin)) { throw "VS Code VSIX does not exist: $plugin" }
     Add-Result 'VS Code / Cursor' 'installed' (Install-VSCode $plugin)
   } catch { Add-Result 'VS Code / Cursor' 'failed' $_.Exception.Message }

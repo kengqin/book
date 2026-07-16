@@ -20,12 +20,12 @@ jobs:
       - run: npm run plugins:validate
       - run: node --check plugins/vscode/extension.js
       - run: node --check plugins/vscode/bridge.js
-      - run: npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out novel-library-reader-0.4.1.vsix
+      - run: npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out novel-library-reader-0.4.2.vsix
         working-directory: plugins/vscode
       - uses: actions/upload-artifact@v4
         with:
           name: novel-library-vscode
-          path: plugins/vscode/novel-library-reader-0.4.1.vsix
+          path: plugins/vscode/novel-library-reader-0.4.2.vsix
 
   build-intellij:
     runs-on: windows-latest
@@ -41,15 +41,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: novel-library-intellij
-          path: plugins/intellij/build/distributions/*.zip
+          path: plugins/intellij/build/distributions/novel-library-intellij-0.4.1.zip
 
   build-visual-studio:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: microsoft/setup-msbuild@v2
       - run: dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
-      - run: msbuild plugins/visual-studio/NovelLibrary.VisualStudio.csproj /p:Configuration=Release
+      - run: dotnet build plugins/visual-studio/NovelLibrary.VisualStudio.csproj --configuration Release --no-restore
       - name: Package Visual Studio VSIX
         shell: pwsh
         run: ./scripts/package-visual-studio-plugin.ps1 -Root $PWD

@@ -1,0 +1,174 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace NovelLibrary.VisualStudio;
+
+internal sealed class BookItem
+{
+    public string Id { get; set; } = "";
+    public string Title { get; set; } = "";
+    public int? CurrentChapter { get; set; }
+    public override string ToString() => Title;
+}
+
+internal sealed class ChapterItem
+{
+    public int Number { get; set; }
+    public string Title { get; set; } = "";
+    public string Kind { get; set; }
+    public override string ToString() => Title;
+}
+
+internal sealed class ChapterPayload
+{
+    public int Number { get; set; }
+    public string Title { get; set; } = "";
+    public string ContentText { get; set; } = "";
+    public string Content { get; set; } = "";
+}
+
+internal static class NovelLibraryReaderSession
+{
+    private static readonly NovelLibraryBridge Bridge = new NovelLibraryBridge();
+    private static readonly SemaphoreSlim Gate = new SemaphoreSlim(1, 1);
+    private static bool _loaded;
+    private static List<string> _lines = new List<string>();
+    private static int _lineStart;
+
+    public static event EventHandler Changed;
+    public static IReadOnlyList<BookItem> Books { get; private set; } = Array.Empty<BookItem>();
+    public static IReadOnlyList<ChapterItem> Chapters { get; private set; } = Array.Empty<ChapterItem>();
+    public static BookItem CurrentBook { get; private set; }
+    public static ChapterPayload CurrentChapter { get; private set; }
+    public static IReadOnlyList<string> VisibleLines => _lines.Skip(_lineStart).Take(5).ToArray();
+    public static string Status => CurrentChapter == null
+        ? "正在连接小说书库桌面端"
+        : $"{CurrentChapter.Title} · {_lineStart + 1}-{Math.Min(_lines.Count, _lineStart + 5)} / {_lines.Count} 行";
+
+    public static async Task EnsureLoadedAsync()
+    {
+        await Gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_loaded) return;
+            Books = await Bridge.GetAsync<List<BookItem>>("/v1/books").ConfigureAwait(false);
+            CurrentBook = Books.FirstOrDefault() ?? throw new InvalidOperationException("桌面端书库中还没有小说");
+            await LoadBookCoreAsync(CurrentBook).ConfigureAwait(false);
+            _loaded = true;
+        }
+        finally
+        {
+            Gate.Release();
+        }
+        RaiseChanged();
+    }
+
+    public static async Task SelectBookAsync(BookItem book)
+    {
+        if (book == null) return;
+        await Gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            CurrentBook = book;
+            await LoadBookCoreAsync(book).ConfigureAwait(false);
+            _loaded = true;
+        }
+        finally
+        {
+            Gate.Release();
+        }
+        RaiseChanged();
+    }
+
+    public static async Task SelectChapterAsync(ChapterItem chapter)
+    {
+        if (chapter == null || CurrentBook == null) return;
+        await LoadReadableChapterAsync(chapter.Number, 1).ConfigureAwait(false);
+        RaiseChanged();
+    }
+
+    public static async Task MoveLineAsync(int direction)
+    {
+        await EnsureLoadedAsync().ConfigureAwait(false);
+        _lineStart = Math.Max(0, Math.Min(Math.Max(0, _lines.Count - 5), _lineStart + direction));
+        RaiseChanged();
+        if (CurrentBook != null && CurrentChapter != null)
+        {
+            var progress = _lines.Count <= 5 ? 100d : _lineStart * 100d / (_lines.Count - 5);
+            await Bridge.PostAsync("/v1/progress", new
+            {
+                bookId = CurrentBook.Id,
+                chapterNumber = CurrentChapter.Number,
+                chapterProgress = progress
+            }).ConfigureAwait(false);
+        }
+    }
+
+    public static async Task MoveChapterAsync(int direction)
+    {
+        await EnsureLoadedAsync().ConfigureAwait(false);
+        if (CurrentChapter == null) return;
+        var index = Chapters.ToList().FindIndex(item => item.Number == CurrentChapter.Number);
+        var next = Math.Max(0, Math.Min(Chapters.Count - 1, index + direction));
+        if (next != index)
+        {
+            await LoadReadableChapterAsync(Chapters[next].Number, direction).ConfigureAwait(false);
+            RaiseChanged();
+        }
+    }
+
+    private static async Task LoadBookCoreAsync(BookItem book)
+    {
+        var allChapters = await Bridge.GetAsync<List<ChapterItem>>(
+            $"/v1/books/{Uri.EscapeDataString(book.Id)}/chapters").ConfigureAwait(false);
+        var readableChapters = allChapters.Where(item => string.IsNullOrEmpty(item.Kind) || item.Kind == "chapter").ToList();
+        Chapters = readableChapters.Count > 0 ? readableChapters : allChapters;
+        var preferred = Chapters.FirstOrDefault(item => item.Number == book.CurrentChapter)
+            ?? Chapters.FirstOrDefault()
+            ?? throw new InvalidOperationException("当前小说没有章节");
+        await LoadReadableChapterAsync(preferred.Number, 1).ConfigureAwait(false);
+    }
+
+    private static async Task LoadReadableChapterAsync(int chapterNumber, int direction)
+    {
+        if (CurrentBook == null) return;
+        var index = Chapters.ToList().FindIndex(item => item.Number == chapterNumber);
+        for (var attempts = 0; index >= 0 && index < Chapters.Count && attempts < 30; attempts++, index += direction)
+        {
+            var chapter = await Bridge.GetAsync<ChapterPayload>(
+                $"/v1/books/{Uri.EscapeDataString(CurrentBook.Id)}/chapters/{Chapters[index].Number}").ConfigureAwait(false);
+            var lines = SplitLines(string.IsNullOrWhiteSpace(chapter.ContentText) ? chapter.Content : chapter.ContentText);
+            if (lines.Count == 0) continue;
+            CurrentChapter = chapter;
+            _lines = lines;
+            _lineStart = 0;
+            return;
+        }
+        throw new InvalidOperationException("附近没有可阅读的正文章节");
+    }
+
+    private static List<string> SplitLines(string text)
+    {
+        var result = new List<string>();
+        foreach (var paragraph in (text ?? "").Replace("\r", "").Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = "";
+            foreach (var character in paragraph.Trim())
+            {
+                line += character;
+                if (line.Length >= 42 || (line.Length >= 18 && "，。！？；：、,.!?;:".Contains(character)))
+                {
+                    result.Add(line);
+                    line = "";
+                }
+            }
+            if (line.Length > 0) result.Add(line);
+        }
+        return result;
+    }
+
+    private static void RaiseChanged() => Changed?.Invoke(null, EventArgs.Empty);
+}
