@@ -6,8 +6,18 @@ use std::{
     process::Command,
 };
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
+
+fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    command
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +33,7 @@ struct PluginDefinition {
     label: String,
     kind: String,
     version: String,
+    identifier: String,
     file: String,
 }
 
@@ -33,6 +44,7 @@ pub struct BundledIdePlugin {
     label: String,
     kind: String,
     version: String,
+    identifier: String,
     available: bool,
 }
 
@@ -43,6 +55,9 @@ pub struct IdeTarget {
     label: String,
     kind: String,
     path: String,
+    installed: bool,
+    installed_version: Option<String>,
+    can_uninstall: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -55,6 +70,13 @@ pub struct IdeIntegrationStatus {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallIdePluginInput {
+    target_id: String,
+    plugin_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UninstallIdePluginInput {
     target_id: String,
     plugin_id: String,
 }
@@ -107,7 +129,7 @@ fn read_manifest(directory: &Path) -> Result<PluginManifest, String> {
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
-    let output = Command::new("where.exe").arg(name).output().ok()?;
+    let output = hidden_command("where.exe").arg(name).output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -149,6 +171,9 @@ fn detect_targets() -> Vec<IdeTarget> {
                 label: label.to_string(),
                 kind: "vscode".to_string(),
                 path: path.display().to_string(),
+                installed: false,
+                installed_version: None,
+                can_uninstall: true,
             });
         }
     }
@@ -198,6 +223,9 @@ fn detect_targets() -> Vec<IdeTarget> {
             label,
             kind: "jetbrains".to_string(),
             path: path.display().to_string(),
+            installed: false,
+            installed_version: None,
+            can_uninstall: false,
         });
     }
 
@@ -218,30 +246,92 @@ fn detect_targets() -> Vec<IdeTarget> {
                 label: "Visual Studio 2022".to_string(),
                 kind: "visual-studio".to_string(),
                 path: path.display().to_string(),
+                installed: false,
+                installed_version: None,
+                can_uninstall: false,
             });
         }
     }
     targets
 }
 
+fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
+    let output = hidden_command("cmd.exe")
+        .arg("/c")
+        .arg(&target.path)
+        .arg("--list-extensions")
+        .arg("--show-versions")
+        .output();
+    let Ok(output) = output else {
+        return (false, None);
+    };
+    let prefix = format!("{identifier}@");
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .find_map(|line| {
+            if line == identifier {
+                Some((true, None))
+            } else {
+                line.strip_prefix(&prefix)
+                    .map(|version| (true, Some(version.to_string())))
+            }
+        })
+        .unwrap_or((false, None))
+}
+
+fn apply_installed_states(targets: &mut [IdeTarget], plugins: &[PluginDefinition]) {
+    for target in targets {
+        if let Some(plugin) = plugins.iter().find(|plugin| plugin.kind == target.kind) {
+            if target.kind == "vscode" {
+                let (installed, version) = vscode_extension_state(target, &plugin.identifier);
+                target.installed = installed;
+                target.installed_version = version;
+            }
+        }
+    }
+}
+
 pub fn status(app: &AppHandle) -> Result<IdeIntegrationStatus, String> {
     let directory = plugin_directory(app)?;
     let manifest = read_manifest(&directory)?;
-    let plugins = manifest
-        .plugins
-        .into_iter()
+    let definitions = manifest.plugins;
+    let mut targets = detect_targets();
+    apply_installed_states(&mut targets, &definitions);
+    let plugins = definitions
+        .iter()
         .map(|plugin| BundledIdePlugin {
             available: directory.join(&plugin.file).is_file(),
-            id: plugin.id,
-            label: plugin.label,
-            kind: plugin.kind,
-            version: plugin.version,
+            id: plugin.id.clone(),
+            label: plugin.label.clone(),
+            kind: plugin.kind.clone(),
+            version: plugin.version.clone(),
+            identifier: plugin.identifier.clone(),
         })
         .collect();
-    Ok(IdeIntegrationStatus {
-        plugins,
-        targets: detect_targets(),
-    })
+    Ok(IdeIntegrationStatus { plugins, targets })
+}
+
+fn resolve_target_plugin(
+    app: &AppHandle,
+    target_id: &str,
+    plugin_id: &str,
+) -> Result<(PathBuf, PluginDefinition, IdeTarget), String> {
+    let directory = plugin_directory(app)?;
+    let manifest = read_manifest(&directory)?;
+    let plugin = manifest
+        .plugins
+        .into_iter()
+        .find(|plugin| plugin.id == plugin_id)
+        .ok_or_else(|| "未找到指定插件".to_string())?;
+    let target = detect_targets()
+        .into_iter()
+        .find(|target| target.id == target_id)
+        .ok_or_else(|| "未找到指定 IDE，请重新检测".to_string())?;
+    if target.kind != plugin.kind {
+        return Err("插件类型与目标 IDE 不匹配".to_string());
+    }
+    Ok((directory, plugin, target))
 }
 
 fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, String> {
@@ -250,18 +340,18 @@ fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, Strin
         return Err("目标 IDE 已被移动或删除，请重新检测".to_string());
     }
     let output = match target.kind.as_str() {
-        "vscode" => Command::new("cmd.exe")
+        "vscode" => hidden_command("cmd.exe")
             .arg("/c")
             .arg(&executable)
             .arg("--install-extension")
             .arg(plugin_path)
             .arg("--force")
             .output(),
-        "jetbrains" => Command::new(&executable)
+        "jetbrains" => hidden_command(&executable)
             .arg("installPlugins")
             .arg(plugin_path)
             .output(),
-        "visual-studio" => Command::new(&executable)
+        "visual-studio" => hidden_command(&executable)
             .arg("/quiet")
             .arg(plugin_path)
             .output(),
@@ -280,20 +370,8 @@ fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, Strin
 }
 
 pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInstallResult, String> {
-    let directory = plugin_directory(app)?;
-    let manifest = read_manifest(&directory)?;
-    let plugin = manifest
-        .plugins
-        .into_iter()
-        .find(|plugin| plugin.id == input.plugin_id)
-        .ok_or_else(|| "未找到指定插件".to_string())?;
-    let target = detect_targets()
-        .into_iter()
-        .find(|target| target.id == input.target_id)
-        .ok_or_else(|| "未找到指定 IDE，请重新检测".to_string())?;
-    if target.kind != plugin.kind {
-        return Err("插件类型与目标 IDE 不匹配".to_string());
-    }
+    let (directory, plugin, target) =
+        resolve_target_plugin(app, &input.target_id, &input.plugin_id)?;
     let plugin_path = directory.join(&plugin.file);
     if !plugin_path.is_file() {
         return Err(format!("桌面安装包未包含插件文件：{}", plugin.file));
@@ -308,6 +386,33 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
         } else {
             output
         },
+    })
+}
+
+pub fn uninstall(
+    app: &AppHandle,
+    input: UninstallIdePluginInput,
+) -> Result<IdeInstallResult, String> {
+    let (_directory, plugin, target) =
+        resolve_target_plugin(app, &input.target_id, &input.plugin_id)?;
+    if !target.can_uninstall {
+        return Err("此 IDE 请在其内置插件管理器中卸载".to_string());
+    }
+    let output = hidden_command("cmd.exe")
+        .arg("/c")
+        .arg(&target.path)
+        .arg("--uninstall-extension")
+        .arg(&plugin.identifier)
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    Ok(IdeInstallResult {
+        target: target.label,
+        plugin: plugin.label,
+        installed: false,
+        message: "卸载命令已完成，重启 IDE 后生效".to_string(),
     })
 }
 

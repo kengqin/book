@@ -53,6 +53,7 @@ export interface BundledIdePlugin {
   label: string
   kind: 'vscode' | 'jetbrains' | 'visual-studio'
   version: string
+  identifier: string
   available: boolean
 }
 
@@ -61,6 +62,9 @@ export interface IdeTarget {
   label: string
   kind: BundledIdePlugin['kind']
   path: string
+  installed: boolean
+  installedVersion?: string
+  canUninstall: boolean
 }
 
 export interface IdeIntegrationStatus {
@@ -146,4 +150,8 @@ export function getIdeIntegrationStatus() {
 
 export function installIdePlugin(targetId: string, pluginId: string) {
   return invoke<IdeInstallResult>('install_ide_plugin', { input: { targetId, pluginId } })
+}
+
+export function uninstallIdePlugin(targetId: string, pluginId: string) {
+  return invoke<IdeInstallResult>('uninstall_ide_plugin', { input: { targetId, pluginId } })
 }

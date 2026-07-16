@@ -6,6 +6,7 @@
       "label": "VS Code / Cursor",
       "kind": "vscode",
       "version": "0.4.0",
+      "identifier": "novel-library.novel-library-reader",
       "file": "novel-library-reader-0.4.0.vsix"
     },
     {
@@ -13,6 +14,7 @@
       "label": "JetBrains IDE",
       "kind": "jetbrains",
       "version": "0.4.0",
+      "identifier": "com.kengqin.novellibrary.reader",
       "file": "novel-library-intellij-0.4.0.zip"
     },
     {
@@ -20,6 +22,7 @@
       "label": "Visual Studio 2022",
       "kind": "visual-studio",
       "version": "0.4.0",
+      "identifier": "NovelLibrary.VisualStudio",
       "file": "novel-library-visual-studio-0.4.0.vsix"
     }
   ]

@@ -272,6 +272,14 @@ fn install_ide_plugin(
     ide_integration::install(&app, input)
 }
 
+#[tauri::command]
+fn uninstall_ide_plugin(
+    app: tauri::AppHandle,
+    input: ide_integration::UninstallIdePluginInput,
+) -> Result<ide_integration::IdeInstallResult, String> {
+    ide_integration::uninstall(&app, input)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -315,6 +323,7 @@ pub fn run() {
             read_external_file,
             get_ide_integration_status,
             install_ide_plugin,
+            uninstall_ide_plugin,
             updater::check_application_update,
             updater::download_application_update,
             updater::cancel_application_update_download,
