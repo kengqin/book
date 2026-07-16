@@ -19,12 +19,13 @@ describe('IndexedDB library repository', () => {
           description: '',
           encoding: 'utf-8',
           sourceName: '测试书.txt',
-          sourceSize: 100
+          sourceSize: 100,
+          sourceFormat: 'txt'
         },
         warnings: [],
         chapters: [
-          { number: 1, originalLabel: '一', title: '开始', volume: '第一卷', content: '正文', wordCount: 2 },
-          { number: 2, originalLabel: '二', title: '继续', volume: '第一卷', content: '更多正文', wordCount: 4 }
+          { number: 1, originalLabel: '一', title: '开始', volume: '第一卷', content: '正文', contentText: '正文', contentFormat: 'text', wordCount: 2 },
+          { number: 2, originalLabel: '二', title: '继续', volume: '第一卷', content: '更多正文', contentText: '更多正文', contentFormat: 'text', wordCount: 4 }
         ]
       }
     })
@@ -40,11 +41,11 @@ describe('IndexedDB library repository', () => {
       options: defaultParseOptions,
       theme: defaultTheme,
       result: {
-        metadata: { title: '进度测试', author: '', description: '', encoding: 'utf-8', sourceName: 'progress.txt', sourceSize: 10 },
+        metadata: { title: '进度测试', author: '', description: '', encoding: 'utf-8', sourceName: 'progress.txt', sourceSize: 10, sourceFormat: 'txt' },
         warnings: [],
         chapters: [
-          { number: 1, originalLabel: '一', title: '一', volume: '', content: '一', wordCount: 1 },
-          { number: 2, originalLabel: '二', title: '二', volume: '', content: '二', wordCount: 1 }
+          { number: 1, originalLabel: '一', title: '一', volume: '', content: '一', contentText: '一', contentFormat: 'text', wordCount: 1 },
+          { number: 2, originalLabel: '二', title: '二', volume: '', content: '二', contentText: '二', contentFormat: 'text', wordCount: 1 }
         ]
       }
     })

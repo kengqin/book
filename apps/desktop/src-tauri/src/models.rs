@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+fn default_source_format() -> String {
+    "txt".to_string()
+}
+
+fn default_content_format() -> String {
+    "text".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParseOptions {
@@ -32,6 +40,10 @@ pub struct ParsedMetadata {
     pub encoding: String,
     pub source_name: String,
     pub source_size: i64,
+    #[serde(default = "default_source_format")]
+    pub source_format: String,
+    #[serde(default)]
+    pub cover_data_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +54,10 @@ pub struct ParsedChapter {
     pub title: String,
     pub volume: String,
     pub content: String,
+    #[serde(default)]
+    pub content_text: String,
+    #[serde(default = "default_content_format")]
+    pub content_format: String,
     pub word_count: i64,
 }
 
@@ -72,6 +88,10 @@ pub struct BookRecord {
     pub source_name: String,
     pub source_size: i64,
     pub encoding: String,
+    #[serde(default = "default_source_format")]
+    pub source_format: String,
+    #[serde(default)]
+    pub cover_data_url: Option<String>,
     pub chapter_count: i64,
     pub total_words: i64,
     pub volumes: Vec<String>,
@@ -95,6 +115,8 @@ pub struct ChapterSummary {
     pub title: String,
     pub volume: String,
     pub word_count: i64,
+    #[serde(default = "default_content_format")]
+    pub content_format: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,7 +129,11 @@ pub struct ChapterRecord {
     pub title: String,
     pub volume: String,
     pub content: String,
+    #[serde(default)]
+    pub content_text: String,
     pub word_count: i64,
+    #[serde(default = "default_content_format")]
+    pub content_format: String,
 }
 
 #[derive(Debug, Deserialize)]

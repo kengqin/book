@@ -116,6 +116,8 @@ export function parseNovel(request: ParserRequest, onProgress: ParseProgressList
       title: header.title,
       volume: header.volume,
       content,
+      contentText: content,
+      contentFormat: 'text',
       wordCount: content.replace(/\s/g, '').length
     }
   })
@@ -127,7 +129,15 @@ export function parseNovel(request: ParserRequest, onProgress: ParseProgressList
   onProgress({ type: 'progress', progress: 92, message: '正在生成预览' })
 
   return {
-    metadata: { title, author, description, encoding, sourceName: request.filename, sourceSize: request.buffer.byteLength },
+    metadata: {
+      title,
+      author,
+      description,
+      encoding,
+      sourceName: request.filename,
+      sourceSize: request.buffer.byteLength,
+      sourceFormat: 'txt'
+    },
     chapters,
     warnings
   }

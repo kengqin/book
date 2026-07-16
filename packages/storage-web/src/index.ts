@@ -77,6 +77,8 @@ export async function saveImportedBook(input: SaveImportedBookInput) {
     sourceName: input.result.metadata.sourceName,
     sourceSize: input.result.metadata.sourceSize,
     encoding: input.result.metadata.encoding,
+    sourceFormat: input.result.metadata.sourceFormat,
+    coverDataUrl: input.result.metadata.coverDataUrl,
     chapterCount: input.result.chapters.length,
     totalWords: input.result.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
     volumes,

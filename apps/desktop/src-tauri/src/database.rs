@@ -255,7 +255,9 @@ fn migrate(connection: &Connection) -> Result<(), String> {
                 chapter_progress REAL NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
-                last_read_at INTEGER NOT NULL
+                last_read_at INTEGER NOT NULL,
+                source_format TEXT NOT NULL DEFAULT 'txt',
+                cover_data_url TEXT
             );
 
             CREATE TABLE IF NOT EXISTS chapters (
@@ -266,7 +268,9 @@ fn migrate(connection: &Connection) -> Result<(), String> {
                 title TEXT NOT NULL,
                 volume TEXT NOT NULL DEFAULT '',
                 content TEXT NOT NULL,
+                content_text TEXT NOT NULL DEFAULT '',
                 word_count INTEGER NOT NULL DEFAULT 0,
+                content_format TEXT NOT NULL DEFAULT 'text',
                 UNIQUE(book_id, number)
             );
 
@@ -307,8 +311,71 @@ fn migrate(connection: &Connection) -> Result<(), String> {
             )
             .map_err(|error| error.to_string())?;
     }
+    let book_columns = {
+        let mut statement = connection
+            .prepare("PRAGMA table_info(books)")
+            .map_err(|error| error.to_string())?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        columns
+    };
+    if !book_columns.iter().any(|column| column == "source_format") {
+        connection
+            .execute(
+                "ALTER TABLE books ADD COLUMN source_format TEXT NOT NULL DEFAULT 'txt'",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    if !book_columns.iter().any(|column| column == "cover_data_url") {
+        connection
+            .execute("ALTER TABLE books ADD COLUMN cover_data_url TEXT", [])
+            .map_err(|error| error.to_string())?;
+    }
+    let chapter_columns = {
+        let mut statement = connection
+            .prepare("PRAGMA table_info(chapters)")
+            .map_err(|error| error.to_string())?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        columns
+    };
+    if !chapter_columns
+        .iter()
+        .any(|column| column == "content_format")
+    {
+        connection
+            .execute(
+                "ALTER TABLE chapters ADD COLUMN content_format TEXT NOT NULL DEFAULT 'text'",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    if !chapter_columns
+        .iter()
+        .any(|column| column == "content_text")
+    {
+        connection
+            .execute(
+                "ALTER TABLE chapters ADD COLUMN content_text TEXT NOT NULL DEFAULT ''",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "UPDATE chapters SET content_text = content WHERE content_text = ''",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+    }
     connection
-        .execute_batch("PRAGMA user_version = 3")
+        .execute_batch("PRAGMA user_version = 4")
         .map_err(|error| error.to_string())
 }
 
@@ -353,10 +420,12 @@ fn map_book(row: &rusqlite::Row<'_>) -> Result<BookRecord, rusqlite::Error> {
         created_at: row.get(15)?,
         updated_at: row.get(16)?,
         last_read_at: row.get(17)?,
+        source_format: row.get(18)?,
+        cover_data_url: row.get(19)?,
     })
 }
 
-const BOOK_COLUMNS: &str = "id, title, author, description, source_name, source_size, encoding, chapter_count, total_words, volumes_json, theme_json, parse_options_json, current_chapter, progress, chapter_progress, created_at, updated_at, last_read_at";
+const BOOK_COLUMNS: &str = "id, title, author, description, source_name, source_size, encoding, chapter_count, total_words, volumes_json, theme_json, parse_options_json, current_chapter, progress, chapter_progress, created_at, updated_at, last_read_at, source_format, cover_data_url";
 
 fn map_note(row: &rusqlite::Row<'_>) -> Result<NoteRecord, rusqlite::Error> {
     Ok(NoteRecord {
@@ -432,7 +501,7 @@ pub fn save_imported_book(
     transaction
         .execute(
             &format!(
-                "INSERT INTO books ({BOOK_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)\n                 ON CONFLICT(id) DO UPDATE SET title=excluded.title, author=excluded.author, description=excluded.description, source_name=excluded.source_name, source_size=excluded.source_size, encoding=excluded.encoding, chapter_count=excluded.chapter_count, total_words=excluded.total_words, volumes_json=excluded.volumes_json, theme_json=excluded.theme_json, parse_options_json=excluded.parse_options_json, current_chapter=excluded.current_chapter, progress=excluded.progress, chapter_progress=excluded.chapter_progress, updated_at=excluded.updated_at, last_read_at=excluded.last_read_at"
+                "INSERT INTO books ({BOOK_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)\n                 ON CONFLICT(id) DO UPDATE SET title=excluded.title, author=excluded.author, description=excluded.description, source_name=excluded.source_name, source_size=excluded.source_size, encoding=excluded.encoding, chapter_count=excluded.chapter_count, total_words=excluded.total_words, volumes_json=excluded.volumes_json, theme_json=excluded.theme_json, parse_options_json=excluded.parse_options_json, current_chapter=excluded.current_chapter, progress=excluded.progress, chapter_progress=excluded.chapter_progress, updated_at=excluded.updated_at, last_read_at=excluded.last_read_at, source_format=excluded.source_format, cover_data_url=excluded.cover_data_url"
             ),
             params![
                 id,
@@ -452,7 +521,9 @@ pub fn save_imported_book(
                 chapter_progress,
                 created_at,
                 now,
-                last_read_at
+                last_read_at,
+                input.result.metadata.source_format,
+                input.result.metadata.cover_data_url
             ],
         )
         .map_err(|error| error.to_string())?;
@@ -460,7 +531,7 @@ pub fn save_imported_book(
     {
         let mut statement = transaction
             .prepare(
-                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, content, word_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, content, content_text, word_count, content_format) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             )
             .map_err(|error| error.to_string())?;
         for chapter in &input.result.chapters {
@@ -473,7 +544,9 @@ pub fn save_imported_book(
                     chapter.title,
                     chapter.volume,
                     chapter.content,
-                    chapter.word_count
+                    chapter.content_text,
+                    chapter.word_count,
+                    chapter.content_format
                 ])
                 .map_err(|error| error.to_string())?;
         }
@@ -527,7 +600,7 @@ pub fn list_chapters(
     book_id: &str,
 ) -> Result<Vec<ChapterSummary>, String> {
     let mut statement = connection
-        .prepare("SELECT id, book_id, number, original_label, title, volume, word_count FROM chapters WHERE book_id = ?1 ORDER BY number")
+        .prepare("SELECT id, book_id, number, original_label, title, volume, word_count, content_format FROM chapters WHERE book_id = ?1 ORDER BY number")
         .map_err(|error| error.to_string())?;
     let chapters = statement
         .query_map(params![book_id], |row| {
@@ -539,6 +612,7 @@ pub fn list_chapters(
                 title: row.get(4)?,
                 volume: row.get(5)?,
                 word_count: row.get(6)?,
+                content_format: row.get(7)?,
             })
         })
         .map_err(|error| error.to_string())?
@@ -554,7 +628,7 @@ pub fn get_chapter(
 ) -> Result<Option<ChapterRecord>, String> {
     connection
         .query_row(
-            "SELECT id, book_id, number, original_label, title, volume, content, word_count FROM chapters WHERE book_id = ?1 AND number = ?2",
+            "SELECT id, book_id, number, original_label, title, volume, content, content_text, word_count, content_format FROM chapters WHERE book_id = ?1 AND number = ?2",
             params![book_id, number],
             |row| {
                 Ok(ChapterRecord {
@@ -565,7 +639,9 @@ pub fn get_chapter(
                     title: row.get(4)?,
                     volume: row.get(5)?,
                     content: row.get(6)?,
-                    word_count: row.get(7)?,
+                    content_text: row.get(7)?,
+                    word_count: row.get(8)?,
+                    content_format: row.get(9)?,
                 })
             },
         )
@@ -616,7 +692,7 @@ pub fn search(connection: &Connection, query: &str) -> Result<Vec<SearchResult>,
     let pattern = format!("%{needle}%");
     let mut statement = connection
         .prepare(
-            "SELECT c.book_id, b.title, c.number, c.title, substr(c.content, 1, 180) FROM chapters c JOIN books b ON b.id = c.book_id WHERE b.title LIKE ?1 OR b.author LIKE ?1 OR c.title LIKE ?1 OR c.content LIKE ?1 ORDER BY b.last_read_at DESC, c.number LIMIT 100",
+            "SELECT c.book_id, b.title, c.number, c.title, substr(c.content_text, 1, 180) FROM chapters c JOIN books b ON b.id = c.book_id WHERE b.title LIKE ?1 OR b.author LIKE ?1 OR c.title LIKE ?1 OR c.content_text LIKE ?1 ORDER BY b.last_read_at DESC, c.number LIMIT 100",
         )
         .map_err(|error| error.to_string())?;
     let results = statement
@@ -842,7 +918,7 @@ pub fn write_text_file(target_path: &Path, content: &str) -> Result<String, Stri
 
 fn list_all_chapters(connection: &Connection) -> Result<Vec<ChapterRecord>, String> {
     let mut statement = connection
-        .prepare("SELECT id, book_id, number, original_label, title, volume, content, word_count FROM chapters ORDER BY book_id, number")
+        .prepare("SELECT id, book_id, number, original_label, title, volume, content, content_text, word_count, content_format FROM chapters ORDER BY book_id, number")
         .map_err(|error| error.to_string())?;
     let chapters = statement
         .query_map([], |row| {
@@ -854,7 +930,9 @@ fn list_all_chapters(connection: &Connection) -> Result<Vec<ChapterRecord>, Stri
                 title: row.get(4)?,
                 volume: row.get(5)?,
                 content: row.get(6)?,
-                word_count: row.get(7)?,
+                content_text: row.get(7)?,
+                word_count: row.get(8)?,
+                content_format: row.get(9)?,
             })
         })
         .map_err(|error| error.to_string())?
@@ -869,7 +947,7 @@ pub fn export_backup(connection: &Connection, target_path: &Path) -> Result<Back
     let notes = list_all_notes(connection)?;
     let payload = BackupPayload {
         format: "novel-library-backup".to_string(),
-        version: 2,
+        version: 3,
         created_at: now_millis(),
         books,
         chapters,
@@ -895,7 +973,7 @@ pub fn import_backup(
     let source = fs::read(source_path).map_err(|error| error.to_string())?;
     let payload: BackupPayload =
         serde_json::from_slice(&source).map_err(|error| format!("备份格式错误：{error}"))?;
-    if payload.format != "novel-library-backup" || !(1..=2).contains(&payload.version) {
+    if payload.format != "novel-library-backup" || !(1..=3).contains(&payload.version) {
         return Err("不支持的小说书库备份版本".to_string());
     }
     let transaction = connection
@@ -909,7 +987,7 @@ pub fn import_backup(
         transaction
             .execute(
                 &format!(
-                    "INSERT INTO books ({BOOK_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)\n                     ON CONFLICT(id) DO UPDATE SET title=excluded.title, author=excluded.author, description=excluded.description, source_name=excluded.source_name, source_size=excluded.source_size, encoding=excluded.encoding, chapter_count=excluded.chapter_count, total_words=excluded.total_words, volumes_json=excluded.volumes_json, theme_json=excluded.theme_json, parse_options_json=excluded.parse_options_json, current_chapter=excluded.current_chapter, progress=excluded.progress, chapter_progress=excluded.chapter_progress, created_at=excluded.created_at, updated_at=excluded.updated_at, last_read_at=excluded.last_read_at"
+                    "INSERT INTO books ({BOOK_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)\n                     ON CONFLICT(id) DO UPDATE SET title=excluded.title, author=excluded.author, description=excluded.description, source_name=excluded.source_name, source_size=excluded.source_size, encoding=excluded.encoding, chapter_count=excluded.chapter_count, total_words=excluded.total_words, volumes_json=excluded.volumes_json, theme_json=excluded.theme_json, parse_options_json=excluded.parse_options_json, current_chapter=excluded.current_chapter, progress=excluded.progress, chapter_progress=excluded.chapter_progress, created_at=excluded.created_at, updated_at=excluded.updated_at, last_read_at=excluded.last_read_at, source_format=excluded.source_format, cover_data_url=excluded.cover_data_url"
                 ),
                 params![
                     book.id,
@@ -929,7 +1007,9 @@ pub fn import_backup(
                     book.chapter_progress,
                     book.created_at,
                     book.updated_at,
-                    book.last_read_at
+                    book.last_read_at,
+                    book.source_format,
+                    book.cover_data_url
                 ],
             )
             .map_err(|error| error.to_string())?;
@@ -938,7 +1018,7 @@ pub fn import_backup(
     {
         let mut statement = transaction
             .prepare(
-                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, content, word_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(id) DO UPDATE SET book_id=excluded.book_id, number=excluded.number, original_label=excluded.original_label, title=excluded.title, volume=excluded.volume, content=excluded.content, word_count=excluded.word_count",
+                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, content, content_text, word_count, content_format) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT(id) DO UPDATE SET book_id=excluded.book_id, number=excluded.number, original_label=excluded.original_label, title=excluded.title, volume=excluded.volume, content=excluded.content, content_text=excluded.content_text, word_count=excluded.word_count, content_format=excluded.content_format",
             )
             .map_err(|error| error.to_string())?;
         for chapter in &payload.chapters {
@@ -951,7 +1031,13 @@ pub fn import_backup(
                     chapter.title,
                     chapter.volume,
                     chapter.content,
-                    chapter.word_count
+                    if chapter.content_text.is_empty() {
+                        &chapter.content
+                    } else {
+                        &chapter.content_text
+                    },
+                    chapter.word_count,
+                    chapter.content_format
                 ])
                 .map_err(|error| error.to_string())?;
         }
@@ -989,6 +1075,8 @@ mod tests {
                     encoding: "utf-8".to_string(),
                     source_name: "desktop-test.txt".to_string(),
                     source_size: 128,
+                    source_format: "txt".to_string(),
+                    cover_data_url: None,
                 },
                 chapters: vec![
                     ParsedChapter {
@@ -997,6 +1085,8 @@ mod tests {
                         title: "开始".to_string(),
                         volume: "第一卷".to_string(),
                         content: "第一章正文。".to_string(),
+                        content_text: "第一章正文。".to_string(),
+                        content_format: "text".to_string(),
                         word_count: 6,
                     },
                     ParsedChapter {
@@ -1005,6 +1095,8 @@ mod tests {
                         title: "继续".to_string(),
                         volume: "第一卷".to_string(),
                         content: "第二章包含青石长阶。".to_string(),
+                        content_text: "第二章包含青石长阶。".to_string(),
+                        content_format: "text".to_string(),
                         word_count: 10,
                     },
                 ],
@@ -1038,7 +1130,35 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read version");
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
+    }
+
+    #[test]
+    fn migrates_schema_three_books_without_losing_txt_content() {
+        let mut connection = Connection::open_in_memory().expect("open database");
+        migrate(&connection).expect("create current schema");
+        let book = save_imported_book(&mut connection, sample_import()).expect("save txt book");
+        connection
+            .execute_batch(
+                "ALTER TABLE books DROP COLUMN source_format;
+                 ALTER TABLE books DROP COLUMN cover_data_url;
+                 ALTER TABLE chapters DROP COLUMN content_text;
+                 ALTER TABLE chapters DROP COLUMN content_format;
+                 PRAGMA user_version = 3;",
+            )
+            .expect("simulate schema three");
+
+        migrate(&connection).expect("migrate schema three");
+        let restored_book = get_book(&connection, &book.id)
+            .expect("read migrated book")
+            .expect("migrated book exists");
+        let restored_chapter = get_chapter(&connection, &book.id, 1)
+            .expect("read migrated chapter")
+            .expect("migrated chapter exists");
+        assert_eq!(restored_book.source_format, "txt");
+        assert!(restored_book.cover_data_url.is_none());
+        assert_eq!(restored_chapter.content_format, "text");
+        assert_eq!(restored_chapter.content, "第一章正文。");
     }
 
     #[test]
@@ -1126,6 +1246,7 @@ mod tests {
         let book = save_imported_book(&mut connection, sample_import()).expect("save book");
         assert_eq!(book.chapter_count, 2);
         assert_eq!(book.total_words, 16);
+        assert_eq!(book.source_format, "txt");
         assert_eq!(list_books(&connection).expect("list books").len(), 1);
         assert_eq!(
             list_chapters(&connection, &book.id)
@@ -1137,8 +1258,8 @@ mod tests {
             get_chapter(&connection, &book.id, 2)
                 .expect("get chapter")
                 .expect("chapter exists")
-                .title,
-            "继续"
+                .content_format,
+            "text"
         );
 
         save_progress(&connection, &book.id, 2, 50.0).expect("save progress");
@@ -1201,6 +1322,61 @@ mod tests {
         );
 
         fs::remove_file(backup_path).expect("remove backup fixture");
+    }
+
+    #[test]
+    fn imports_version_two_backup_without_epub_fields() {
+        let mut source = Connection::open_in_memory().expect("open source database");
+        migrate(&source).expect("migrate source database");
+        save_imported_book(&mut source, sample_import()).expect("save source book");
+        let backup_path = std::env::temp_dir().join(format!(
+            "novel-library-legacy-backup-test-{}.json",
+            Uuid::new_v4()
+        ));
+        export_backup(&source, &backup_path).expect("export current backup");
+
+        let mut payload: serde_json::Value =
+            serde_json::from_slice(&fs::read(&backup_path).expect("read current backup"))
+                .expect("parse current backup");
+        payload["version"] = serde_json::Value::from(2);
+        for book in payload["books"].as_array_mut().expect("backup books") {
+            book.as_object_mut()
+                .expect("book object")
+                .remove("sourceFormat");
+            book.as_object_mut()
+                .expect("book object")
+                .remove("coverDataUrl");
+        }
+        for chapter in payload["chapters"].as_array_mut().expect("backup chapters") {
+            chapter
+                .as_object_mut()
+                .expect("chapter object")
+                .remove("contentFormat");
+            chapter
+                .as_object_mut()
+                .expect("chapter object")
+                .remove("contentText");
+        }
+        fs::write(
+            &backup_path,
+            serde_json::to_vec(&payload).expect("serialize legacy backup"),
+        )
+        .expect("write legacy backup");
+
+        let mut target = Connection::open_in_memory().expect("open target database");
+        migrate(&target).expect("migrate target database");
+        import_backup(&mut target, &backup_path).expect("import version two backup");
+        let restored = list_books(&target).expect("list legacy books");
+        assert_eq!(restored[0].source_format, "txt");
+        assert_eq!(
+            get_chapter(&target, &restored[0].id, 1)
+                .expect("read legacy chapter")
+                .expect("legacy chapter exists")
+                .content_format,
+            "text"
+        );
+
+        fs::remove_file(backup_path).expect("remove legacy backup fixture");
     }
 
     #[test]
