@@ -15,7 +15,8 @@ const files = [
   'plugins/visual-studio/NovelLibrary.VisualStudio.csproj',
   'plugins/visual-studio/NovelLibraryPackage.cs',
   'plugins/visual-studio/LICENSE',
-  'plugins/visual-studio/source.extension.vsixmanifest'
+  'plugins/visual-studio/source.extension.vsixmanifest',
+  'scripts/package-visual-studio-plugin.ps1'
 ]
 for (const file of files) await readFile(join(root, file))
 const manifest = JSON.parse(await readFile(join(root, 'plugins/vscode/package.json'), 'utf8'))
