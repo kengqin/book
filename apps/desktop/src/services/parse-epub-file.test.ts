@@ -30,18 +30,23 @@ async function epubFixture() {
       </metadata>
       <manifest>
         <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+        <item id="volume" href="Text/volume.xhtml" media-type="application/xhtml+xml"/>
         <item id="chapter-1" href="Text/chapter-1.xhtml" media-type="application/xhtml+xml"/>
         <item id="chapter-2" href="Text/chapter-2.xhtml" media-type="application/xhtml+xml"/>
         <item id="cover" href="Images/cover.png" media-type="image/png" properties="cover-image"/>
       </manifest>
-      <spine><itemref idref="chapter-1"/><itemref idref="chapter-2"/></spine>
+      <spine><itemref idref="volume"/><itemref idref="chapter-1"/><itemref idref="chapter-2"/></spine>
     </package>`)
   zip.file('OEBPS/nav.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
     <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>
-      <nav epub:type="toc"><ol><li><a href="Text/chapter-1.xhtml">第一卷 起程</a><ol>
+      <nav epub:type="toc"><ol><li><a href="Text/volume.xhtml">第一卷 起程</a><ol>
         <li><a href="Text/chapter-1.xhtml">第一章 初见</a></li>
         <li><a href="Text/chapter-2.xhtml">第二章 风雨</a></li>
       </ol></li></ol></nav>
+    </body></html>`)
+  zip.file('OEBPS/Text/volume.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
+    <html xmlns="http://www.w3.org/1999/xhtml"><head><title>第一卷 起程</title></head><body>
+      <h1>第一卷 起程</h1>
     </body></html>`)
   zip.file('OEBPS/Text/chapter-1.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
     <html xmlns="http://www.w3.org/1999/xhtml"><head><title>初见</title></head><body>
@@ -69,12 +74,12 @@ describe('EPUB parser', () => {
       sourceName: 'fixture.epub'
     })
     expect(result.metadata.coverDataUrl).toMatch(/^data:image\/png;base64,/)
-    expect(result.chapters.map(chapter => chapter.title)).toEqual(['初见', '风雨'])
+    expect(result.chapters.map(chapter => chapter.title)).toEqual(['第一卷 起程', '初见', '风雨'])
     expect(result.chapters.every(chapter => chapter.volume === '第一卷 起程')).toBe(true)
     expect(result.chapters.every(chapter => chapter.contentFormat === 'html')).toBe(true)
-    expect(result.chapters[0].content).toContain('data:image/png;base64,')
-    expect(result.chapters[0].content).not.toContain('<script')
-    expect(result.chapters[0].content).not.toContain('onclick')
+    expect(result.chapters[1].content).toContain('data:image/png;base64,')
+    expect(result.chapters[1].content).not.toContain('<script')
+    expect(result.chapters[1].content).not.toContain('onclick')
   }, 15_000)
 
   it.skipIf(!process.env.EPUB_TEST_FILE)('parses a real local EPUB from beginning to end', async () => {
@@ -96,11 +101,14 @@ describe('EPUB parser', () => {
     expect(result.chapters.length).toBeGreaterThan(0)
     expect(result.chapters.every(chapter => chapter.contentFormat === 'html')).toBe(true)
     expect(result.chapters.some(chapter => chapter.wordCount > 0)).toBe(true)
+    const volumeNames = new Set(result.chapters.map(chapter => chapter.volume).filter(Boolean))
+    const misplacedDividers = result.chapters.filter(chapter => !chapter.volume && volumeNames.has(chapter.title))
+    expect(misplacedDividers).toEqual([])
     console.info('REAL_EPUB_RESULT', JSON.stringify({
       title: result.metadata.title,
       author: result.metadata.author,
       chapters: result.chapters.length,
-      volumes: new Set(result.chapters.map(chapter => chapter.volume).filter(Boolean)).size,
+      volumes: volumeNames.size,
       words: result.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
       hasCover: Boolean(result.metadata.coverDataUrl),
       warnings: result.warnings,

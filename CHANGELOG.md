@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-16
+
+### 修复
+
+- 修复 EPUB 分卷标题页被错误归入“正文”分组的问题，已导入书籍会在启动时自动整理。
+
 ## [0.3.0] - 2026-07-16
 
 ### 新增
@@ -76,6 +82,7 @@
 - 默认数据目录为 `%APPDATA%\NovelLibrary`。
 - 当前数据库 schema 为 `2`；安装旧版本前应先导出备份。
 
+[0.3.1]: https://github.com/kengqin/book/releases/tag/v0.3.1
 [0.3.0]: https://github.com/kengqin/book/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kengqin/book/releases/tag/v0.2.0
 [0.1.2]: https://github.com/kengqin/book/releases/tag/v0.1.2

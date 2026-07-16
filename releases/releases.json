@@ -1,8 +1,39 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.3.0",
+  "latest": "0.3.1",
   "releases": [
+    {
+      "version": "0.3.1",
+      "date": "2026-07-16",
+      "title": "EPUB 分卷目录归类修复",
+      "channel": "stable",
+      "databaseSchema": 4,
+      "published": true,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.1",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.1/NovelLibrary_0.3.1_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "修复 EPUB 分卷标题页被错误归入“正文”分组的问题",
+            "带子目录的分卷节点现在归入自身分卷，子章节顺序和内容保持不变",
+            "已通过《诡秘之主》1414 章、8 卷完整目录回归验证"
+          ]
+        },
+        {
+          "title": "兼容",
+          "items": [
+            "已导入的 EPUB 会在启动时自动整理错误分组，无需删除或重新导入",
+            "TXT 书籍、阅读进度、笔记和 Schema 4 数据保持不变"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "从 0.3.0 更新后重新启动应用，即会自动修复已有 EPUB 的分卷标题归类。"
+      ]
+    },
     {
       "version": "0.3.0",
       "date": "2026-07-16",

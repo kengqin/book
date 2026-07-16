@@ -375,6 +375,12 @@ fn migrate(connection: &Connection) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
     connection
+        .execute(
+            "UPDATE chapters SET volume = title WHERE content_format = 'html' AND trim(volume) = '' AND EXISTS (SELECT 1 FROM chapters AS member WHERE member.book_id = chapters.book_id AND member.volume = chapters.title)",
+            [],
+        )
+        .map_err(|error| error.to_string())?;
+    connection
         .execute_batch("PRAGMA user_version = 4")
         .map_err(|error| error.to_string())
 }
@@ -1159,6 +1165,31 @@ mod tests {
         assert!(restored_book.cover_data_url.is_none());
         assert_eq!(restored_chapter.content_format, "text");
         assert_eq!(restored_chapter.content, "第一章正文。");
+    }
+
+    #[test]
+    fn repairs_existing_epub_volume_dividers() {
+        let mut connection = Connection::open_in_memory().expect("open database");
+        migrate(&connection).expect("create schema");
+        let book = save_imported_book(&mut connection, sample_import()).expect("save book");
+        connection
+            .execute(
+                "UPDATE chapters SET title = '第一部 小丑', volume = '', content_format = 'html' WHERE book_id = ?1 AND number = 1",
+                params![book.id],
+            )
+            .expect("prepare misplaced divider");
+        connection
+            .execute(
+                "UPDATE chapters SET volume = '第一部 小丑', content_format = 'html' WHERE book_id = ?1 AND number = 2",
+                params![book.id],
+            )
+            .expect("prepare volume member");
+
+        migrate(&connection).expect("repair existing epub groups");
+        let divider = get_chapter(&connection, &book.id, 1)
+            .expect("read divider")
+            .expect("divider exists");
+        assert_eq!(divider.volume, "第一部 小丑");
     }
 
     #[test]

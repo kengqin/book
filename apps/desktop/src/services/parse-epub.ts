@@ -133,8 +133,9 @@ function chapterVolume(chapters: ReturnType<Book['chapters']>, index: number) {
 function volumeMap(items: TOCItem[], parentLabel = '', output = new Map<string, string>()) {
   for (const item of items) {
     const href = item.href.split('#')[0]
-    if (href && parentLabel) output.set(href, parentLabel)
-    if (item.children.length) volumeMap(item.children, parentLabel || item.label, output)
+    const volume = item.children.length ? item.label : parentLabel
+    if (href && volume) output.set(href, volume)
+    if (item.children.length) volumeMap(item.children, item.label || parentLabel, output)
   }
   return output
 }
