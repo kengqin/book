@@ -4,6 +4,7 @@
     <RootNamespace>NovelLibrary.VisualStudio</RootNamespace>
     <AssemblyName>NovelLibrary.VisualStudio</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <LangVersion>latest</LangVersion>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>bin\</PackageOutputPath>
   </PropertyGroup>
