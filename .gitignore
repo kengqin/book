@@ -2,6 +2,7 @@ node_modules/
 apps/*/dist/
 apps/*/src-tauri/target/
 apps/*/src-tauri/gen/
+.release-local/
 *.key
 *.key.pub
 正文/.vitepress/dist/
