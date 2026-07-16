@@ -1,6 +1,6 @@
 # IDE 小说插件完整技术方案
 
-> 状态：开发分支已落地核心实现，等待 JetBrains / Visual Studio 官方工具链验收
+> 状态：开发分支已落地核心实现，JetBrains / Visual Studio Windows CI 构建已通过，待干净环境安装验收
 > 更新时间：2026-07-16
 > 开发分支：`codex/novel-ide-plugin`
 > 首发平台：Windows 10/11
@@ -471,8 +471,8 @@ cargo test
 
 待发布前完成：
 
-- 在 Windows runner 真实构建 JetBrains 插件 ZIP。
-- 在 Windows runner 真实构建和安装 Visual Studio VSIX。
+- 在 Windows runner 真实构建 JetBrains 插件 ZIP（已完成）。
+- 在 Windows runner 真实构建 Visual Studio VSIX（已完成）；待干净 Windows 环境真实安装和卸载。
 - 补齐 Tauri deep-link 和 Windows 文件关联配置。
 - 做干净 Windows 环境的端到端安装验收。
 - 确认插件平台许可证、签名证书和最终发布渠道。
