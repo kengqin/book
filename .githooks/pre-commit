@@ -1,0 +1,8 @@
+#!/bin/sh
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || exit 0
+
+if [ "$branch" = "main" ]; then
+  echo "Direct commits on main are disabled. Switch to develop or a feature branch." >&2
+  exit 1
+fi
