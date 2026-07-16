@@ -1,8 +1,49 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.2.0",
+  "latest": "0.3.0",
   "releases": [
+    {
+      "version": "0.3.0",
+      "date": "2026-07-16",
+      "title": "EPUB 本地书库扩展",
+      "channel": "stable",
+      "databaseSchema": 4,
+      "published": true,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.0",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.0/NovelLibrary_0.3.0_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "新增 EPUB2 / EPUB3 导入，支持元数据、封面、书脊顺序、NAV / NCX 和嵌套分卷目录",
+            "新增 EPUB 标题、段落、列表、引用、代码、表格、插图和脚注锚点排版",
+            "新增独立 EPUB Web Worker 与持续导入进度，超长书籍解析不阻塞主界面",
+            "封面和正文图片转换为本地 data URL，可随数据库和备份离线迁移"
+          ]
+        },
+        {
+          "title": "兼容",
+          "items": [
+            "保留 TXT 编码识别、章节正则、广告清理和纯文本阅读链路",
+            "SQLite Schema 升级至 4，Schema 3 书库自动迁移且无需重新导入 TXT",
+            "继续支持 v1 / v2 书库备份恢复，并为 EPUB 建立纯文本全文搜索索引"
+          ]
+        },
+        {
+          "title": "安全",
+          "items": [
+            "EPUB 使用安全结构化内容解析，不执行电子书内脚本和第三方样式",
+            "阅读器增加 DOMPurify 最终白名单，阻止备份或数据库中的危险富文本"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "首次启动会将数据库升级到 Schema 4；旧书籍和阅读进度会保留。",
+        "需要降级到 0.2.x 或更早版本时，请先在设置页导出完整备份。"
+      ]
+    },
     {
       "version": "0.2.0",
       "date": "2026-07-16",

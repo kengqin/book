@@ -25,6 +25,8 @@ export interface ParsedChapter {
   title: string
   volume: string
   content: string
+  contentText: string
+  contentFormat: 'text' | 'html'
   wordCount: number
 }
 
@@ -36,6 +38,8 @@ export interface ParseResult {
     encoding: Exclude<TextEncoding, 'auto'>
     sourceName: string
     sourceSize: number
+    sourceFormat: 'txt' | 'epub'
+    coverDataUrl?: string
   }
   chapters: ParsedChapter[]
   warnings: string[]
@@ -49,6 +53,8 @@ export interface LocalBook {
   sourceName: string
   sourceSize: number
   encoding: string
+  sourceFormat: 'txt' | 'epub'
+  coverDataUrl?: string
   chapterCount: number
   totalWords: number
   volumes: string[]

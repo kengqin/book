@@ -11,6 +11,7 @@ export interface DesktopChapterSummary {
   title: string
   volume: string
   wordCount: number
+  contentFormat: 'text' | 'html'
 }
 
 export interface DesktopChapter extends DesktopChapterSummary {

@@ -52,6 +52,8 @@ button { letter-spacing: 0; }
 .book-list { display: grid; margin-top: 22px; border-top: 1px solid #d7dbd4; }
 .book-list article { min-height: 72px; display: grid; grid-template-columns: 40px minmax(180px,1fr) 80px 100px 150px 84px; align-items: center; gap: 16px; border-bottom: 1px solid #d7dbd4; }
 .book-seal { width: 38px; height: 48px; display: grid; place-items: center; padding: 0; color: #f3dfac; border: 0; background: #263631; font-family: SimSun, serif; cursor: pointer; }
+.book-seal img { width: 100%; height: 100%; object-fit: cover; }
+.format-badge { display: inline-block; margin-right: 4px; padding: 1px 4px; color: #315f55; border: 1px solid #9cb7ae; font-size: 8px; line-height: 1.4; }
 .book-copy { display: grid; gap: 4px; }
 .book-copy { padding: 0; text-align: left; border: 0; background: transparent; cursor: pointer; }
 .book-copy span, .book-list article > span { color: #6d7974; font-size: 11px; }
@@ -209,6 +211,7 @@ button { letter-spacing: 0; }
 .book-detail-view > .text-command { margin-bottom: 20px; }
 .book-detail-header { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 30px; padding: 30px; color: var(--book-text); background: var(--book-bg); }
 .book-detail-seal { width: 150px; aspect-ratio: 3 / 4; display: grid; place-items: center; color: var(--book-accent); border: 1px solid color-mix(in srgb, var(--book-text) 24%, transparent); font-family: SimSun, serif; font-size: 58px; }
+.book-detail-seal img { width: 100%; height: 100%; object-fit: cover; }
 .book-detail-header p { margin: 2px 0 10px; color: var(--book-accent); font-size: 10px; font-weight: 800; }
 .book-detail-header h1 { margin: 0; font-family: "Noto Serif SC", SimSun, serif; font-size: 34px; letter-spacing: 0; }
 .book-detail-header > div > span { display: block; margin-top: 5px; opacity: .72; font-size: 12px; }
@@ -245,6 +248,24 @@ button { letter-spacing: 0; }
 .reader-volume { margin: 0 0 8px !important; color: #7c8177; font-family: Inter, sans-serif !important; font-size: 10px !important; font-weight: 800; }
 .desktop-reader-content h1 { margin: 0 0 40px; font-size: 30px; letter-spacing: 0; }
 .desktop-reader-content article > p { margin: 0 0 1.1em; font-size: var(--reader-font-size); line-height: var(--reader-line-height); text-align: justify; }
+.epub-content { font-size: var(--reader-font-size); line-height: var(--reader-line-height); overflow-wrap: anywhere; }
+.epub-content > *:first-child { margin-top: 0; }
+.epub-content p { margin: 0 0 1.1em; text-align: justify; }
+.epub-content h1, .epub-content h2, .epub-content h3, .epub-content h4, .epub-content h5, .epub-content h6 { margin: 1.35em 0 .7em; line-height: 1.45; letter-spacing: 0; }
+.epub-content h1 { font-size: 1.65em; }
+.epub-content h2 { font-size: 1.4em; }
+.epub-content h3 { font-size: 1.2em; }
+.epub-content img { display: block; max-width: 100%; height: auto; margin: 1.5em auto; object-fit: contain; }
+.epub-content figure { max-width: 100%; margin: 1.5em 0; }
+.epub-content figcaption { margin-top: .5em; opacity: .7; text-align: center; font-size: .82em; }
+.epub-content blockquote { margin: 1.2em 0; padding: .2em 0 .2em 1.1em; border-left: 3px solid currentColor; opacity: .8; }
+.epub-content ul, .epub-content ol { margin: 1em 0; padding-left: 1.8em; }
+.epub-content li { margin: .35em 0; }
+.epub-content table { width: 100%; margin: 1.4em 0; border-collapse: collapse; overflow-wrap: normal; font-size: .88em; }
+.epub-content th, .epub-content td { padding: .5em .65em; border: 1px solid color-mix(in srgb, currentColor 28%, transparent); vertical-align: top; }
+.epub-content pre { max-width: 100%; padding: 1em; overflow-x: auto; white-space: pre-wrap; background: color-mix(in srgb, currentColor 8%, transparent); font-family: Consolas, monospace; font-size: .82em; }
+.epub-content code { font-family: Consolas, monospace; font-size: .9em; }
+.epub-content a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .desktop-reader-content footer { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 52px; border-top: 1px solid currentColor; padding-top: 18px; opacity: .82; }
 .desktop-reader-content footer button { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; text-align: left; color: inherit; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); background: transparent; cursor: pointer; }
 .desktop-reader-content footer button:last-child { text-align: right; }

@@ -2,6 +2,26 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。桌面端正式版本与 Git Tag、GitHub Release、安装包版本保持一致。
 
+## [Unreleased]
+
+## [0.3.0] - 2026-07-16
+
+### 新增
+
+- 本地书库新增 EPUB2 / EPUB3 导入，支持元数据、封面、书脊顺序、嵌套目录和分卷识别。
+- EPUB 正文支持标题、段落、列表、引用、代码、表格、插图和脚注锚点排版。
+- EPUB 使用独立 Web Worker 解析，超长书籍导入时持续回报进度，不阻塞主界面。
+
+### 安全
+
+- EPUB 先解析为安全结构化内容，再由阅读器使用 DOMPurify 白名单进行最终清理。
+- 从备份或数据库读取的富文本会移除脚本、事件属性、iframe、危险链接和第三方样式。
+
+### 数据
+
+- 数据库 Schema 升级至 `4`，新增来源格式、封面、正文格式和纯文本搜索索引。
+- Schema 3 数据库和 v1 / v2 备份自动兼容，已有 TXT 书籍无需重新导入。
+
 ## [0.2.0] - 2026-07-16
 
 ### 新增
@@ -56,6 +76,7 @@
 - 默认数据目录为 `%APPDATA%\NovelLibrary`。
 - 当前数据库 schema 为 `2`；安装旧版本前应先导出备份。
 
+[0.3.0]: https://github.com/kengqin/book/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kengqin/book/releases/tag/v0.2.0
 [0.1.2]: https://github.com/kengqin/book/releases/tag/v0.1.2
 [0.1.1]: https://github.com/kengqin/book/releases/tag/v0.1.1
