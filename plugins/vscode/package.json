@@ -8,7 +8,7 @@
   "engines": { "vscode": ">=1.85.0" },
   "categories": ["Other"],
   "main": "extension.js",
-  "activationEvents": ["onStartupFinished", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.importFile"],
+  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.importFile"],
   "contributes": {
     "commands": [
       { "command": "novelLibrary.openReader", "title": "小说书库: 打开阅读面板" },
@@ -19,6 +19,16 @@
       { "command": "novelLibrary.openReader", "key": "ctrl+alt+n" },
       { "command": "novelLibrary.openDesktop", "key": "ctrl+alt+o" }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "novelLibrary", "title": "小说书库", "icon": "media/novel-library.svg" }
+      ]
+    },
+    "views": {
+      "novelLibrary": [
+        { "id": "novelLibrary.reader", "name": "阅读工具" }
+      ]
+    },
     "menus": {
       "editor/context": [
         { "command": "novelLibrary.importFile", "when": "resourceExtname == .txt || resourceExtname == .epub", "group": "navigation@90" }

@@ -18,6 +18,22 @@ function html() {
   </script></body></html>`
 }
 
+class ReaderTreeProvider {
+  getTreeItem(item) {
+    const treeItem = new vscode.TreeItem(item.label)
+    treeItem.command = { command: item.command, title: item.label }
+    return treeItem
+  }
+
+  getChildren() {
+    return [
+      { label: '打开阅读面板', command: 'novelLibrary.openReader' },
+      { label: '导入当前文件', command: 'novelLibrary.importFile' },
+      { label: '打开桌面端', command: 'novelLibrary.openDesktop' }
+    ]
+  }
+}
+
 function activate(context) {
   let panel
   let currentBook
@@ -43,6 +59,7 @@ function activate(context) {
     if (!file) return
     try { await request('/v1/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: file.fsPath }) }); vscode.window.showInformationMessage('已发送到小说书库导入队列') } catch (error) { vscode.window.showErrorMessage(`导入失败: ${error.message}`) }
   }))
+  context.subscriptions.push(vscode.window.registerTreeDataProvider('novelLibrary.reader', new ReaderTreeProvider()))
 }
 
 module.exports = { activate, deactivate() {} }

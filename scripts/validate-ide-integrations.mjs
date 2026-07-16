@@ -9,6 +9,7 @@ const files = [
   'plugins/vscode/README.md',
   'plugins/vscode/LICENSE',
   'plugins/vscode/.vscodeignore',
+  'plugins/vscode/media/novel-library.svg',
   'plugins/intellij/build.gradle.kts',
   'plugins/intellij/src/main/resources/META-INF/plugin.xml',
   'plugins/visual-studio/NovelLibraryBridge.cs',
