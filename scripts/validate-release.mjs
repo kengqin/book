@@ -37,8 +37,18 @@ if (!releaseManifest.releases.some((release) => release.version === expected)) {
   throw new Error(`版本清单缺少 ${expected}`)
 }
 
-if (!changelog.includes(`## [${expected}]`)) {
-  throw new Error(`CHANGELOG.md 缺少 ${expected}`)
+if (releaseManifest.releases[0]?.version !== expected) {
+  throw new Error(`最新版本 ${expected} 必须新增在版本清单首位`)
+}
+
+const releaseVersions = releaseManifest.releases.map((release) => release.version)
+if (new Set(releaseVersions).size !== releaseVersions.length) {
+  throw new Error('版本清单存在重复版本，发布记录只能新增不能覆盖')
+}
+
+const missingChangelogVersions = releaseVersions.filter((version) => !changelog.includes(`## [${version}]`))
+if (missingChangelogVersions.length > 0) {
+  throw new Error(`CHANGELOG.md 缺少版本：${missingChangelogVersions.join(', ')}`)
 }
 
 const tagArgument = process.argv.find((argument) => argument.startsWith('--tag='))

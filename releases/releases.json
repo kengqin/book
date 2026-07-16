@@ -1,8 +1,33 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.1.0",
+  "latest": "0.1.1",
   "releases": [
+    {
+      "version": "0.1.1",
+      "date": "2026-07-16",
+      "title": "启动体验与安装目录修正",
+      "channel": "stable",
+      "databaseSchema": 2,
+      "published": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.1",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.1/NovelLibrary_0.1.1_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "Windows 启动不再显示命令行窗口"
+          ]
+        },
+        {
+          "title": "调整",
+          "items": [
+            "默认安装目录、安装包、快捷方式和卸载项使用 NovelLibrary 英文名称"
+          ]
+        }
+      ]
+    },
     {
       "version": "0.1.0",
       "date": "2026-07-15",
@@ -21,8 +46,7 @@
             "TXT 导入、编码识别、章节解析与 SQLite 本地书库",
             "书籍详情、章节目录、阅读器、搜索和阅读进度恢复",
             "JSON 备份恢复、自定义数据目录和自定义数据库文件",
-            "版本中心、自动更新和历史版本安装入口",
-            "Windows 启动不再显示命令行窗口"
+            "版本中心、自动更新和历史版本安装入口"
           ]
         }
       ]
