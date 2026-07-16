@@ -6,16 +6,17 @@ import {
   availableUpdate,
   checkForUpdates,
   compareVersions,
+  downloadAvailableUpdate,
   getCurrentVersion,
-  installAvailableUpdate,
+  installDownloadedUpdate,
   isAutoCheckEnabled,
   loadReleaseManifest,
   setAutoCheckEnabled,
   updateChecking,
   updateError,
-  updateInstalling,
   updateMessage,
   updateProgress,
+  updateStage,
   type ReleaseEntry
 } from '../services/release-center'
 
@@ -34,11 +35,21 @@ function updateAutoCheck() {
 async function installHistoricalVersion(release: ReleaseEntry) {
   const isDowngrade = compareVersions(release.version, currentVersion.value) < 0
   if (isDowngrade && !window.confirm(`将从 ${currentVersion.value} 降级到 ${release.version}。旧版本可能无法读取新版数据库，请先在设置中导出备份。仍要继续吗？`)) return
-  await openUrl(release.installerUrl)
+  updateError.value = ''
+  try {
+    await openUrl(release.installerUrl)
+  } catch {
+    updateError.value = `无法打开 v${release.version} 安装包，请稍后重试`
+  }
 }
 
 async function openRelease(release: ReleaseEntry) {
-  await openUrl(release.releaseUrl)
+  updateError.value = ''
+  try {
+    await openUrl(release.releaseUrl)
+  } catch {
+    updateError.value = `无法打开 v${release.version} Release 页面，请稍后重试`
+  }
 }
 
 onMounted(async () => {
@@ -65,11 +76,12 @@ onMounted(async () => {
         <strong v-else><CheckCircle2 :size="17" />{{ updateMessage || '版本状态正常' }}</strong>
         <span v-if="updateError" class="update-error">{{ updateError }}</span>
         <span v-else>{{ autoCheck ? '启动时自动检查更新' : '仅手动检查更新' }}</span>
-        <div v-if="updateInstalling" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
+        <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
       </div>
       <div class="header-actions">
-        <button type="button" class="secondary-command" :disabled="updateChecking || updateInstalling" @click="checkForUpdates(false)"><RefreshCw :size="16" :class="{ spinning: updateChecking }" />检查</button>
-        <button v-if="availableUpdate" type="button" class="primary-command" :disabled="updateInstalling" @click="installAvailableUpdate"><Download :size="16" />{{ updateInstalling ? `${updateProgress}%` : '更新并重启' }}</button>
+        <button type="button" class="secondary-command" :disabled="updateChecking || ['downloading', 'cancelling', 'installing'].includes(updateStage)" @click="checkForUpdates(false)"><RefreshCw :size="16" :class="{ spinning: updateChecking }" />检查</button>
+        <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'error')" type="button" class="primary-command" @click="downloadAvailableUpdate"><Download :size="16" />下载更新</button>
+        <button v-else-if="updateStage === 'downloaded'" type="button" class="primary-command" @click="installDownloadedUpdate"><RefreshCw :size="16" />安装并重启</button>
       </div>
     </section>
 

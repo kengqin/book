@@ -112,6 +112,19 @@ button { letter-spacing: 0; }
 .spinning { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.global-update-status { position: fixed; right: 22px; bottom: 22px; z-index: 20; width: min(360px, calc(100vw - 44px)); display: grid; gap: 11px; padding: 15px 16px 16px; color: #eaf0ec; border: 1px solid #101916; background: #22312d; box-shadow: 0 12px 30px rgba(14,24,20,.2); }
+.global-update-status header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.global-update-status header div { display: flex; align-items: center; gap: 8px; }
+.global-update-status .icon-button { width: 28px; height: 28px; color: #c8d2cd; border-color: transparent; background: transparent; }
+.global-update-status .icon-button:hover { color: #fff; border-color: #64736d; }
+.global-update-status p { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; font-size: 12px; }
+.global-update-status p strong { color: #f3dfac; }
+.global-update-status small { color: #aab7b1; font-size: 10px; }
+.global-update-status .update-error { color: #ffb4aa; }
+.global-update-status > .primary-command, .global-update-status > .secondary-command { justify-self: end; }
+.global-update-progress { height: 4px; background: rgba(255,255,255,.16); }
+.global-update-progress span { display: block; height: 100%; background: #dfbf72; transition: width .18s ease; }
+
 .book-detail-view > .text-command { margin-bottom: 20px; }
 .book-detail-header { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 30px; padding: 30px; color: var(--book-text); background: var(--book-bg); }
 .book-detail-seal { width: 150px; aspect-ratio: 3 / 4; display: grid; place-items: center; color: var(--book-accent); border: 1px solid color-mix(in srgb, var(--book-text) 24%, transparent); font-family: SimSun, serif; font-size: 58px; }

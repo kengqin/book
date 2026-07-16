@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { BookOpen, Download, LibraryBig, Search, Settings } from 'lucide-vue-next'
-import { availableUpdate, checkForUpdates, isAutoCheckEnabled } from './services/release-center'
+import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
+import { availableUpdate, checkForUpdates, initializeUpdateEvents, isAutoCheckEnabled } from './services/release-center'
 
 onMounted(() => {
-  if (isAutoCheckEnabled()) void checkForUpdates(true)
+  void initializeUpdateEvents().then(() => {
+    if (isAutoCheckEnabled()) void checkForUpdates(true)
+  })
 })
 </script>
 
@@ -33,4 +36,5 @@ onMounted(() => {
       <RouterView />
     </main>
   </div>
+  <GlobalUpdateStatus />
 </template>

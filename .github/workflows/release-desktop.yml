@@ -58,6 +58,7 @@ jobs:
         run: npm run release:validate -- --tag=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
       - name: Build and publish GitHub Release
+        id: tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -68,7 +69,34 @@ jobs:
           releaseBody: 查看仓库 CHANGELOG.md 与应用内“版本与更新”。
           releaseDraft: false
           prerelease: false
+          uploadUpdaterJson: false
           updaterJsonPreferNsis: true
+
+      - name: Create updater metadata
+        id: updater
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          $installer = Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer not found" }
+          $signatureFile = "$($installer.FullName).sig"
+          if (-not (Test-Path $signatureFile)) { throw "Updater signature not found" }
+          $signature = (Get-Content -Raw $signatureFile).Trim()
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/$($installer.Name)"
+          $platform = [ordered]@{ signature = $signature; url = $downloadUrl }
+          $metadata = [ordered]@{
+            version = $version
+            notes = "查看应用内版本记录或 CHANGELOG.md。"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = [ordered]@{
+              "windows-x86_64" = $platform
+              "windows-x86_64-nsis" = $platform
+            }
+          }
+          $latestFile = Join-Path $PWD "latest.json"
+          $metadata | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 $latestFile
+          "file=$latestFile" >> $env:GITHUB_OUTPUT
 
       - name: Create installer checksum
         id: checksum
@@ -85,4 +113,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          files: ${{ steps.checksum.outputs.file }}
+          files: |
+            ${{ steps.checksum.outputs.file }}
+            ${{ steps.updater.outputs.file }}

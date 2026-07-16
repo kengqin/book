@@ -1,8 +1,36 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.1.1",
+  "latest": "0.1.2",
   "releases": [
+    {
+      "version": "0.1.2",
+      "date": "2026-07-16",
+      "title": "全局更新任务与发布链路修复",
+      "channel": "stable",
+      "databaseSchema": 2,
+      "published": true,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.2",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.2/NovelLibrary_0.1.2_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "跨页面全局显示更新下载进度",
+            "支持取消下载，下载完成后由用户选择安装并重启"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "历史版本 Release 和安装包链接可以通过系统浏览器打开",
+            "更新服务不可用时显示中文状态提示",
+            "发布流程生成 latest.json，恢复自动更新检查"
+          ]
+        }
+      ]
+    },
     {
       "version": "0.1.1",
       "date": "2026-07-16",
@@ -36,7 +64,7 @@
       "databaseSchema": 2,
       "published": true,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.0",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.0/%E5%B0%8F%E8%AF%B4%E4%B9%A6%E5%BA%93_0.1.0_x64-setup.exe",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.0/NovelLibrary_0.1.0_x64-setup.exe",
       "sha256": "",
       "sections": [
         {

@@ -7,7 +7,7 @@
     "core:default",
     "dialog:allow-open",
     "dialog:allow-save",
-    "opener:allow-open-url",
+    "opener:default",
     "process:allow-restart",
     "updater:default"
   ]

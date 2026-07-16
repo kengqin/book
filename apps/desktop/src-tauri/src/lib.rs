@@ -1,5 +1,6 @@
 mod database;
 mod models;
+mod updater;
 
 use std::path::PathBuf;
 
@@ -9,6 +10,7 @@ use models::{
     SaveProgressInput, SearchResult, StorageStatus,
 };
 use tauri::{Manager, State};
+use updater::UpdateDownloadState;
 
 fn desktop_data_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let default_directory = app
@@ -161,6 +163,7 @@ pub fn run() {
             let data_directory = desktop_data_directory(app.handle())?;
             let database = DatabaseState::initialize(data_directory)?;
             app.manage(database);
+            app.manage(UpdateDownloadState::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -177,7 +180,12 @@ pub fn run() {
             reset_data_directory,
             change_database_file,
             export_backup,
-            import_backup
+            import_backup,
+            updater::check_application_update,
+            updater::download_application_update,
+            updater::cancel_application_update_download,
+            updater::install_downloaded_application_update,
+            updater::dismiss_application_update
         ])
         .run(tauri::generate_context!())
         .expect("failed to run novel library desktop application");

@@ -2,6 +2,19 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。桌面端正式版本与 Git Tag、GitHub Release、安装包版本保持一致。
 
+## [0.1.2] - 2026-07-16
+
+### 新增
+
+- 新增跨页面全局更新状态，下载进度在书架、阅读器和设置页面持续显示。
+- 更新下载支持取消；下载完成后由用户点击“安装并重启”，不再自动强制重启。
+
+### 修复
+
+- 修复历史版本 Release 和安装包链接无法通过系统浏览器打开的问题。
+- 更新服务不可用时改为显示中文状态，不再暴露底层英文错误。
+- 修复发布流程缺少 `latest.json`，导致自动更新检查返回 `404` 的问题。
+
 ## [0.1.1] - 2026-07-16
 
 ### 修复
@@ -28,5 +41,6 @@
 - 默认数据目录为 `%APPDATA%\NovelLibrary`。
 - 当前数据库 schema 为 `2`；安装旧版本前应先导出备份。
 
+[0.1.2]: https://github.com/kengqin/book/releases/tag/v0.1.2
 [0.1.1]: https://github.com/kengqin/book/releases/tag/v0.1.1
 [0.1.0]: https://github.com/kengqin/book/releases/tag/v0.1.0
