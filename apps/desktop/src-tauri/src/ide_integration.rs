@@ -115,9 +115,24 @@ fn plugin_directory(app: &AppHandle) -> Result<PathBuf, String> {
             .join("resources")
             .join("ide-plugins"),
     ];
-    candidates
+    let manifest_candidates = candidates
         .into_iter()
-        .find(|path| path.join("manifest.json").is_file())
+        .filter(|path| path.join("manifest.json").is_file())
+        .collect::<Vec<_>>();
+    manifest_candidates
+        .iter()
+        .find(|path| {
+            read_manifest(path)
+                .map(|manifest| {
+                    manifest
+                        .plugins
+                        .iter()
+                        .all(|plugin| path.join(&plugin.file).is_file())
+                })
+                .unwrap_or(false)
+        })
+        .cloned()
+        .or_else(|| manifest_candidates.into_iter().next())
         .ok_or_else(|| "未找到随桌面端提供的 IDE 插件清单".to_string())
 }
 
@@ -640,5 +655,4 @@ mod tests {
         assert_eq!(first, second);
         assert_ne!(first, target_id("jetbrains", Path::new("C:/Code/code.cmd")));
     }
-
 }
