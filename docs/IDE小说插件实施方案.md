@@ -1,5 +1,7 @@
 # IDE 小说插件实施方案
 
+> 完整技术基线见 [`IDE小说插件完整技术方案.md`](./IDE小说插件完整技术方案.md)。本文档保留为实施摘要和快速入口。
+
 ## 交付范围
 
 本功能在 `codex/novel-ide-plugin` 分支中作为一个完整版本交付，桌面端负责本地书库，IDE 只通过本机 Bridge 访问数据。首发平台为 Windows 10/11，支持 IntelliJ 系列、VS Code/Cursor 和 Visual Studio 2022。
