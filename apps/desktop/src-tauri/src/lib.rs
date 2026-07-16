@@ -6,8 +6,9 @@ use std::path::PathBuf;
 
 use database::DatabaseState;
 use models::{
-    BackupResult, BookRecord, ChapterRecord, ChapterSummary, SaveImportedBookInput,
-    SaveProgressInput, SearchResult, StorageStatus,
+    BackupResult, BookRecord, ChapterRecord, ChapterSummary, NoteRecord, NoteSummary,
+    NotesTransferResult, SaveImportedBookInput, SaveNoteInput, SaveProgressInput, SearchResult,
+    StorageStatus,
 };
 use tauri::{Manager, State};
 use updater::UpdateDownloadState;
@@ -85,6 +86,72 @@ fn search_library(
     query: String,
 ) -> Result<Vec<SearchResult>, String> {
     database::search(&state.connect()?, &query)
+}
+
+#[tauri::command]
+fn list_notes(
+    state: State<'_, DatabaseState>,
+    query: Option<String>,
+) -> Result<Vec<NoteSummary>, String> {
+    database::list_notes(&state.connect()?, query.as_deref().unwrap_or_default())
+}
+
+#[tauri::command]
+fn get_note(
+    state: State<'_, DatabaseState>,
+    note_id: String,
+) -> Result<Option<NoteRecord>, String> {
+    database::get_note(&state.connect()?, &note_id)
+}
+
+#[tauri::command]
+fn create_note(state: State<'_, DatabaseState>, title: String) -> Result<NoteRecord, String> {
+    database::create_note(&state.connect()?, &title)
+}
+
+#[tauri::command]
+fn save_note(state: State<'_, DatabaseState>, input: SaveNoteInput) -> Result<NoteRecord, String> {
+    database::save_note(&state.connect()?, input)
+}
+
+#[tauri::command]
+fn set_note_pinned(
+    state: State<'_, DatabaseState>,
+    note_id: String,
+    is_pinned: bool,
+) -> Result<(), String> {
+    database::set_note_pinned(&state.connect()?, &note_id, is_pinned)
+}
+
+#[tauri::command]
+fn duplicate_note(state: State<'_, DatabaseState>, note_id: String) -> Result<NoteRecord, String> {
+    database::duplicate_note(&state.connect()?, &note_id)
+}
+
+#[tauri::command]
+fn delete_note(state: State<'_, DatabaseState>, note_id: String) -> Result<(), String> {
+    database::delete_note(&state.connect()?, &note_id)
+}
+
+#[tauri::command]
+fn export_notes(
+    state: State<'_, DatabaseState>,
+    target_path: String,
+) -> Result<NotesTransferResult, String> {
+    database::export_notes(&state.connect()?, std::path::Path::new(&target_path))
+}
+
+#[tauri::command]
+fn import_notes(
+    state: State<'_, DatabaseState>,
+    source_path: String,
+) -> Result<NotesTransferResult, String> {
+    database::import_notes(&mut state.connect()?, std::path::Path::new(&source_path))
+}
+
+#[tauri::command]
+fn write_note_export(target_path: String, content: String) -> Result<String, String> {
+    database::write_text_file(std::path::Path::new(&target_path), &content)
 }
 
 #[tauri::command]
@@ -175,6 +242,16 @@ pub fn run() {
             save_reading_progress,
             delete_book,
             search_library,
+            list_notes,
+            get_note,
+            create_note,
+            save_note,
+            set_note_pinned,
+            duplicate_note,
+            delete_note,
+            export_notes,
+            import_notes,
+            write_note_export,
             get_storage_status,
             change_data_directory,
             reset_data_directory,

@@ -128,6 +128,39 @@ pub struct SearchResult {
     pub snippet: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteRecord {
+    pub id: String,
+    pub title: String,
+    pub content_html: String,
+    pub content_text: String,
+    pub is_pinned: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteSummary {
+    pub id: String,
+    pub title: String,
+    pub excerpt: String,
+    pub is_pinned: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveNoteInput {
+    pub id: String,
+    pub title: String,
+    pub content_html: String,
+    pub content_text: String,
+    pub is_pinned: bool,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageStatus {
@@ -144,6 +177,8 @@ pub struct BackupPayload {
     pub created_at: i64,
     pub books: Vec<BookRecord>,
     pub chapters: Vec<ChapterRecord>,
+    #[serde(default)]
+    pub notes: Vec<NoteRecord>,
 }
 
 #[derive(Debug, Serialize)]
@@ -152,4 +187,21 @@ pub struct BackupResult {
     pub path: String,
     pub books: usize,
     pub chapters: usize,
+    pub notes: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotesExportPayload {
+    pub format: String,
+    pub version: u32,
+    pub exported_at: i64,
+    pub notes: Vec<NoteRecord>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotesTransferResult {
+    pub path: String,
+    pub notes: usize,
 }

@@ -14,6 +14,8 @@ export const router = createRouter({
     { path: '/book/:bookId', component: BookView },
     { path: '/read/:bookId/:chapterNumber', component: ReaderView },
     { path: '/search', component: SearchView },
+    { path: '/tools', component: () => import('./views/ToolsView.vue') },
+    { path: '/tools/notes', component: () => import('./views/NotesView.vue') },
     { path: '/updates', component: UpdatesView },
     { path: '/settings', component: SettingsView }
   ]

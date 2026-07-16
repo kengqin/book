@@ -125,6 +125,87 @@ button { letter-spacing: 0; }
 .global-update-progress { height: 4px; background: rgba(255,255,255,.16); }
 .global-update-progress span { display: block; height: 100%; background: #dfbf72; transition: width .18s ease; }
 
+.tools-library-view { display: flex; flex-direction: column; }
+.tools-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 340px)); gap: 12px; margin-top: 24px; }
+.tool-library-item { min-height: 96px; display: grid; grid-template-columns: 48px minmax(0, 1fr) 20px; align-items: center; gap: 14px; padding: 16px; color: #25312d; text-align: left; border: 1px solid #cbd1ca; background: #fff; cursor: pointer; }
+.tool-library-item:hover { border-color: #849a91; box-shadow: inset 3px 0 #27665d; }
+.tool-library-icon { width: 48px; height: 48px; display: grid; place-items: center; color: #f3dfac; background: #263631; }
+.tool-library-copy { min-width: 0; display: grid; gap: 5px; }
+.tool-library-copy strong { font-family: "Noto Serif SC", SimSun, serif; font-size: 15px; }
+.tool-library-copy small { color: #728078; font-size: 10px; }
+.tool-library-item > svg { color: #77847d; }
+.tool-library-footer { display: flex; align-items: center; gap: 7px; margin-top: auto; padding-top: 30px; color: #89948f; font-size: 10px; }
+
+.notes-workspace { min-width: 620px; height: 100%; min-height: 560px; display: grid; grid-template-columns: 300px minmax(360px, 1fr); overflow: hidden; background: #f7f8f5; }
+
+.note-index { min-width: 0; display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid #d5dad3; background: #eef1ec; }
+.note-index > header { flex: 0 0 58px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 13px 0 16px; border-bottom: 1px solid #d5dad3; }
+.note-index > header > div { min-width: 0; display: flex; align-items: center; gap: 5px; }
+.note-index > header strong { font-size: 12px; white-space: nowrap; }
+.note-index > header span { min-width: 16px; color: #718079; font-size: 9px; }
+.note-index > header .icon-button { width: 28px; height: 30px; }
+.note-index-heading .icon-button { margin-right: 2px; border-color: transparent; background: transparent; }
+.note-index-heading .icon-button:hover { border-color: #c8cec7; background: #fff; }
+.note-index-actions { flex: 0 0 auto; }
+.note-index-actions .primary-icon { color: #fff; border-color: #27665d; background: #27665d; }
+.note-search { flex: 0 0 38px; display: flex; align-items: center; gap: 8px; margin: 10px 11px; padding: 0 10px; color: #78837e; border: 1px solid #c8cec7; background: #fff; }
+.note-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 11px; }
+.note-search button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; color: #6d7974; border: 0; background: transparent; cursor: pointer; }
+.note-list { min-height: 0; flex: 1; overflow-y: auto; border-top: 1px solid #d5dad3; }
+.note-list > button { width: 100%; min-height: 94px; display: grid; align-content: center; gap: 7px; padding: 13px 15px; color: #26322e; text-align: left; border: 0; border-bottom: 1px solid #d7dcd5; background: transparent; cursor: pointer; }
+.note-list > button:hover { background: #f8faf7; }
+.note-list > button.active { box-shadow: inset 3px 0 #b84638; background: #fff; }
+.note-list > button > span { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.note-list strong { min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: "Noto Serif SC", SimSun, serif; font-size: 13px; }
+.note-list > button > span svg { flex: 0 0 auto; color: #b58a34; fill: #e2c77c; }
+.note-list p { margin: 0; color: #6f7b75; font-size: 10px; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-list time { color: #929c97; font-size: 9px; }
+.note-list-status { min-height: 180px; display: grid; place-items: center; color: #7a8780; font-size: 11px; }
+
+.note-editor-pane { position: relative; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
+.note-editor-alert, .note-editor-toast { flex: 0 0 auto; min-height: 34px; display: flex; align-items: center; gap: 7px; padding: 7px 14px; font-size: 10px; overflow-wrap: anywhere; }
+.note-editor-alert { color: #8e2f27; border-bottom: 1px solid #edc5bf; background: #fff0ed; }
+.note-editor-toast { color: #245d54; border-bottom: 1px solid #bdd9d0; background: #edf7f3; }
+.note-editor-empty { height: 100%; display: grid; place-items: center; align-content: center; gap: 12px; color: #75817b; }
+.note-editor-empty h2 { margin: 0 0 4px; color: #2d3a36; font-family: "Noto Serif SC", SimSun, serif; font-size: 19px; }
+.note-editor-commandbar { flex: 0 0 58px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 16px; border-bottom: 1px solid #d8dcd6; background: #f7f8f5; }
+.note-editor-commandbar > span { color: #7a8780; font-size: 9px; }
+.note-editor-commandbar > span.saving { color: #8b671f; }
+.note-editor-commandbar > span.error { color: #9b3b31; }
+.note-editor-commandbar > div { display: flex; align-items: center; gap: 6px; }
+.note-editor-commandbar .icon-button { width: 34px; height: 34px; }
+.note-editor-commandbar .secondary-command { height: 34px; padding-inline: 10px; }
+.note-export-control { position: relative; }
+.note-export-menu { position: absolute; z-index: 12; top: 39px; right: 0; width: 142px; padding: 5px; border: 1px solid #c8cec7; background: #fff; box-shadow: 0 10px 24px rgba(26,38,33,.16); }
+.note-export-menu button { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 9px; color: #2d3a36; text-align: left; border: 0; background: transparent; cursor: pointer; }
+.note-export-menu button:hover { background: #eef2ed; }
+.note-title-block { flex: 0 0 auto; width: min(840px, 100%); margin: 0 auto; padding: 28px 42px 18px; }
+.note-title-input { width: 100%; padding: 0; color: #1f2b27; border: 0; outline: 0; background: transparent; font-family: "Noto Serif SC", SimSun, serif; font-size: 27px; font-weight: 700; letter-spacing: 0; }
+.note-title-input::placeholder { color: #a8b0ac; }
+.note-title-block > div { display: flex; align-items: center; gap: 14px; margin-top: 10px; color: #8a948f; font-size: 9px; }
+.note-format-toolbar { flex: 0 0 72px; display: flex; flex-wrap: wrap; align-content: center; align-items: center; gap: 2px; padding: 5px 12px; overflow: hidden; border-top: 1px solid #e0e3de; border-bottom: 1px solid #d6dbd4; background: #fafbf9; }
+.note-format-toolbar button { flex: 0 0 30px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: #596660; border: 1px solid transparent; background: transparent; cursor: pointer; }
+.note-format-toolbar button:hover { color: #24332e; border-color: #c8cec7; background: #fff; }
+.note-format-toolbar button.active { color: #fff; border-color: #27665d; background: #27665d; }
+.note-format-toolbar button:disabled { color: #b6bdb9; cursor: not-allowed; }
+.note-format-toolbar > i { flex: 0 0 1px; width: 1px; height: 20px; margin: 0 4px; background: #d5dad4; }
+.note-editor-content { min-height: 0; flex: 1; overflow-y: auto; }
+.note-prose-editor { width: min(840px, 100%); min-height: 100%; margin: 0 auto; padding: 28px 42px 100px; color: #28342f; outline: 0; font-family: "Noto Serif SC", SimSun, serif; font-size: 15px; line-height: 1.85; }
+.note-prose-editor > *:first-child { margin-top: 0; }
+.note-prose-editor h1, .note-prose-editor h2, .note-prose-editor h3 { color: #1f2c28; line-height: 1.4; letter-spacing: 0; }
+.note-prose-editor h1 { margin: 1.5em 0 .65em; font-size: 25px; }
+.note-prose-editor h2 { margin: 1.4em 0 .6em; padding-bottom: 7px; border-bottom: 1px solid #dfe3de; font-size: 21px; }
+.note-prose-editor h3 { margin: 1.25em 0 .55em; font-size: 17px; }
+.note-prose-editor p { margin: .65em 0; }
+.note-prose-editor ul, .note-prose-editor ol { padding-left: 1.6em; }
+.note-prose-editor blockquote { margin: 1em 0; padding: 3px 0 3px 16px; color: #5c6963; border-left: 3px solid #93a79f; }
+.note-prose-editor code { padding: 2px 5px; color: #9b3b31; background: #f1f2ee; font-family: Consolas, monospace; font-size: .9em; }
+.note-prose-editor pre { margin: 1em 0; padding: 15px 17px; overflow-x: auto; color: #e7ece9; background: #23302c; }
+.note-prose-editor pre code { padding: 0; color: inherit; background: transparent; }
+.note-prose-editor a { color: #216a91; text-decoration: underline; }
+.note-prose-editor hr { margin: 30px 0; border: 0; border-top: 1px solid #cfd5ce; }
+.note-prose-editor p.is-editor-empty:first-child::before { height: 0; float: left; color: #a4ada8; content: attr(data-placeholder); pointer-events: none; }
+
 .book-detail-view > .text-command { margin-bottom: 20px; }
 .book-detail-header { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 30px; padding: 30px; color: var(--book-text); background: var(--book-bg); }
 .book-detail-seal { width: 150px; aspect-ratio: 3 / 4; display: grid; place-items: center; color: var(--book-accent); border: 1px solid color-mix(in srgb, var(--book-text) 24%, transparent); font-family: SimSun, serif; font-size: 58px; }
@@ -187,4 +268,6 @@ button { letter-spacing: 0; }
   .reader-controls label:nth-child(2) { display: none; }
   .update-status-panel { grid-template-columns: 150px minmax(0, 1fr); }
   .update-status-panel > .header-actions { grid-column: 1 / -1; }
+  .notes-workspace { grid-template-columns: 250px minmax(340px, 1fr); }
+  .note-title-block, .note-prose-editor { padding-inline: 28px; }
 }

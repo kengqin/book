@@ -35,6 +35,7 @@ export interface DesktopBackupResult {
   path: string
   books: number
   chapters: number
+  notes: number
 }
 
 export function listDesktopBooks() {
