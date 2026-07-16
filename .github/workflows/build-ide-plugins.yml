@@ -50,7 +50,10 @@ jobs:
       - uses: microsoft/setup-msbuild@v2
       - run: dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
       - run: msbuild plugins/visual-studio/NovelLibrary.VisualStudio.csproj /p:Configuration=Release
+      - name: Package Visual Studio VSIX
+        shell: pwsh
+        run: ./scripts/package-visual-studio-plugin.ps1 -Root $PWD
       - uses: actions/upload-artifact@v4
         with:
           name: novel-library-visual-studio
-          path: plugins/visual-studio/bin/**/*.vsix
+          path: plugins/visual-studio/bin/novel-library-visual-studio-0.4.0.vsix

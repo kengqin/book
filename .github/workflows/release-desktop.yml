@@ -83,6 +83,7 @@ jobs:
         run: |
           dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
           msbuild plugins/visual-studio/NovelLibrary.VisualStudio.csproj /p:Configuration=Release
+          ./scripts/package-visual-studio-plugin.ps1 -Root $PWD
           $plugin = Get-ChildItem plugins/visual-studio/bin -Recurse -Filter *.vsix | Select-Object -First 1
           if (-not $plugin) { throw 'Visual Studio VSIX not found' }
           Copy-Item $plugin.FullName apps/desktop/src-tauri/resources/ide-plugins/novel-library-visual-studio-0.4.0.vsix
