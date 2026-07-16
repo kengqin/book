@@ -65,8 +65,8 @@ jobs:
         with:
           projectPath: apps/desktop
           tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          releaseName: 小说书库 ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          releaseBody: 查看仓库 CHANGELOG.md 与应用内“版本与更新”。
+          releaseName: NovelLibrary ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          releaseBody: 正在生成完整版本日志。
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: false
@@ -84,10 +84,14 @@ jobs:
           if (-not (Test-Path $signatureFile)) { throw "Updater signature not found" }
           $signature = (Get-Content -Raw $signatureFile).Trim()
           $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/$($installer.Name)"
+          $releaseManifest = Get-Content -Raw "releases/releases.json" | ConvertFrom-Json
+          $release = $releaseManifest.releases | Where-Object { $_.version -eq $version } | Select-Object -First 1
+          if (-not $release) { throw "Release metadata not found for $tag" }
+          $notes = @($release.sections | ForEach-Object { "$($_.title)：$($_.items -join '；')" }) -join "`n"
           $platform = [ordered]@{ signature = $signature; url = $downloadUrl }
           $metadata = [ordered]@{
             version = $version
-            notes = "查看应用内版本记录或 CHANGELOG.md。"
+            notes = "$($release.title)`n`n$notes"
             pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             platforms = [ordered]@{
               "windows-x86_64" = $platform
@@ -108,11 +112,24 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
           "$hash  $($installer.Name)" | Set-Content -Encoding ascii $checksumFile
           "file=$checksumFile" >> $env:GITHUB_OUTPUT
+          "hash=$hash" >> $env:GITHUB_OUTPUT
+          "installer_name=$($installer.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: notes
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          $notesFile = Join-Path $PWD "release-notes.md"
+          node scripts/generate-release-notes.mjs --tag=$tag --output=$notesFile --sha256=${{ steps.checksum.outputs.hash }} --installer-name=${{ steps.checksum.outputs.installer_name }}
+          "file=$notesFile" >> $env:GITHUB_OUTPUT
 
       - name: Upload installer checksum
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: NovelLibrary ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          body_path: ${{ steps.notes.outputs.file }}
           files: |
             ${{ steps.checksum.outputs.file }}
             ${{ steps.updater.outputs.file }}
