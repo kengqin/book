@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AlignJustify, ArrowLeft, ChevronLeft, ChevronRight, Minus, Plus, Sun, Type } from 'lucide-vue-next'
-import { formatChapterLabel } from '@novel-library/reader-core'
+import { formatChapterLabel, isNumberedChapter } from '@novel-library/reader-core'
 import { getDesktopBook, getDesktopChapter, listDesktopChapters, saveDesktopProgress, type DesktopBook, type DesktopChapter, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 
@@ -24,9 +24,29 @@ const chapterNumber = computed(() => Number(route.params.chapterNumber))
 const chapterIndex = computed(() => chapters.value.findIndex(item => item.number === chapter.value?.number))
 const previous = computed(() => chapters.value[chapterIndex.value - 1])
 const next = computed(() => chapters.value[chapterIndex.value + 1])
+const volumeChapters = computed(() => chapter.value && isNumberedChapter(chapter.value)
+  ? chapters.value.filter(item => isNumberedChapter(item) && item.volume === chapter.value?.volume)
+  : [])
+const volumeChapterIndex = computed(() => volumeChapters.value.findIndex(item => item.number === chapter.value?.number))
 const paragraphs = computed(() => chapter.value?.content.split(/\n{2,}/).filter(Boolean) ?? [])
 const isRichContent = computed(() => chapter.value?.contentFormat === 'html')
 const safeRichContent = computed(() => isRichContent.value ? sanitizeReaderHtml(chapter.value?.content || '') : '')
+
+function chapterPositionLabel() {
+  if (!chapter.value) return ''
+  if (isNumberedChapter(chapter.value)) {
+    return formatChapterLabel(chapter.value) + ' · 本卷 ' + (volumeChapterIndex.value + 1) + ' / ' + volumeChapters.value.length
+  }
+  const kindLabel = chapter.value.kind === 'volume' ? '分卷' : chapter.value.kind === 'frontmatter' ? '前置内容' : '附加内容'
+  return kindLabel + ' · 全书 ' + (chapterIndex.value + 1) + ' / ' + chapters.value.length + ' 项'
+}
+
+function chapterHeading() {
+  if (!chapter.value) return ''
+  return isNumberedChapter(chapter.value)
+    ? formatChapterLabel(chapter.value) + ' ' + chapter.value.title
+    : chapter.value.title
+}
 
 function saveSettings() {
   localStorage.setItem('desktop-reader-settings', JSON.stringify({ fontSize: fontSize.value, lineHeight: lineHeight.value, palette: palette.value }))
@@ -92,9 +112,9 @@ watch(() => route.params.chapterNumber, load)
 
 <template>
   <section class="desktop-reader" :class="`desktop-reader--${palette}`" :style="{ '--reader-font-size': `${fontSize}px`, '--reader-line-height': lineHeight }">
-    <header class="desktop-reader-toolbar"><button type="button" class="icon-button" title="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button><div v-if="book && chapter"><strong>{{ book.title }}</strong><span>{{ formatChapterLabel(chapter) }} · {{ chapterIndex + 1 }} / {{ chapters.length }}</span></div><div class="reader-controls"><label title="字号"><Type :size="16" /><button type="button" @click="fontSize = Math.max(15, fontSize - 1)"><Minus :size="14" /></button><output>{{ fontSize }}</output><button type="button" @click="fontSize = Math.min(26, fontSize + 1)"><Plus :size="14" /></button></label><label title="行距"><AlignJustify :size="16" /><button v-for="value in [1.8, 2.05, 2.3]" :key="value" type="button" :class="{ active: lineHeight === value }" @click="lineHeight = value">{{ value === 1.8 ? '紧' : value === 2.05 ? '中' : '松' }}</button></label><label title="纸张"><Sun :size="16" /><button v-for="item in ([['light','白'],['paper','纸'],['night','夜']] as const)" :key="item[0]" type="button" :class="{ active: palette === item[0] }" @click="palette = item[0]">{{ item[1] }}</button></label></div></header>
+    <header class="desktop-reader-toolbar"><button type="button" class="icon-button" title="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button><div v-if="book && chapter"><strong>{{ book.title }}</strong><span>{{ chapterPositionLabel() }}</span></div><div class="reader-controls"><label title="字号"><Type :size="16" /><button type="button" @click="fontSize = Math.max(15, fontSize - 1)"><Minus :size="14" /></button><output>{{ fontSize }}</output><button type="button" @click="fontSize = Math.min(26, fontSize + 1)"><Plus :size="14" /></button></label><label title="行距"><AlignJustify :size="16" /><button v-for="value in [1.8, 2.05, 2.3]" :key="value" type="button" :class="{ active: lineHeight === value }" @click="lineHeight = value">{{ value === 1.8 ? '紧' : value === 2.05 ? '中' : '松' }}</button></label><label title="纸张"><Sun :size="16" /><button v-for="item in ([['light','白'],['paper','纸'],['night','夜']] as const)" :key="item[0]" type="button" :class="{ active: palette === item[0] }" @click="palette = item[0]">{{ item[1] }}</button></label></div></header>
     <div v-if="loading" class="view-status">正在加载章节...</div>
     <div v-else-if="error" class="inline-error">{{ error }}</div>
-    <main v-else-if="book && chapter" class="desktop-reader-content"><article><p class="reader-volume">{{ chapter.volume || book.title }}</p><h1>{{ formatChapterLabel(chapter) }} {{ chapter.title }}</h1><div v-if="isRichContent" class="epub-content" v-html="safeRichContent" /><template v-else><p v-for="(paragraph, index) in paragraphs" :key="index">{{ paragraph }}</p></template></article><footer><button type="button" :disabled="!previous" @click="previous && openChapter(previous.number)"><ChevronLeft :size="18" /><span><small>上一章</small>{{ previous?.title || '已经是第一章' }}</span></button><button type="button" :disabled="!next" @click="next && openChapter(next.number)"><span><small>下一章</small>{{ next?.title || '已经是最后一章' }}</span><ChevronRight :size="18" /></button></footer></main>
+    <main v-else-if="book && chapter" class="desktop-reader-content"><article><p v-if="chapter.kind !== 'volume'" class="reader-volume">{{ chapter.volume || book.title }}</p><h1>{{ chapterHeading() }}</h1><div v-if="isRichContent" class="epub-content" v-html="safeRichContent" /><template v-else><p v-for="(paragraph, index) in paragraphs" :key="index">{{ paragraph }}</p></template></article><footer><button type="button" :disabled="!previous" @click="previous && openChapter(previous.number)"><ChevronLeft :size="18" /><span><small>上一章</small>{{ previous?.title || '已经是第一章' }}</span></button><button type="button" :disabled="!next" @click="next && openChapter(next.number)"><span><small>下一章</small>{{ next?.title || '已经是最后一章' }}</span><ChevronRight :size="18" /></button></footer></main>
   </section>
 </template>

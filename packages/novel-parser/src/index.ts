@@ -115,6 +115,7 @@ export function parseNovel(request: ParserRequest, onProgress: ParseProgressList
       originalLabel: header.label,
       title: header.title,
       volume: header.volume,
+      kind: 'chapter',
       content,
       contentText: content,
       contentFormat: 'text',

@@ -50,6 +50,7 @@ async function epubFixture() {
     </body></html>`)
   zip.file('OEBPS/Text/chapter-1.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
     <html xmlns="http://www.w3.org/1999/xhtml"><head><title>初见</title></head><body>
+      <h2>第一卷 起程</h2><img src="../Images/cover.png" alt="卷首装饰"/>
       <h1>第一章 初见</h1><p onclick="alert(1)">第一章正文。</p>
       <img src="../Images/cover.png" alt="插图"/><script>alert('x')</script>
     </body></html>`)
@@ -75,9 +76,13 @@ describe('EPUB parser', () => {
     })
     expect(result.metadata.coverDataUrl).toMatch(/^data:image\/png;base64,/)
     expect(result.chapters.map(chapter => chapter.title)).toEqual(['第一卷 起程', '初见', '风雨'])
+    expect(result.chapters.map(chapter => chapter.kind)).toEqual(['volume', 'chapter', 'chapter'])
+    expect(result.chapters.map(chapter => chapter.originalLabel)).toEqual(['第一卷 起程', '一', '二'])
     expect(result.chapters.every(chapter => chapter.volume === '第一卷 起程')).toBe(true)
     expect(result.chapters.every(chapter => chapter.contentFormat === 'html')).toBe(true)
     expect(result.chapters[1].content).toContain('data:image/png;base64,')
+    expect(result.chapters[1].content).not.toContain('卷首装饰')
+    expect(result.chapters[1].content).not.toContain('<h1>')
     expect(result.chapters[1].content).not.toContain('<script')
     expect(result.chapters[1].content).not.toContain('onclick')
   }, 15_000)
@@ -101,13 +106,22 @@ describe('EPUB parser', () => {
     expect(result.chapters.length).toBeGreaterThan(0)
     expect(result.chapters.every(chapter => chapter.contentFormat === 'html')).toBe(true)
     expect(result.chapters.some(chapter => chapter.wordCount > 0)).toBe(true)
+    const kindCounts = result.chapters.reduce<Record<string, number>>((counts, chapter) => {
+      counts[chapter.kind] = (counts[chapter.kind] || 0) + 1
+      return counts
+    }, {})
+    expect(kindCounts.frontmatter).toBeGreaterThan(0)
+    expect(kindCounts.chapter).toBeGreaterThan(1000)
+    const firstChapter = result.chapters.find(chapter => chapter.kind === 'chapter')
+    expect(firstChapter?.originalLabel).toMatch(/^[0-9零〇一二两三四五六七八九十百千万]+$/u)
+    expect(firstChapter?.originalLabel).not.toBe(String(firstChapter?.number))
+    expect(firstChapter?.content).toMatch(/^<p>/u)
     const volumeNames = new Set(result.chapters.map(chapter => chapter.volume).filter(Boolean))
     const misplacedDividers = result.chapters.filter(chapter => !chapter.volume && volumeNames.has(chapter.title))
     expect(misplacedDividers).toEqual([])
     console.info('REAL_EPUB_RESULT', JSON.stringify({
-      title: result.metadata.title,
-      author: result.metadata.author,
       chapters: result.chapters.length,
+      kinds: kindCounts,
       volumes: volumeNames.size,
       words: result.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
       hasCover: Boolean(result.metadata.coverDataUrl),

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { LocalBook, ParseOptions, ParseResult, ThemeSettings } from '@novel-library/reader-core'
+import type { ChapterKind, LocalBook, ParseOptions, ParseResult, ThemeSettings } from '@novel-library/reader-core'
 
 export type DesktopBook = LocalBook & { chapterProgress: number }
 
@@ -10,6 +10,7 @@ export interface DesktopChapterSummary {
   originalLabel: string
   title: string
   volume: string
+  kind: ChapterKind
   wordCount: number
   contentFormat: 'text' | 'html'
 }
@@ -22,6 +23,8 @@ export interface DesktopSearchResult {
   bookId: string
   bookTitle: string
   chapterNumber: number
+  originalLabel: string
+  kind: ChapterKind
   chapterTitle: string
   snippet: string
 }

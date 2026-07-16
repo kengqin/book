@@ -19,11 +19,14 @@ export interface ThemeSettings {
   coverAssetId?: string
 }
 
+export type ChapterKind = 'frontmatter' | 'volume' | 'chapter' | 'appendix'
+
 export interface ParsedChapter {
   number: number
   originalLabel: string
   title: string
   volume: string
+  kind: ChapterKind
   content: string
   contentText: string
   contentFormat: 'text' | 'html'
@@ -119,6 +122,10 @@ export function formatChapterLabel(chapter: Pick<ParsedChapter, 'number' | 'orig
   if (/^\d+$/u.test(label)) return `第${Number(label)}章`
   if (/^[零〇一二两三四五六七八九十百千万两]+$/u.test(label)) return `第${label}章`
   return label || `第${chapter.number}章`
+}
+
+export function isNumberedChapter(chapter: Pick<ParsedChapter, 'kind'>) {
+  return chapter.kind === 'chapter'
 }
 
 export function calculateOverallProgress(chapterNumber: number, chapterProgress: number, chapterCount: number) {

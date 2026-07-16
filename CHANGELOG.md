@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-16
+
+### 修复
+
+- 修复新版本已出现在历史记录中，但顶部状态仍错误显示“当前已是最新版本”的问题。
+- 更新检查改为读取版本清单后直接校验对应版本的固定更新元数据，避免 GitHub 最新版本地址的短暂缓存不同步。
+- 在线版本记录增加缓存破除；更新元数据尚在同步时明确显示“新版已发布”，不再给出相反状态。
+
+### 兼容
+
+- 数据库 Schema 升级至 `5`，已有 EPUB 会自动补齐章节类型、原始章号并清理重复卷首内容；TXT、书库、阅读进度、笔记和自定义数据目录不受影响。
+- 下载进度、取消下载、安装并重启和历史版本安装流程保持不变。
+
 ## [0.3.1] - 2026-07-16
 
 ### 修复
@@ -82,6 +95,7 @@
 - 默认数据目录为 `%APPDATA%\NovelLibrary`。
 - 当前数据库 schema 为 `2`；安装旧版本前应先导出备份。
 
+[0.3.2]: https://github.com/kengqin/book/releases/tag/v0.3.2
 [0.3.1]: https://github.com/kengqin/book/releases/tag/v0.3.1
 [0.3.0]: https://github.com/kengqin/book/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kengqin/book/releases/tag/v0.2.0

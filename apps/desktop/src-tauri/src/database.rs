@@ -2,10 +2,11 @@ use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
-    sync::RwLock,
+    sync::{LazyLock, RwLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, MAIN_DB};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -28,6 +29,139 @@ struct DataDirectoryConfig {
     data_directory: String,
     #[serde(default)]
     database_path: Option<String>,
+}
+
+static HEADING_TAG_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<h[1-6](?:\s[^>]*)?>(.*?)</h[1-6]\s*>").expect("valid heading regex")
+});
+static HTML_TAG_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?is)<[^>]+>").expect("valid HTML tag regex"));
+static CHAPTER_HEADING_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*第\s*([0-9零〇一二两三四五六七八九十百千万]+)\s*[章回节]")
+        .expect("valid chapter heading regex")
+});
+
+fn decode_generated_html_text(value: &str) -> String {
+    HTML_TAG_RE
+        .replace_all(value, " ")
+        .replace("&nbsp;", " ")
+        .replace("&#39;", "'")
+        .replace("&quot;", "\"")
+        .replace("&gt;", ">")
+        .replace("&lt;", "<")
+        .replace("&amp;", "&")
+}
+
+fn normalized_heading(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect()
+}
+
+fn chapter_heading_info(content: &str, title: &str) -> (Option<String>, Option<usize>) {
+    let target = normalized_heading(title);
+    let mut matching_heading_end = None;
+    for captures in HEADING_TAG_RE.captures_iter(content) {
+        let Some(whole) = captures.get(0) else {
+            continue;
+        };
+        let Some(inner) = captures.get(1) else {
+            continue;
+        };
+        let text = decode_generated_html_text(inner.as_str());
+        if let Some(chapter) = CHAPTER_HEADING_RE.captures(&text) {
+            if let Some(label) = chapter.get(1) {
+                return (Some(label.as_str().to_string()), Some(whole.end()));
+            }
+        }
+        if normalized_heading(&text) == target {
+            matching_heading_end = Some(whole.end());
+        }
+    }
+    (None, matching_heading_end)
+}
+
+fn repair_epub_chapter_structure(connection: &Connection, legacy: bool) -> Result<(), String> {
+    let rows = {
+        let mut statement = connection
+            .prepare(
+                "SELECT c.id, c.number, c.original_label, c.title, c.volume, c.kind, c.content
+                 FROM chapters c JOIN books b ON b.id = c.book_id
+                 WHERE b.source_format = 'epub' AND c.content_format = 'html'
+                 ORDER BY c.book_id, c.number",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                ))
+            })
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?
+    };
+
+    for (id, _number, original_label, title, volume, stored_kind, content) in rows {
+        let (chapter_label, heading_end) = chapter_heading_info(&content, &title);
+        let inferred_kind = if chapter_label.is_some() {
+            "chapter"
+        } else if !volume.trim().is_empty()
+            && normalized_heading(&title) == normalized_heading(&volume)
+        {
+            "volume"
+        } else if volume.trim().is_empty() || volume == "前置内容" {
+            "frontmatter"
+        } else {
+            "appendix"
+        };
+        let kind = if legacy
+            || !matches!(
+                stored_kind.as_str(),
+                "frontmatter" | "volume" | "chapter" | "appendix"
+            ) {
+            inferred_kind
+        } else {
+            stored_kind.as_str()
+        };
+        let repaired_volume = if kind == "frontmatter" {
+            "前置内容".to_string()
+        } else {
+            volume
+        };
+        let repaired_label = chapter_label.unwrap_or_else(|| {
+            if kind == "chapter" {
+                original_label
+            } else {
+                title.clone()
+            }
+        });
+        let repaired_content = heading_end
+            .map(|end| content[end..].to_string())
+            .unwrap_or(content);
+        let repaired_text = decode_generated_html_text(&repaired_content)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let word_count = repaired_text
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .count() as i64;
+        connection
+            .execute(
+                "UPDATE chapters SET original_label = ?2, volume = ?3, kind = ?4, content = ?5, content_text = ?6, word_count = ?7 WHERE id = ?1",
+                params![id, repaired_label, repaired_volume, kind, repaired_content, repaired_text, word_count],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 pub struct DatabaseState {
@@ -234,6 +368,9 @@ fn load_configured_database(config_path: &Path) -> Option<ActiveDatabase> {
 }
 
 fn migrate(connection: &Connection) -> Result<(), String> {
+    let previous_version = connection
+        .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+        .map_err(|error| error.to_string())?;
     connection
         .execute_batch(
             r#"
@@ -271,6 +408,7 @@ fn migrate(connection: &Connection) -> Result<(), String> {
                 content_text TEXT NOT NULL DEFAULT '',
                 word_count INTEGER NOT NULL DEFAULT 0,
                 content_format TEXT NOT NULL DEFAULT 'text',
+                kind TEXT NOT NULL DEFAULT 'chapter',
                 UNIQUE(book_id, number)
             );
 
@@ -374,14 +512,25 @@ fn migrate(connection: &Connection) -> Result<(), String> {
             )
             .map_err(|error| error.to_string())?;
     }
+    if !chapter_columns.iter().any(|column| column == "kind") {
+        connection
+            .execute(
+                "ALTER TABLE chapters ADD COLUMN kind TEXT NOT NULL DEFAULT 'chapter'",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+    }
     connection
         .execute(
             "UPDATE chapters SET volume = title WHERE content_format = 'html' AND trim(volume) = '' AND EXISTS (SELECT 1 FROM chapters AS member WHERE member.book_id = chapters.book_id AND member.volume = chapters.title)",
             [],
         )
         .map_err(|error| error.to_string())?;
+    if previous_version < 5 {
+        repair_epub_chapter_structure(connection, true)?;
+    }
     connection
-        .execute_batch("PRAGMA user_version = 4")
+        .execute_batch("PRAGMA user_version = 5")
         .map_err(|error| error.to_string())
 }
 
@@ -475,6 +624,7 @@ pub fn save_imported_book(
         .result
         .chapters
         .iter()
+        .filter(|chapter| chapter.kind != "frontmatter")
         .map(|chapter| chapter.volume.trim())
         .filter(|volume| !volume.is_empty())
         .map(ToOwned::to_owned)
@@ -537,7 +687,7 @@ pub fn save_imported_book(
     {
         let mut statement = transaction
             .prepare(
-                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, content, content_text, word_count, content_format) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, kind, content, content_text, word_count, content_format) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             )
             .map_err(|error| error.to_string())?;
         for chapter in &input.result.chapters {
@@ -549,6 +699,7 @@ pub fn save_imported_book(
                     chapter.original_label,
                     chapter.title,
                     chapter.volume,
+                    chapter.kind,
                     chapter.content,
                     chapter.content_text,
                     chapter.word_count,
@@ -606,7 +757,7 @@ pub fn list_chapters(
     book_id: &str,
 ) -> Result<Vec<ChapterSummary>, String> {
     let mut statement = connection
-        .prepare("SELECT id, book_id, number, original_label, title, volume, word_count, content_format FROM chapters WHERE book_id = ?1 ORDER BY number")
+        .prepare("SELECT id, book_id, number, original_label, title, volume, kind, word_count, content_format FROM chapters WHERE book_id = ?1 ORDER BY number")
         .map_err(|error| error.to_string())?;
     let chapters = statement
         .query_map(params![book_id], |row| {
@@ -617,8 +768,9 @@ pub fn list_chapters(
                 original_label: row.get(3)?,
                 title: row.get(4)?,
                 volume: row.get(5)?,
-                word_count: row.get(6)?,
-                content_format: row.get(7)?,
+                kind: row.get(6)?,
+                word_count: row.get(7)?,
+                content_format: row.get(8)?,
             })
         })
         .map_err(|error| error.to_string())?
@@ -634,7 +786,7 @@ pub fn get_chapter(
 ) -> Result<Option<ChapterRecord>, String> {
     connection
         .query_row(
-            "SELECT id, book_id, number, original_label, title, volume, content, content_text, word_count, content_format FROM chapters WHERE book_id = ?1 AND number = ?2",
+            "SELECT id, book_id, number, original_label, title, volume, kind, content, content_text, word_count, content_format FROM chapters WHERE book_id = ?1 AND number = ?2",
             params![book_id, number],
             |row| {
                 Ok(ChapterRecord {
@@ -644,10 +796,11 @@ pub fn get_chapter(
                     original_label: row.get(3)?,
                     title: row.get(4)?,
                     volume: row.get(5)?,
-                    content: row.get(6)?,
-                    content_text: row.get(7)?,
-                    word_count: row.get(8)?,
-                    content_format: row.get(9)?,
+                    kind: row.get(6)?,
+                    content: row.get(7)?,
+                    content_text: row.get(8)?,
+                    word_count: row.get(9)?,
+                    content_format: row.get(10)?,
                 })
             },
         )
@@ -698,7 +851,7 @@ pub fn search(connection: &Connection, query: &str) -> Result<Vec<SearchResult>,
     let pattern = format!("%{needle}%");
     let mut statement = connection
         .prepare(
-            "SELECT c.book_id, b.title, c.number, c.title, substr(c.content_text, 1, 180) FROM chapters c JOIN books b ON b.id = c.book_id WHERE b.title LIKE ?1 OR b.author LIKE ?1 OR c.title LIKE ?1 OR c.content_text LIKE ?1 ORDER BY b.last_read_at DESC, c.number LIMIT 100",
+            "SELECT c.book_id, b.title, c.number, c.original_label, c.kind, c.title, substr(c.content_text, 1, 180) FROM chapters c JOIN books b ON b.id = c.book_id WHERE b.title LIKE ?1 OR b.author LIKE ?1 OR c.title LIKE ?1 OR c.content_text LIKE ?1 ORDER BY b.last_read_at DESC, c.number LIMIT 100",
         )
         .map_err(|error| error.to_string())?;
     let results = statement
@@ -707,8 +860,10 @@ pub fn search(connection: &Connection, query: &str) -> Result<Vec<SearchResult>,
                 book_id: row.get(0)?,
                 book_title: row.get(1)?,
                 chapter_number: row.get(2)?,
-                chapter_title: row.get(3)?,
-                snippet: row.get(4)?,
+                original_label: row.get(3)?,
+                kind: row.get(4)?,
+                chapter_title: row.get(5)?,
+                snippet: row.get(6)?,
             })
         })
         .map_err(|error| error.to_string())?
@@ -924,7 +1079,7 @@ pub fn write_text_file(target_path: &Path, content: &str) -> Result<String, Stri
 
 fn list_all_chapters(connection: &Connection) -> Result<Vec<ChapterRecord>, String> {
     let mut statement = connection
-        .prepare("SELECT id, book_id, number, original_label, title, volume, content, content_text, word_count, content_format FROM chapters ORDER BY book_id, number")
+        .prepare("SELECT id, book_id, number, original_label, title, volume, kind, content, content_text, word_count, content_format FROM chapters ORDER BY book_id, number")
         .map_err(|error| error.to_string())?;
     let chapters = statement
         .query_map([], |row| {
@@ -935,10 +1090,11 @@ fn list_all_chapters(connection: &Connection) -> Result<Vec<ChapterRecord>, Stri
                 original_label: row.get(3)?,
                 title: row.get(4)?,
                 volume: row.get(5)?,
-                content: row.get(6)?,
-                content_text: row.get(7)?,
-                word_count: row.get(8)?,
-                content_format: row.get(9)?,
+                kind: row.get(6)?,
+                content: row.get(7)?,
+                content_text: row.get(8)?,
+                word_count: row.get(9)?,
+                content_format: row.get(10)?,
             })
         })
         .map_err(|error| error.to_string())?
@@ -953,7 +1109,7 @@ pub fn export_backup(connection: &Connection, target_path: &Path) -> Result<Back
     let notes = list_all_notes(connection)?;
     let payload = BackupPayload {
         format: "novel-library-backup".to_string(),
-        version: 3,
+        version: 4,
         created_at: now_millis(),
         books,
         chapters,
@@ -979,7 +1135,7 @@ pub fn import_backup(
     let source = fs::read(source_path).map_err(|error| error.to_string())?;
     let payload: BackupPayload =
         serde_json::from_slice(&source).map_err(|error| format!("备份格式错误：{error}"))?;
-    if payload.format != "novel-library-backup" || !(1..=3).contains(&payload.version) {
+    if payload.format != "novel-library-backup" || !(1..=4).contains(&payload.version) {
         return Err("不支持的小说书库备份版本".to_string());
     }
     let transaction = connection
@@ -1024,7 +1180,7 @@ pub fn import_backup(
     {
         let mut statement = transaction
             .prepare(
-                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, content, content_text, word_count, content_format) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT(id) DO UPDATE SET book_id=excluded.book_id, number=excluded.number, original_label=excluded.original_label, title=excluded.title, volume=excluded.volume, content=excluded.content, content_text=excluded.content_text, word_count=excluded.word_count, content_format=excluded.content_format",
+                "INSERT INTO chapters (id, book_id, number, original_label, title, volume, kind, content, content_text, word_count, content_format) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(id) DO UPDATE SET book_id=excluded.book_id, number=excluded.number, original_label=excluded.original_label, title=excluded.title, volume=excluded.volume, kind=excluded.kind, content=excluded.content, content_text=excluded.content_text, word_count=excluded.word_count, content_format=excluded.content_format",
             )
             .map_err(|error| error.to_string())?;
         for chapter in &payload.chapters {
@@ -1036,6 +1192,7 @@ pub fn import_backup(
                     chapter.original_label,
                     chapter.title,
                     chapter.volume,
+                    chapter.kind,
                     chapter.content,
                     if chapter.content_text.is_empty() {
                         &chapter.content
@@ -1049,6 +1206,7 @@ pub fn import_backup(
         }
     }
 
+    repair_epub_chapter_structure(&transaction, payload.version <= 3)?;
     upsert_notes(&transaction, &payload.notes)?;
 
     transaction.commit().map_err(|error| error.to_string())?;
@@ -1090,6 +1248,7 @@ mod tests {
                         original_label: "一".to_string(),
                         title: "开始".to_string(),
                         volume: "第一卷".to_string(),
+                        kind: "chapter".to_string(),
                         content: "第一章正文。".to_string(),
                         content_text: "第一章正文。".to_string(),
                         content_format: "text".to_string(),
@@ -1100,6 +1259,7 @@ mod tests {
                         original_label: "二".to_string(),
                         title: "继续".to_string(),
                         volume: "第一卷".to_string(),
+                        kind: "chapter".to_string(),
                         content: "第二章包含青石长阶。".to_string(),
                         content_text: "第二章包含青石长阶。".to_string(),
                         content_format: "text".to_string(),
@@ -1136,7 +1296,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read version");
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 
     #[test]
@@ -1174,22 +1334,39 @@ mod tests {
         let book = save_imported_book(&mut connection, sample_import()).expect("save book");
         connection
             .execute(
-                "UPDATE chapters SET title = '第一部 小丑', volume = '', content_format = 'html' WHERE book_id = ?1 AND number = 1",
+                "UPDATE books SET source_format = 'epub' WHERE id = ?1",
+                params![book.id],
+            )
+            .expect("mark book as epub");
+        connection
+            .execute(
+                "UPDATE chapters SET title = '第一部 小丑', volume = '', content = '<h1>第一部 小丑</h1><p>卷首装饰</p>', content_format = 'html' WHERE book_id = ?1 AND number = 1",
                 params![book.id],
             )
             .expect("prepare misplaced divider");
         connection
             .execute(
-                "UPDATE chapters SET volume = '第一部 小丑', content_format = 'html' WHERE book_id = ?1 AND number = 2",
+                "UPDATE chapters SET volume = '第一部 小丑', content = '<h1>第十四章 继续</h1><p>正文</p>', content_format = 'html' WHERE book_id = ?1 AND number = 2",
                 params![book.id],
             )
             .expect("prepare volume member");
+        connection
+            .execute_batch("PRAGMA user_version = 4")
+            .expect("set legacy version");
 
         migrate(&connection).expect("repair existing epub groups");
         let divider = get_chapter(&connection, &book.id, 1)
             .expect("read divider")
             .expect("divider exists");
         assert_eq!(divider.volume, "第一部 小丑");
+        assert_eq!(divider.kind, "volume");
+        assert_eq!(divider.content, "<p>卷首装饰</p>");
+        let chapter = get_chapter(&connection, &book.id, 2)
+            .expect("read repaired chapter")
+            .expect("chapter exists");
+        assert_eq!(chapter.kind, "chapter");
+        assert_eq!(chapter.original_label, "十四");
+        assert_eq!(chapter.content, "<p>正文</p>");
     }
 
     #[test]
