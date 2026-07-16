@@ -6,9 +6,9 @@ import { getIdeIntegrationStatus, installIdePlugin, uninstallIdePlugin, type Bun
 
 const router = useRouter()
 const fallbackPlugins: BundledIdePlugin[] = [
-  { id: 'vscode', label: 'VS Code / Cursor', kind: 'vscode', version: '0.4.0', identifier: 'novel-library.novel-library-reader', available: false },
-  { id: 'intellij', label: 'JetBrains IDE', kind: 'jetbrains', version: '0.4.0', identifier: 'com.kengqin.novellibrary.reader', available: false },
-  { id: 'visual-studio', label: 'Visual Studio 2022', kind: 'visual-studio', version: '0.4.0', identifier: 'NovelLibrary.VisualStudio', available: false }
+  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.1', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 编辑器内阅读小说，固定显示 5 行，支持快捷键滚动、切章和桌面端进度同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
+  { id: 'intellij', label: '小说书库 · IntelliJ IDEA 阅读器', kind: 'jetbrains', version: '0.4.0', identifier: 'com.kengqin.novellibrary.reader', description: '适用于 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 的小说阅读插件。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
+  { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.0', identifier: 'NovelLibrary.VisualStudio', description: '在 Visual Studio 2022 中打开小说阅读面板，并与桌面端书库同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
 ]
 const status = ref<IdeIntegrationStatus>({ plugins: fallbackPlugins, targets: [] })
 const detecting = ref(true)
@@ -90,18 +90,19 @@ onMounted(refresh)
       <article v-for="plugin in visiblePlugins" :key="plugin.id" class="ide-plugin-card">
         <header>
           <span class="ide-target-icon"><Code2 :size="20" /></span>
-          <div><strong>{{ plugin.label }}</strong><small>{{ plugin.identifier }} · v{{ plugin.version }}</small></div>
-          <span class="ide-package-state" :class="{ ready: plugin.available }">{{ plugin.available ? '随包可用' : '缺少产物' }}</span>
+          <div class="ide-plugin-heading"><strong>{{ plugin.label }}</strong><small>{{ plugin.description }}</small><span>插件版本 v{{ plugin.version }} · {{ plugin.packageType }} · ID {{ plugin.identifier }}</span></div>
+          <span class="ide-package-state" :class="{ ready: plugin.available }">{{ plugin.available ? `安装包已内置 · ${plugin.packageType}` : '安装包缺失' }}</span>
         </header>
+        <div class="ide-plugin-supported"><span>支持：</span>{{ plugin.supportedIdes.join('、') }}</div>
         <div v-if="targetsFor(plugin).length" class="ide-target-list">
           <div v-for="target in targetsFor(plugin)" :key="target.id" class="ide-target-row">
-            <div><strong>{{ target.label }}</strong><small>{{ target.path }}</small><span v-if="target.installed">已安装{{ target.installedVersion ? ` · v${target.installedVersion}` : '' }}</span><span v-else>未安装</span></div>
+            <div><strong>{{ target.label }}</strong><small>安装位置：{{ target.path }}</small><span v-if="target.installed">插件已安装{{ target.installedVersion ? ` · v${target.installedVersion}` : '' }}</span><span v-else>插件未安装</span></div>
             <button v-if="target.installed && target.canUninstall" type="button" class="secondary-command" :disabled="busyTarget === target.id" @click="uninstall(target, plugin)"><Trash2 :size="15" />{{ busyTarget === target.id ? '处理中' : '卸载' }}</button>
             <button v-else-if="target.installed" type="button" class="secondary-command" disabled><CheckCircle2 :size="15" />已安装</button>
             <button v-else type="button" class="primary-command" :disabled="busyTarget === target.id || !plugin.available" @click="install(target, plugin)"><RotateCcw v-if="busyTarget === target.id" :size="15" class="spinning" /><Download v-else :size="15" />{{ busyTarget === target.id ? '安装中' : '安装' }}</button>
           </div>
         </div>
-        <div v-else class="ide-plugin-empty">{{ detecting ? '正在检测本机实例...' : '未检测到本机实例，可直接下载插件包后在 IDE 内安装' }}</div>
+        <div v-else class="ide-plugin-empty">{{ detecting ? '正在检测本机实例...' : `未检测到 ${plugin.supportedIdes.join('、')}，请确认 IDE 已安装` }}</div>
       </article>
     </div>
     <p v-if="message" class="settings-message"><CheckCircle2 :size="15" />{{ message }}</p>

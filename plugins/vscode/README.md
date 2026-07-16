@@ -1,8 +1,15 @@
-# Novel Library Reader
+# 小说书库 VS Code / Cursor 阅读器
 
-The desktop release bundles this extension and lets you choose the detected VS Code or Cursor installation.
+这个插件把桌面端书库同步到编辑器内的一个只读阅读标签，不会修改当前代码文件。
 
-VS Code and Cursor extension for reading novels from the local NovelLibrary desktop app.
+## 使用
 
-The desktop Bridge must be running before opening the reading panel.
-After installation, reload the IDE window if it was already open. Select the 小说书库 book icon in the activity bar, then choose 打开阅读面板.
+1. 启动小说书库桌面端，并确认已经导入小说。
+2. 安装插件后执行 `Developer: Reload Window`，或重启 VS Code / Cursor。
+3. 点击左侧活动栏的“小说书库”图标，选择“打开编辑器内阅读”。桌面端 Bridge 可用时，插件也会自动打开阅读标签。
+4. 在任意编辑器中使用快捷键：
+   - `Ctrl+Alt+N`：打开编辑器内阅读
+   - `Ctrl+Alt+Up/Down`：上一行 / 下一行
+   - `Ctrl+Alt+Left/Right`：上一章 / 下一章
+
+阅读器每次显示 5 行，阅读进度会回写桌面端书库。

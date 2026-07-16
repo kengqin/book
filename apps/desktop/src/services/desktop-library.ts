@@ -54,6 +54,9 @@ export interface BundledIdePlugin {
   kind: 'vscode' | 'jetbrains' | 'visual-studio'
   version: string
   identifier: string
+  description: string
+  packageType: string
+  supportedIdes: string[]
   available: boolean
 }
 

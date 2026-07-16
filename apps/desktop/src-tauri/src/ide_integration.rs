@@ -34,6 +34,9 @@ struct PluginDefinition {
     kind: String,
     version: String,
     identifier: String,
+    description: String,
+    package_type: String,
+    supported_ides: Vec<String>,
     file: String,
 }
 
@@ -45,6 +48,9 @@ pub struct BundledIdePlugin {
     kind: String,
     version: String,
     identifier: String,
+    description: String,
+    package_type: String,
+    supported_ides: Vec<String>,
     available: bool,
 }
 
@@ -141,6 +147,48 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+fn expand_launcher_token(script: &Path, token: &str) -> Option<PathBuf> {
+    let relative = token.trim().strip_prefix("%~dp0")?;
+    let path = script.parent()?.join(relative);
+    path.is_file().then_some(path)
+}
+
+fn cli_command(target: &IdeTarget) -> Result<(PathBuf, Vec<PathBuf>), String> {
+    let launcher = PathBuf::from(&target.path);
+    if launcher
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("cmd"))
+    {
+        let script = fs::read_to_string(&launcher)
+            .map_err(|error| format!("无法读取 IDE 启动脚本：{error}"))?;
+        let paths = script
+            .lines()
+            .flat_map(|line| line.split('"'))
+            .filter_map(|token| expand_launcher_token(&launcher, token))
+            .collect::<Vec<_>>();
+        let executable = paths
+            .iter()
+            .find(|path| {
+                path.extension()
+                    .and_then(|value| value.to_str())
+                    .is_some_and(|value| value.eq_ignore_ascii_case("exe"))
+            })
+            .cloned()
+            .ok_or_else(|| "无法从 IDE 启动脚本定位可执行文件".to_string())?;
+        let prefix = paths
+            .into_iter()
+            .filter(|path| path != &executable)
+            .collect();
+        return Ok((executable, prefix));
+    }
+    if launcher.is_file() {
+        Ok((launcher, Vec::new()))
+    } else {
+        Err("目标 IDE 已被移动或删除，请重新检测".to_string())
+    }
+}
+
 fn scan_executables(root: &Path, names: &[&str], depth: usize, output: &mut Vec<PathBuf>) {
     if depth == 0 || !root.is_dir() {
         return;
@@ -162,6 +210,90 @@ fn scan_executables(root: &Path, names: &[&str], depth: usize, output: &mut Vec<
     }
 }
 
+#[cfg(windows)]
+fn jetbrains_registry_roots() -> Vec<PathBuf> {
+    use winreg::{enums::*, RegKey};
+
+    let uninstall_path = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+    let mut roots = Vec::new();
+    for hive in [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
+        for access in [KEY_READ | KEY_WOW64_64KEY, KEY_READ | KEY_WOW64_32KEY] {
+            let Ok(uninstall) = RegKey::predef(hive).open_subkey_with_flags(uninstall_path, access)
+            else {
+                continue;
+            };
+            for key_name in uninstall.enum_keys().flatten() {
+                let Ok(app) = uninstall.open_subkey_with_flags(&key_name, access) else {
+                    continue;
+                };
+                let display_name = app
+                    .get_value::<String, _>("DisplayName")
+                    .unwrap_or_default();
+                let publisher = app.get_value::<String, _>("Publisher").unwrap_or_default();
+                let name = display_name.to_ascii_lowercase();
+                let is_jetbrains = publisher.to_ascii_lowercase().contains("jetbrains")
+                    || [
+                        "intellij",
+                        "pycharm",
+                        "webstorm",
+                        "android studio",
+                        "rider",
+                        "clion",
+                        "goland",
+                        "rubymine",
+                    ]
+                    .iter()
+                    .any(|part| name.contains(part));
+                if !is_jetbrains {
+                    continue;
+                }
+                if let Ok(install_location) = app.get_value::<String, _>("InstallLocation") {
+                    let path = PathBuf::from(install_location.trim_matches(['"', ' ']));
+                    if path.is_dir() {
+                        roots.push(path);
+                    }
+                }
+            }
+        }
+    }
+    roots
+}
+
+#[cfg(not(windows))]
+fn jetbrains_registry_roots() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+fn jetbrains_label(path: &Path) -> String {
+    let install_name = path
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::file_name)
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    if install_name.contains(' ') || install_name.chars().any(|value| value.is_ascii_digit()) {
+        return install_name.to_string();
+    }
+    match path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .trim_end_matches("64")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "idea" => "IntelliJ IDEA".to_string(),
+        "pycharm" => "PyCharm".to_string(),
+        "webstorm" => "WebStorm".to_string(),
+        "studio" => "Android Studio".to_string(),
+        "rider" => "Rider".to_string(),
+        "clion" => "CLion".to_string(),
+        "goland" => "GoLand".to_string(),
+        "rubymine" => "RubyMine".to_string(),
+        _ => "JetBrains IDE".to_string(),
+    }
+}
+
 fn detect_targets() -> Vec<IdeTarget> {
     let mut targets = Vec::new();
     for (command, label) in [("code.cmd", "Visual Studio Code"), ("cursor.cmd", "Cursor")] {
@@ -179,7 +311,7 @@ fn detect_targets() -> Vec<IdeTarget> {
     }
 
     let mut jetbrains = Vec::new();
-    for root in [
+    let mut jetbrains_roots = vec![
         std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
             .map(|path| path.join("JetBrains").join("Toolbox").join("apps")),
@@ -192,7 +324,9 @@ fn detect_targets() -> Vec<IdeTarget> {
     ]
     .into_iter()
     .flatten()
-    {
+    .collect::<Vec<_>>();
+    jetbrains_roots.extend(jetbrains_registry_roots());
+    for root in jetbrains_roots {
         scan_executables(
             &root,
             &[
@@ -212,12 +346,7 @@ fn detect_targets() -> Vec<IdeTarget> {
     jetbrains.sort();
     jetbrains.dedup();
     for path in jetbrains {
-        let label = path
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .unwrap_or("JetBrains IDE")
-            .trim_end_matches("64")
-            .to_string();
+        let label = jetbrains_label(&path);
         targets.push(IdeTarget {
             id: target_id("jetbrains", &path),
             label,
@@ -256,28 +385,102 @@ fn detect_targets() -> Vec<IdeTarget> {
 }
 
 fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
-    let output = hidden_command("cmd.exe")
-        .arg("/c")
-        .arg(&target.path)
+    let Ok((executable, prefix)) = cli_command(target) else {
+        return (false, None);
+    };
+    let output = hidden_command(executable)
+        .args(prefix)
         .arg("--list-extensions")
         .arg("--show-versions")
         .output();
-    let Ok(output) = output else {
+    let prefix = format!("{identifier}@");
+    if let Ok(output) = output {
+        if let Some(state) = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .find_map(|line| {
+                if line == identifier {
+                    Some((true, None))
+                } else {
+                    line.strip_prefix(&prefix)
+                        .map(|version| (true, Some(version.to_string())))
+                }
+            })
+        {
+            return state;
+        }
+    }
+    let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else {
         return (false, None);
     };
-    let prefix = format!("{identifier}@");
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::trim)
-        .find_map(|line| {
-            if line == identifier {
-                Some((true, None))
-            } else {
-                line.strip_prefix(&prefix)
-                    .map(|version| (true, Some(version.to_string())))
-            }
+    let extension_root = if target.label == "Cursor" {
+        home.join(".cursor").join("extensions")
+    } else {
+        home.join(".vscode").join("extensions")
+    };
+    let folder_prefix = format!("{identifier}-");
+    fs::read_dir(extension_root)
+        .ok()
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .find_map(|name| {
+            name.strip_prefix(&folder_prefix)
+                .map(|version| (true, Some(version.to_string())))
         })
         .unwrap_or((false, None))
+}
+
+fn xml_tag_value(payload: &str, tag: &str) -> Option<String> {
+    let start = payload.find(&format!("<{tag}>"))? + tag.len() + 2;
+    let end = payload[start..].find(&format!("</{tag}>"))? + start;
+    Some(payload[start..end].trim().to_string())
+}
+
+fn jetbrains_plugin_state(identifier: &str) -> (bool, Option<String>) {
+    let roots = [
+        std::env::var_os("APPDATA").map(PathBuf::from),
+        std::env::var_os("LOCALAPPDATA").map(PathBuf::from),
+    ];
+    for root in roots
+        .into_iter()
+        .flatten()
+        .map(|path| path.join("JetBrains"))
+    {
+        let mut plugin_files = Vec::new();
+        scan_files_named(&root, "plugin.xml", 5, &mut plugin_files);
+        for file in plugin_files {
+            let Ok(payload) = fs::read_to_string(file) else {
+                continue;
+            };
+            if xml_tag_value(&payload, "id").as_deref() == Some(identifier) {
+                return (true, xml_tag_value(&payload, "version"));
+            }
+        }
+    }
+    (false, None)
+}
+
+fn scan_files_named(root: &Path, name: &str, depth: usize, output: &mut Vec<PathBuf>) {
+    if depth == 0 || !root.is_dir() {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            scan_files_named(&path, name, depth - 1, output);
+        } else if path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case(name))
+        {
+            output.push(path);
+        }
+    }
 }
 
 fn apply_installed_states(targets: &mut [IdeTarget], plugins: &[PluginDefinition]) {
@@ -285,6 +488,10 @@ fn apply_installed_states(targets: &mut [IdeTarget], plugins: &[PluginDefinition
         if let Some(plugin) = plugins.iter().find(|plugin| plugin.kind == target.kind) {
             if target.kind == "vscode" {
                 let (installed, version) = vscode_extension_state(target, &plugin.identifier);
+                target.installed = installed;
+                target.installed_version = version;
+            } else if target.kind == "jetbrains" {
+                let (installed, version) = jetbrains_plugin_state(&plugin.identifier);
                 target.installed = installed;
                 target.installed_version = version;
             }
@@ -307,6 +514,9 @@ pub fn status(app: &AppHandle) -> Result<IdeIntegrationStatus, String> {
             kind: plugin.kind.clone(),
             version: plugin.version.clone(),
             identifier: plugin.identifier.clone(),
+            description: plugin.description.clone(),
+            package_type: plugin.package_type.clone(),
+            supported_ides: plugin.supported_ides.clone(),
         })
         .collect();
     Ok(IdeIntegrationStatus { plugins, targets })
@@ -340,13 +550,15 @@ fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, Strin
         return Err("目标 IDE 已被移动或删除，请重新检测".to_string());
     }
     let output = match target.kind.as_str() {
-        "vscode" => hidden_command("cmd.exe")
-            .arg("/c")
-            .arg(&executable)
-            .arg("--install-extension")
-            .arg(plugin_path)
-            .arg("--force")
-            .output(),
+        "vscode" => {
+            let (executable, prefix) = cli_command(target)?;
+            hidden_command(executable)
+                .args(prefix)
+                .arg("--install-extension")
+                .arg(plugin_path)
+                .arg("--force")
+                .output()
+        }
         "jetbrains" => hidden_command(&executable)
             .arg("installPlugins")
             .arg(plugin_path)
@@ -398,9 +610,9 @@ pub fn uninstall(
     if !target.can_uninstall {
         return Err("此 IDE 请在其内置插件管理器中卸载".to_string());
     }
-    let output = hidden_command("cmd.exe")
-        .arg("/c")
-        .arg(&target.path)
+    let (executable, prefix) = cli_command(&target)?;
+    let output = hidden_command(executable)
+        .args(prefix)
         .arg("--uninstall-extension")
         .arg(&plugin.identifier)
         .output()
@@ -428,4 +640,5 @@ mod tests {
         assert_eq!(first, second);
         assert_ne!(first, target_id("jetbrains", Path::new("C:/Code/code.cmd")));
     }
+
 }

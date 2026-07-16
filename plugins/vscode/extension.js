@@ -1,22 +1,139 @@
 const vscode = require('vscode')
-const { request } = require('./bridge')
+const fs = require('fs')
+const { bridgeFile, request } = require('./bridge')
 
-function html() {
-  return `<!doctype html><html><head><meta charset="UTF-8"><style>
-  body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:12px;line-height:1.8}
-  header{display:flex;gap:8px;align-items:center;position:sticky;top:0;background:var(--vscode-editor-background);padding-bottom:8px}
-  select,button{color:inherit;background:var(--vscode-button-background);border:0;padding:5px 8px}
-  #content{margin-top:18px;white-space:pre-wrap;font-size:16px;line-height:2;min-height:190px}
-  #content p{margin:0;min-height:2em}.meta{opacity:.7;font-size:11px}
-  </style></head><body><header><select id="books"></select><select id="chapters"></select><button id="prev">上一章</button><button id="next">下一章</button></header><div id="title"></div><main id="content">正在读取书架...</main><div class="meta" id="meta"></div><script>
-  const vscode=acquireVsCodeApi();let books=[],chapters=[],book,chapter,lineStart=0;
-  const booksEl=document.getElementById('books'), chaptersEl=document.getElementById('chapters'), content=document.getElementById('content');
-  function send(type,data){vscode.postMessage({type,data})}
-  function displayLines(text){const lines=[];for(const paragraph of text.replace(/\\r/g,'').split(/\\n+/)){let line='';for(const char of paragraph.trim()){line+=char;if(line.length>=42||(line.length>=18&&/[，。！？；：、,.!?;:]/.test(char))){lines.push(line);line=''}}if(line)lines.push(line)}return lines.filter(Boolean)}
-  function render(){if(!chapter)return;const lines=displayLines(chapter.contentText||chapter.content);lineStart=Math.max(0,Math.min(lineStart,Math.max(0,lines.length-5)));document.getElementById('title').textContent=chapter.title;content.textContent=lines.slice(lineStart,lineStart+5).join('\\n');document.getElementById('meta').textContent='显示 '+(lineStart+1)+' - '+Math.min(lines.length,lineStart+5)+' 行 · 使用方向键滚动，Ctrl+方向键切换章节';send('progress',{chapterNumber:chapter.number,chapterProgress:lines.length>5?lineStart/(lines.length-5)*100:100})}
-  window.addEventListener('message',e=>{const m=e.data;if(m.type==='books'){books=m.data;booksEl.innerHTML=books.map(b=>'<option value="'+b.id+'">'+b.title+'</option>').join('');if(books[0])send('book',books[0].id)}if(m.type==='chapters'){chapters=m.data;chaptersEl.innerHTML=chapters.map(c=>'<option value="'+c.number+'">'+c.title+'</option>').join('');if(chapters[0])send('chapter',chapters[0].number)}if(m.type==='chapter'){chapter=m.data;lineStart=0;render()}if(m.type==='line'){lineStart+=m.data.direction*(m.data.page?5:1);render()}})
-  booksEl.onchange=()=>send('book',booksEl.value);chaptersEl.onchange=()=>send('chapter',Number(chaptersEl.value));document.getElementById('prev').onclick=()=>send('move',-1);document.getElementById('next').onclick=()=>send('move',1);document.addEventListener('keydown',e=>{if(e.key==='ArrowDown'||e.key==='PageDown')send('line',{direction:1,page:e.key==='PageDown'});if(e.key==='ArrowUp'||e.key==='PageUp')send('line',{direction:-1,page:e.key==='PageUp'});if(e.ctrlKey&&e.key==='ArrowRight')send('move',1);if(e.ctrlKey&&e.key==='ArrowLeft')send('move',-1)});send('load');
-  </script></body></html>`
+const readerUri = vscode.Uri.from({ scheme: 'novel-library', path: '/小说阅读器' })
+
+const state = {
+  books: [],
+  chapters: [],
+  book: null,
+  chapter: null,
+  lines: [],
+  lineStart: 0,
+  loading: false
+}
+
+function displayLines(text) {
+  const lines = []
+  for (const paragraph of String(text || '').replace(/\r/g, '').split(/\n+/)) {
+    let line = ''
+    for (const char of paragraph.trim()) {
+      line += char
+      if (line.length >= 42 || (line.length >= 18 && /[，。！？；：、,.!?;:]/.test(char))) {
+        lines.push(line)
+        line = ''
+      }
+    }
+    if (line) lines.push(line)
+  }
+  return lines.filter(Boolean)
+}
+
+function readerText() {
+  if (!state.chapter) {
+    return '小说阅读器\n\n正在等待桌面端书库 Bridge...\n\n请先启动小说书库桌面端。'
+  }
+  const end = Math.min(state.lines.length, state.lineStart + 5)
+  const visible = state.lines.slice(state.lineStart, end)
+  return [
+    `小说阅读  |  ${state.book?.title || '未命名书籍'}`,
+    `第 ${state.chapter.number} 章  ${state.chapter.title}`,
+    `显示 ${state.lineStart + 1}-${end} / ${state.lines.length} 行  |  Ctrl+Alt+上/下滚动  Ctrl+Alt+左/右切章`,
+    '',
+    ...visible
+  ].join('\n')
+}
+
+class ReaderDocumentProvider {
+  constructor() {
+    this.emitter = new vscode.EventEmitter()
+    this.onDidChange = this.emitter.event
+  }
+
+  provideTextDocumentContent() {
+    return readerText()
+  }
+
+  refresh() {
+    this.emitter.fire(readerUri)
+  }
+
+  dispose() {
+    this.emitter.dispose()
+  }
+}
+
+function currentProgress() {
+  if (state.lines.length <= 5) return 100
+  return (state.lineStart / (state.lines.length - 5)) * 100
+}
+
+async function updateChapter(provider, chapterNumber) {
+  if (!state.book) return
+  state.chapter = await request(`/v1/books/${encodeURIComponent(state.book.id)}/chapters/${chapterNumber}`)
+  state.lines = displayLines(state.chapter.contentText || state.chapter.content)
+  state.lineStart = 0
+  provider.refresh()
+}
+
+async function loadLibrary(provider) {
+  if (state.loading) return
+  state.loading = true
+  try {
+    state.books = await request('/v1/books')
+    if (!state.books.length) {
+      state.book = null
+      state.chapter = null
+      state.lines = []
+      provider.refresh()
+      return
+    }
+    state.book = state.book && state.books.find(book => book.id === state.book.id) || state.books[0]
+    state.chapters = await request(`/v1/books/${encodeURIComponent(state.book.id)}/chapters`)
+    if (state.chapters.length) await updateChapter(provider, state.chapters[0].number)
+    else {
+      state.chapter = null
+      state.lines = []
+      provider.refresh()
+    }
+  } finally {
+    state.loading = false
+  }
+}
+
+async function showReader(provider, focus = true) {
+  const document = await vscode.workspace.openTextDocument(readerUri)
+  await vscode.window.showTextDocument(document, {
+    viewColumn: vscode.ViewColumn.Beside,
+    preserveFocus: !focus,
+    preview: false
+  })
+  await loadLibrary(provider)
+}
+
+function moveLines(provider, direction) {
+  const maxStart = Math.max(0, state.lines.length - 5)
+  state.lineStart = Math.max(0, Math.min(maxStart, state.lineStart + direction))
+  provider.refresh()
+  if (state.book && state.chapter) {
+    request('/v1/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookId: state.book.id,
+        chapterNumber: state.chapter.number,
+        chapterProgress: currentProgress()
+      })
+    }).catch(() => {})
+  }
+}
+
+async function moveChapter(provider, direction) {
+  if (!state.chapters.length || !state.chapter) return
+  const currentIndex = state.chapters.findIndex(chapter => chapter.number === state.chapter.number)
+  const nextIndex = Math.max(0, Math.min(state.chapters.length - 1, currentIndex + direction))
+  if (nextIndex !== currentIndex) await updateChapter(provider, state.chapters[nextIndex].number)
 }
 
 class ReaderTreeProvider {
@@ -28,39 +145,68 @@ class ReaderTreeProvider {
 
   getChildren() {
     return [
-      { label: '打开阅读面板', command: 'novelLibrary.openReader' },
+      { label: '打开编辑器内阅读', command: 'novelLibrary.openReader' },
+      { label: '上一行', command: 'novelLibrary.previousLine' },
+      { label: '下一行', command: 'novelLibrary.nextLine' },
+      { label: '上一章', command: 'novelLibrary.previousChapter' },
+      { label: '下一章', command: 'novelLibrary.nextChapter' },
       { label: '导入当前文件', command: 'novelLibrary.importFile' },
-      { label: '打开桌面端', command: 'novelLibrary.openDesktop' }
+      { label: '打开小说书库桌面端', command: 'novelLibrary.openDesktop' }
     ]
   }
 }
 
 function activate(context) {
-  let panel
-  let currentBook
-  let currentChapterIndex = 0
-  const openReader = () => {
-    panel = vscode.window.createWebviewPanel('novelLibraryReader', '小说阅读', vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true })
-    panel.webview.html = html()
-    panel.webview.onDidReceiveMessage(async message => {
-      try {
-        if (message.type === 'load') panel.webview.postMessage({ type: 'books', data: await request('/v1/books') })
-        if (message.type === 'book') { currentBook = message.data; currentChapterIndex = 0; panel.webview.postMessage({ type: 'chapters', data: await request(`/v1/books/${encodeURIComponent(currentBook)}/chapters`) }) }
-        if (message.type === 'chapter') panel.webview.postMessage({ type: 'chapter', data: await request(`/v1/books/${encodeURIComponent(currentBook)}/chapters/${message.data}`) })
-        if (message.type === 'line') panel.webview.postMessage({ type: 'line', data: message.data })
-        if (message.type === 'progress') await request('/v1/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookId: currentBook, chapterNumber: message.data.chapterNumber, chapterProgress: message.data.chapterProgress }) })
-        if (message.type === 'move') { const list = await request(`/v1/books/${encodeURIComponent(currentBook)}/chapters`); currentChapterIndex = Math.max(0, Math.min(list.length - 1, currentChapterIndex + message.data)); panel.webview.postMessage({ type: 'chapter', data: await request(`/v1/books/${encodeURIComponent(currentBook)}/chapters/${list[currentChapterIndex].number}`) }) }
-      } catch (error) { vscode.window.showErrorMessage(`小说 Bridge: ${error.message}`) }
-    }, undefined, context.subscriptions)
+  const provider = new ReaderDocumentProvider()
+  let opened = false
+  context.subscriptions.push(provider)
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('novel-library', provider))
+  context.subscriptions.push(vscode.window.registerTreeDataProvider('novelLibrary.reader', new ReaderTreeProvider()))
+
+  const openReader = async () => {
+    opened = true
+    try {
+      await showReader(provider)
+    } catch (error) {
+      vscode.window.showErrorMessage(`小说阅读器无法连接桌面端：${error.message}`)
+    }
   }
+  const nextLine = () => moveLines(provider, 1)
+  const previousLine = () => moveLines(provider, -1)
+  const nextChapter = () => moveChapter(provider, 1)
+  const previousChapter = () => moveChapter(provider, -1)
+
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openReader', openReader))
-  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openDesktop', async () => { try { await vscode.env.openExternal(vscode.Uri.parse('novellibrary://open')) } catch (error) { vscode.window.showErrorMessage(error.message) } }))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextLine', nextLine))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousLine', previousLine))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextChapter', nextChapter))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousChapter', previousChapter))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openDesktop', async () => {
+    try {
+      await vscode.env.openExternal(vscode.Uri.parse('novellibrary://open'))
+    } catch (error) {
+      vscode.window.showErrorMessage(error.message)
+    }
+  }))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.importFile', async uri => {
     const file = uri || vscode.window.activeTextEditor?.document.uri
     if (!file) return
-    try { await request('/v1/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: file.fsPath }) }); vscode.window.showInformationMessage('已发送到小说书库导入队列') } catch (error) { vscode.window.showErrorMessage(`导入失败: ${error.message}`) }
+    try {
+      await request('/v1/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: file.fsPath })
+      })
+      vscode.window.showInformationMessage('已发送到小说书库导入队列')
+    } catch (error) {
+      vscode.window.showErrorMessage(`导入失败：${error.message}`)
+    }
   }))
-  context.subscriptions.push(vscode.window.registerTreeDataProvider('novelLibrary.reader', new ReaderTreeProvider()))
+
+  // Auto-open only when the desktop bridge already exists, so installing the extension is quiet.
+  if (fs.existsSync(bridgeFile())) {
+    setTimeout(() => { if (!opened) openReader() }, 500)
+  }
 }
 
 module.exports = { activate, deactivate() {} }

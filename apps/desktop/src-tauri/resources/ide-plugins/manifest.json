@@ -3,26 +3,35 @@
   "plugins": [
     {
       "id": "vscode",
-      "label": "VS Code / Cursor",
+      "label": "小说书库 · VS Code / Cursor 阅读器",
       "kind": "vscode",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "identifier": "novel-library.novel-library-reader",
-      "file": "novel-library-reader-0.4.0.vsix"
+      "description": "在 VS Code 和 Cursor 编辑器内阅读小说，固定显示 5 行，支持快捷键滚动、切章和桌面端进度同步。",
+      "packageType": "VSIX",
+      "supportedIdes": ["Visual Studio Code", "Cursor"],
+      "file": "novel-library-reader-0.4.1.vsix"
     },
     {
       "id": "intellij",
-      "label": "JetBrains IDE",
+      "label": "小说书库 · IntelliJ IDEA 阅读器",
       "kind": "jetbrains",
       "version": "0.4.0",
       "identifier": "com.kengqin.novellibrary.reader",
+      "description": "适用于 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 的小说阅读插件。",
+      "packageType": "ZIP",
+      "supportedIdes": ["IntelliJ IDEA", "PyCharm", "WebStorm", "Android Studio", "Rider", "CLion", "GoLand", "RubyMine"],
       "file": "novel-library-intellij-0.4.0.zip"
     },
     {
       "id": "visual-studio",
-      "label": "Visual Studio 2022",
+      "label": "小说书库 · Visual Studio 阅读器",
       "kind": "visual-studio",
       "version": "0.4.0",
       "identifier": "NovelLibrary.VisualStudio",
+      "description": "在 Visual Studio 2022 中打开小说阅读面板，并与桌面端书库同步。",
+      "packageType": "VSIX",
+      "supportedIdes": ["Visual Studio 2022"],
       "file": "novel-library-visual-studio-0.4.0.vsix"
     }
   ]
