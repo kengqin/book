@@ -1,0 +1,50 @@
+name: Build IDE plugins
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'plugins/**'
+      - 'packages/reader-protocol/**'
+      - 'scripts/validate-ide-integrations.mjs'
+
+jobs:
+  validate-vscode:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run plugins:validate
+      - run: node --check plugins/vscode/extension.js
+      - run: node --check plugins/vscode/bridge.js
+
+  build-intellij:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: gradle buildPlugin
+        working-directory: plugins/intellij
+      - uses: actions/upload-artifact@v4
+        with:
+          name: novel-library-intellij
+          path: plugins/intellij/build/distributions/*.zip
+
+  build-visual-studio:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - run: dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
+      - run: msbuild plugins/visual-studio/NovelLibrary.VisualStudio.csproj /p:Configuration=Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: novel-library-visual-studio
+          path: plugins/visual-studio/bin/**/*.vsix
