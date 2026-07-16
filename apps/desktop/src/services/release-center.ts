@@ -55,6 +55,7 @@ export const updateStage = ref<UpdateStage>('idle')
 export const updateProgress = ref(0)
 export const updateMessage = ref('')
 export const updateError = ref('')
+export const publishedUpdateVersion = ref<string | null>(null)
 
 let updateEventListener: Promise<UnlistenFn> | undefined
 
@@ -82,7 +83,7 @@ function isReleaseManifest(value: unknown): value is ReleaseManifest {
 
 export async function loadReleaseManifest(): Promise<{ manifest: ReleaseManifest; remote: boolean }> {
   try {
-    const response = await fetch(REMOTE_MANIFEST_URL, { cache: 'no-store' })
+    const response = await fetch(REMOTE_MANIFEST_URL + '?t=' + Date.now(), { cache: 'no-store' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const manifest: unknown = await response.json()
     if (!isReleaseManifest(manifest)) throw new Error('版本清单格式无效')
@@ -131,13 +132,26 @@ export async function checkForUpdates(silent = false) {
   updateChecking.value = true
   updateError.value = ''
   if (!silent) updateMessage.value = '正在检查更新...'
+  let expectedVersion: string | null = null
   try {
-    const update = await invoke<AvailableUpdate | null>('check_application_update')
+    const currentVersion = await getCurrentVersion()
+    const { manifest } = await loadReleaseManifest()
+    expectedVersion = compareVersions(manifest.latest, currentVersion) > 0 ? manifest.latest : null
+    const update = await invoke<AvailableUpdate | null>('check_application_update', {
+      expectedVersion
+    })
     availableUpdate.value = update
     updateStage.value = update ? 'available' : 'idle'
-    updateMessage.value = update ? `发现新版本 ${update.version}` : '当前已是最新版本'
+    publishedUpdateVersion.value = !update && expectedVersion ? expectedVersion : null
+    updateMessage.value = update
+      ? '发现新版本 ' + update.version
+      : expectedVersion
+        ? 'v' + expectedVersion + ' 已发布，自动更新信息正在同步'
+        : '当前已是最新版本'
     return update
   } catch (cause) {
+    publishedUpdateVersion.value = expectedVersion
+    updateStage.value = 'idle'
     updateMessage.value = ''
     updateError.value = describeUpdateError(cause)
     return null
@@ -193,6 +207,7 @@ export async function installDownloadedUpdate() {
 export async function dismissUpdate() {
   await invoke('dismiss_application_update')
   availableUpdate.value = null
+  publishedUpdateVersion.value = null
   updateStage.value = 'idle'
   updateProgress.value = 0
   updateMessage.value = ''

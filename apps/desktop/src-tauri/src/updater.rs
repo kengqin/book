@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const DOWNLOAD_EVENT: &str = "application-update-download";
+const RELEASE_DOWNLOAD_BASE: &str = "https://github.com/kengqin/book/releases/download";
 
 #[derive(Default)]
 pub struct UpdateDownloadState {
@@ -47,17 +48,37 @@ fn emit_progress(app: &AppHandle, progress: DownloadProgress) {
     let _ = app.emit(DOWNLOAD_EVENT, progress);
 }
 
+fn versioned_update_endpoint(version: &str) -> Result<tauri::Url, String> {
+    let version = version.strip_prefix('v').unwrap_or(version);
+    let valid = !version.is_empty()
+        && version.len() <= 64
+        && version.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
+        });
+    if !valid {
+        return Err("更新版本号格式无效".to_string());
+    }
+
+    tauri::Url::parse(&format!("{RELEASE_DOWNLOAD_BASE}/v{version}/latest.json"))
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub async fn check_application_update(
     app: AppHandle,
     state: State<'_, UpdateDownloadState>,
+    expected_version: Option<String>,
 ) -> Result<Option<ApplicationUpdate>, String> {
-    let update = app
-        .updater()
-        .map_err(|error| error.to_string())?
-        .check()
-        .await
-        .map_err(|error| error.to_string())?;
+    let updater = if let Some(version) = expected_version.as_deref() {
+        app.updater_builder()
+            .endpoints(vec![versioned_update_endpoint(version)?])
+            .map_err(|error| error.to_string())?
+            .build()
+            .map_err(|error| error.to_string())?
+    } else {
+        app.updater().map_err(|error| error.to_string())?
+    };
+    let update = updater.check().await.map_err(|error| error.to_string())?;
 
     let mut inner = lock_state(&state)?;
     inner.available = update.clone();
@@ -211,4 +232,31 @@ pub fn dismiss_application_update(state: State<'_, UpdateDownloadState>) -> Resu
     inner.available = None;
     inner.downloaded = None;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::versioned_update_endpoint;
+
+    #[test]
+    fn builds_version_specific_update_endpoint() {
+        let endpoint = versioned_update_endpoint("0.3.1").expect("valid endpoint");
+        assert_eq!(
+            endpoint.as_str(),
+            "https://github.com/kengqin/book/releases/download/v0.3.1/latest.json"
+        );
+    }
+
+    #[test]
+    fn accepts_prefixed_version_without_duplicate_prefix() {
+        let endpoint = versioned_update_endpoint("v0.3.1").expect("valid endpoint");
+        assert!(endpoint.as_str().contains("/v0.3.1/latest.json"));
+        assert!(!endpoint.as_str().contains("/vv0.3.1/"));
+    }
+
+    #[test]
+    fn rejects_version_that_can_escape_the_release_path() {
+        assert!(versioned_update_endpoint("../latest").is_err());
+        assert!(versioned_update_endpoint("0.3.1/latest").is_err());
+    }
 }

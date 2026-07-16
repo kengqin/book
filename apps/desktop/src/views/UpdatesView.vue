@@ -11,6 +11,7 @@ import {
   installDownloadedUpdate,
   isAutoCheckEnabled,
   loadReleaseManifest,
+  publishedUpdateVersion,
   setAutoCheckEnabled,
   updateChecking,
   updateError,
@@ -73,6 +74,7 @@ onMounted(async () => {
       </div>
       <div class="update-status-copy">
         <strong v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</strong>
+        <strong v-else-if="publishedUpdateVersion"><RefreshCw :size="17" />v{{ publishedUpdateVersion }} 已发布</strong>
         <strong v-else><CheckCircle2 :size="17" />{{ updateMessage || '版本状态正常' }}</strong>
         <span v-if="updateError" class="update-error">{{ updateError }}</span>
         <span v-else>{{ autoCheck ? '启动时自动检查更新' : '仅手动检查更新' }}</span>
