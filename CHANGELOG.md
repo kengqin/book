@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。桌面端正式版本与 Git Tag、GitHub Release、安装包版本保持一致。
 
-## [Unreleased]
+## [0.2.0] - 2026-07-16
 
 ### 新增
 
@@ -56,6 +56,7 @@
 - 默认数据目录为 `%APPDATA%\NovelLibrary`。
 - 当前数据库 schema 为 `2`；安装旧版本前应先导出备份。
 
+[0.2.0]: https://github.com/kengqin/book/releases/tag/v0.2.0
 [0.1.2]: https://github.com/kengqin/book/releases/tag/v0.1.2
 [0.1.1]: https://github.com/kengqin/book/releases/tag/v0.1.1
 [0.1.0]: https://github.com/kengqin/book/releases/tag/v0.1.0

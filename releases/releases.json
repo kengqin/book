@@ -1,8 +1,38 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.1.2",
+  "latest": "0.2.0",
   "releases": [
+    {
+      "version": "0.2.0",
+      "date": "2026-07-16",
+      "title": "工具库与本地笔记",
+      "channel": "stable",
+      "databaseSchema": 3,
+      "published": true,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.2.0",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.2.0/NovelLibrary_0.2.0_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "新增工具库首页，点击工具后进入对应功能",
+            "新增本地笔记的创建、编辑、搜索、置顶、复制和删除",
+            "新增类似语雀体验的富文本编辑器与自动保存",
+            "支持单篇 Markdown、HTML、JSON 导出和全部笔记 JSON 导入导出",
+            "完整数据备份增加本地笔记"
+          ]
+        },
+        {
+          "title": "数据",
+          "items": [
+            "SQLite Schema 升级至 3，旧数据库自动新增 notes 表",
+            "笔记跟随自定义数据目录和数据库文件迁移"
+          ]
+        }
+      ]
+    },
     {
       "version": "0.1.2",
       "date": "2026-07-16",
