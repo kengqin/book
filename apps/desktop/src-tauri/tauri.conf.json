@@ -28,6 +28,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
+    "resources": ["resources/ide-plugins/*"],
     "targets": ["nsis"],
     "windows": {
       "nsis": {

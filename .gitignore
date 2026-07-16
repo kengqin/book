@@ -5,6 +5,8 @@ apps/*/src-tauri/gen/
 plugins/*/.gradle/
 plugins/*/build/
 plugins/*/bin/
+apps/desktop/src-tauri/resources/ide-plugins/*.vsix
+apps/desktop/src-tauri/resources/ide-plugins/*.zip
 .release-local/
 *.key
 *.key.pub

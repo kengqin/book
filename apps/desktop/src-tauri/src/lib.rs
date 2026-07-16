@@ -1,5 +1,6 @@
 mod bridge;
 mod database;
+mod ide_integration;
 mod models;
 mod updater;
 
@@ -256,6 +257,21 @@ fn read_external_file(path: String) -> Result<ExternalFile, String> {
     })
 }
 
+#[tauri::command]
+fn get_ide_integration_status(
+    app: tauri::AppHandle,
+) -> Result<ide_integration::IdeIntegrationStatus, String> {
+    ide_integration::status(&app)
+}
+
+#[tauri::command]
+fn install_ide_plugin(
+    app: tauri::AppHandle,
+    input: ide_integration::InstallIdePluginInput,
+) -> Result<ide_integration::IdeInstallResult, String> {
+    ide_integration::install(&app, input)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -297,6 +313,8 @@ pub fn run() {
             export_backup,
             import_backup,
             read_external_file,
+            get_ide_integration_status,
+            install_ide_plugin,
             updater::check_application_update,
             updater::download_application_update,
             updater::cancel_application_update_download,

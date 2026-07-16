@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "plugins": [
+    {
+      "id": "vscode",
+      "label": "VS Code / Cursor",
+      "kind": "vscode",
+      "version": "0.4.0",
+      "file": "novel-library-reader-0.4.0.vsix"
+    },
+    {
+      "id": "intellij",
+      "label": "JetBrains IDE",
+      "kind": "jetbrains",
+      "version": "0.4.0",
+      "file": "novel-library-intellij-0.4.0.zip"
+    },
+    {
+      "id": "visual-studio",
+      "label": "Visual Studio 2022",
+      "kind": "visual-studio",
+      "version": "0.4.0",
+      "file": "novel-library-visual-studio-0.4.0.vsix"
+    }
+  ]
+}

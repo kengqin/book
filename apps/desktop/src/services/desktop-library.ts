@@ -48,6 +48,33 @@ export interface DesktopExternalFile {
   bytes: number[]
 }
 
+export interface BundledIdePlugin {
+  id: string
+  label: string
+  kind: 'vscode' | 'jetbrains' | 'visual-studio'
+  version: string
+  available: boolean
+}
+
+export interface IdeTarget {
+  id: string
+  label: string
+  kind: BundledIdePlugin['kind']
+  path: string
+}
+
+export interface IdeIntegrationStatus {
+  plugins: BundledIdePlugin[]
+  targets: IdeTarget[]
+}
+
+export interface IdeInstallResult {
+  target: string
+  plugin: string
+  installed: boolean
+  message: string
+}
+
 export function listDesktopBooks() {
   return invoke<DesktopBook[]>('list_books')
 }
@@ -111,4 +138,12 @@ export function importDesktopBackup(sourcePath: string) {
 
 export function readDesktopExternalFile(path: string) {
   return invoke<DesktopExternalFile>('read_external_file', { path })
+}
+
+export function getIdeIntegrationStatus() {
+  return invoke<IdeIntegrationStatus>('get_ide_integration_status')
+}
+
+export function installIdePlugin(targetId: string, pluginId: string) {
+  return invoke<IdeInstallResult>('install_ide_plugin', { input: { targetId, pluginId } })
 }
