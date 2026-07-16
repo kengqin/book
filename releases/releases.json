@@ -12,7 +12,7 @@
       "published": true,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.2",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.2/NovelLibrary_0.1.2_x64-setup.exe",
-      "sha256": "",
+      "sha256": "a73b708d6c484d3cdf02e5e7ee473a46c70e4f0a0b2ef0bb04bc136ebae14723",
       "sections": [
         {
           "title": "新增",
@@ -40,7 +40,7 @@
       "published": true,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.1",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.1/NovelLibrary_0.1.1_x64-setup.exe",
-      "sha256": "",
+      "sha256": "9ad5247446149fea8b4d28aedb79e48b83b88f256d2bd98a83f1a4e8d86aae32",
       "sections": [
         {
           "title": "修复",
@@ -65,7 +65,7 @@
       "published": true,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.0",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.0/NovelLibrary_0.1.0_x64-setup.exe",
-      "sha256": "",
+      "sha256": "5a06917932eedfee57ec172f39d04582c05fa0930ddd3ebe3be3de9b03e387f3",
       "sections": [
         {
           "title": "新增",
