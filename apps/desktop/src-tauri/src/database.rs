@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{
-    BackupPayload, BackupResult, BookRecord, ChapterRecord, ChapterSummary, SaveImportedBookInput,
+    BackupPayload, BackupResult, BookRecord, ChapterRecord, ChapterSummary, NoteRecord,
+    NoteSummary, NotesExportPayload, NotesTransferResult, SaveImportedBookInput, SaveNoteInput,
     SearchResult,
 };
 
@@ -271,6 +272,18 @@ fn migrate(connection: &Connection) -> Result<(), String> {
 
             CREATE INDEX IF NOT EXISTS idx_books_last_read_at ON books(last_read_at DESC);
             CREATE INDEX IF NOT EXISTS idx_chapters_book_number ON chapters(book_id, number);
+
+            CREATE TABLE IF NOT EXISTS notes (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL DEFAULT '',
+                content_html TEXT NOT NULL DEFAULT '',
+                content_text TEXT NOT NULL DEFAULT '',
+                is_pinned INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(is_pinned DESC, updated_at DESC);
             "#,
         )
         .map_err(|error| error.to_string())?;
@@ -295,7 +308,7 @@ fn migrate(connection: &Connection) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
     connection
-        .execute_batch("PRAGMA user_version = 2")
+        .execute_batch("PRAGMA user_version = 3")
         .map_err(|error| error.to_string())
 }
 
@@ -344,6 +357,21 @@ fn map_book(row: &rusqlite::Row<'_>) -> Result<BookRecord, rusqlite::Error> {
 }
 
 const BOOK_COLUMNS: &str = "id, title, author, description, source_name, source_size, encoding, chapter_count, total_words, volumes_json, theme_json, parse_options_json, current_chapter, progress, chapter_progress, created_at, updated_at, last_read_at";
+
+fn map_note(row: &rusqlite::Row<'_>) -> Result<NoteRecord, rusqlite::Error> {
+    Ok(NoteRecord {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        content_html: row.get(2)?,
+        content_text: row.get(3)?,
+        is_pinned: row.get::<_, i64>(4)? != 0,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
+}
+
+const NOTE_COLUMNS: &str =
+    "id, title, content_html, content_text, is_pinned, created_at, updated_at";
 
 pub fn save_imported_book(
     connection: &mut Connection,
@@ -607,6 +635,211 @@ pub fn search(connection: &Connection, query: &str) -> Result<Vec<SearchResult>,
     Ok(results)
 }
 
+pub fn list_notes(connection: &Connection, query: &str) -> Result<Vec<NoteSummary>, String> {
+    let pattern = format!("%{}%", query.trim());
+    let mut statement = connection
+        .prepare(
+            "SELECT id, title, substr(content_text, 1, 180), is_pinned, created_at, updated_at FROM notes WHERE ?1 = '%%' OR title LIKE ?1 OR content_text LIKE ?1 ORDER BY is_pinned DESC, updated_at DESC",
+        )
+        .map_err(|error| error.to_string())?;
+    let notes = statement
+        .query_map(params![pattern], |row| {
+            Ok(NoteSummary {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                excerpt: row.get(2)?,
+                is_pinned: row.get::<_, i64>(3)? != 0,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(notes)
+}
+
+pub fn get_note(connection: &Connection, note_id: &str) -> Result<Option<NoteRecord>, String> {
+    connection
+        .query_row(
+            &format!("SELECT {NOTE_COLUMNS} FROM notes WHERE id = ?1"),
+            params![note_id],
+            map_note,
+        )
+        .optional()
+        .map_err(|error| error.to_string())
+}
+
+pub fn create_note(connection: &Connection, title: &str) -> Result<NoteRecord, String> {
+    let id = Uuid::new_v4().to_string();
+    let timestamp = now_millis();
+    let title = normalized_note_title(title);
+    connection
+        .execute(
+            "INSERT INTO notes (id, title, content_html, content_text, is_pinned, created_at, updated_at) VALUES (?1, ?2, '<p></p>', '', 0, ?3, ?3)",
+            params![id, title, timestamp],
+        )
+        .map_err(|error| error.to_string())?;
+    get_note(connection, &id)?.ok_or_else(|| "笔记创建失败".to_string())
+}
+
+pub fn save_note(connection: &Connection, input: SaveNoteInput) -> Result<NoteRecord, String> {
+    let title = normalized_note_title(&input.title);
+    let changed = connection
+        .execute(
+            "UPDATE notes SET title = ?2, content_html = ?3, content_text = ?4, is_pinned = ?5, updated_at = ?6 WHERE id = ?1",
+            params![
+                input.id,
+                title,
+                input.content_html,
+                input.content_text,
+                i64::from(input.is_pinned),
+                now_millis()
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+    if changed == 0 {
+        return Err("要保存的笔记不存在".to_string());
+    }
+    get_note(connection, &input.id)?.ok_or_else(|| "笔记保存失败".to_string())
+}
+
+pub fn set_note_pinned(
+    connection: &Connection,
+    note_id: &str,
+    is_pinned: bool,
+) -> Result<(), String> {
+    let changed = connection
+        .execute(
+            "UPDATE notes SET is_pinned = ?2, updated_at = ?3 WHERE id = ?1",
+            params![note_id, i64::from(is_pinned), now_millis()],
+        )
+        .map_err(|error| error.to_string())?;
+    if changed == 0 {
+        return Err("要置顶的笔记不存在".to_string());
+    }
+    Ok(())
+}
+
+pub fn duplicate_note(connection: &Connection, note_id: &str) -> Result<NoteRecord, String> {
+    let source = get_note(connection, note_id)?.ok_or_else(|| "要复制的笔记不存在".to_string())?;
+    let id = Uuid::new_v4().to_string();
+    let timestamp = now_millis();
+    let title = format!("{} - 副本", source.title);
+    connection
+        .execute(
+            "INSERT INTO notes (id, title, content_html, content_text, is_pinned, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)",
+            params![id, title, source.content_html, source.content_text, timestamp],
+        )
+        .map_err(|error| error.to_string())?;
+    get_note(connection, &id)?.ok_or_else(|| "笔记复制失败".to_string())
+}
+
+pub fn delete_note(connection: &Connection, note_id: &str) -> Result<(), String> {
+    connection
+        .execute("DELETE FROM notes WHERE id = ?1", params![note_id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn normalized_note_title(title: &str) -> String {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        "无标题笔记".to_string()
+    } else {
+        trimmed.chars().take(160).collect()
+    }
+}
+
+fn list_all_notes(connection: &Connection) -> Result<Vec<NoteRecord>, String> {
+    let mut statement = connection
+        .prepare(&format!(
+            "SELECT {NOTE_COLUMNS} FROM notes ORDER BY is_pinned DESC, updated_at DESC"
+        ))
+        .map_err(|error| error.to_string())?;
+    let notes = statement
+        .query_map([], map_note)
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(notes)
+}
+
+fn upsert_notes(transaction: &Transaction<'_>, notes: &[NoteRecord]) -> Result<(), String> {
+    let mut statement = transaction
+        .prepare(&format!(
+            "INSERT INTO notes ({NOTE_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(id) DO UPDATE SET title=excluded.title, content_html=excluded.content_html, content_text=excluded.content_text, is_pinned=excluded.is_pinned, created_at=excluded.created_at, updated_at=excluded.updated_at"
+        ))
+        .map_err(|error| error.to_string())?;
+    for note in notes {
+        statement
+            .execute(params![
+                note.id,
+                note.title,
+                note.content_html,
+                note.content_text,
+                i64::from(note.is_pinned),
+                note.created_at,
+                note.updated_at
+            ])
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+pub fn export_notes(
+    connection: &Connection,
+    target_path: &Path,
+) -> Result<NotesTransferResult, String> {
+    let payload = NotesExportPayload {
+        format: "novel-library-notes".to_string(),
+        version: 1,
+        exported_at: now_millis(),
+        notes: list_all_notes(connection)?,
+    };
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    fs::write(
+        target_path,
+        serde_json::to_vec_pretty(&payload).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(NotesTransferResult {
+        path: target_path.display().to_string(),
+        notes: payload.notes.len(),
+    })
+}
+
+pub fn import_notes(
+    connection: &mut Connection,
+    source_path: &Path,
+) -> Result<NotesTransferResult, String> {
+    let source = fs::read(source_path).map_err(|error| error.to_string())?;
+    let payload: NotesExportPayload =
+        serde_json::from_slice(&source).map_err(|error| format!("笔记文件格式错误：{error}"))?;
+    if payload.format != "novel-library-notes" || payload.version != 1 {
+        return Err("不支持的笔记导入版本".to_string());
+    }
+    let transaction = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+    upsert_notes(&transaction, &payload.notes)?;
+    transaction.commit().map_err(|error| error.to_string())?;
+    Ok(NotesTransferResult {
+        path: source_path.display().to_string(),
+        notes: payload.notes.len(),
+    })
+}
+
+pub fn write_text_file(target_path: &Path, content: &str) -> Result<String, String> {
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    fs::write(target_path, content.as_bytes()).map_err(|error| error.to_string())?;
+    Ok(target_path.display().to_string())
+}
+
 fn list_all_chapters(connection: &Connection) -> Result<Vec<ChapterRecord>, String> {
     let mut statement = connection
         .prepare("SELECT id, book_id, number, original_label, title, volume, content, word_count FROM chapters ORDER BY book_id, number")
@@ -633,12 +866,14 @@ fn list_all_chapters(connection: &Connection) -> Result<Vec<ChapterRecord>, Stri
 pub fn export_backup(connection: &Connection, target_path: &Path) -> Result<BackupResult, String> {
     let books = list_books(connection)?;
     let chapters = list_all_chapters(connection)?;
+    let notes = list_all_notes(connection)?;
     let payload = BackupPayload {
         format: "novel-library-backup".to_string(),
-        version: 1,
+        version: 2,
         created_at: now_millis(),
         books,
         chapters,
+        notes,
     };
     let source = serde_json::to_vec(&payload).map_err(|error| error.to_string())?;
     if let Some(parent) = target_path.parent() {
@@ -649,6 +884,7 @@ pub fn export_backup(connection: &Connection, target_path: &Path) -> Result<Back
         path: target_path.display().to_string(),
         books: payload.books.len(),
         chapters: payload.chapters.len(),
+        notes: payload.notes.len(),
     })
 }
 
@@ -659,7 +895,7 @@ pub fn import_backup(
     let source = fs::read(source_path).map_err(|error| error.to_string())?;
     let payload: BackupPayload =
         serde_json::from_slice(&source).map_err(|error| format!("备份格式错误：{error}"))?;
-    if payload.format != "novel-library-backup" || payload.version != 1 {
+    if payload.format != "novel-library-backup" || !(1..=2).contains(&payload.version) {
         return Err("不支持的小说书库备份版本".to_string());
     }
     let transaction = connection
@@ -721,11 +957,14 @@ pub fn import_backup(
         }
     }
 
+    upsert_notes(&transaction, &payload.notes)?;
+
     transaction.commit().map_err(|error| error.to_string())?;
     Ok(BackupResult {
         path: source_path.display().to_string(),
         books: payload.books.len(),
         chapters: payload.chapters.len(),
+        notes: payload.notes.len(),
     })
 }
 
@@ -736,7 +975,9 @@ pub fn database_exists(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{ParseOptions, ParseResult, ParsedChapter, ParsedMetadata, ThemeSettings};
+    use crate::models::{
+        ParseOptions, ParseResult, ParsedChapter, ParsedMetadata, SaveNoteInput, ThemeSettings,
+    };
 
     fn sample_import() -> SaveImportedBookInput {
         SaveImportedBookInput {
@@ -797,7 +1038,81 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read version");
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
+    }
+
+    #[test]
+    fn completes_note_create_edit_search_pin_duplicate_and_delete_flow() {
+        let connection = Connection::open_in_memory().expect("open database");
+        migrate(&connection).expect("migrate database");
+
+        let note = create_note(&connection, "灵感记录").expect("create note");
+        let updated = save_note(
+            &connection,
+            SaveNoteInput {
+                id: note.id.clone(),
+                title: "世界观灵感".to_string(),
+                content_html: "<h2>青石城</h2><p>城门外有一座旧碑。</p>".to_string(),
+                content_text: "青石城 城门外有一座旧碑。".to_string(),
+                is_pinned: false,
+            },
+        )
+        .expect("save note");
+        assert_eq!(updated.title, "世界观灵感");
+        assert_eq!(
+            list_notes(&connection, "旧碑").expect("search notes").len(),
+            1
+        );
+
+        set_note_pinned(&connection, &note.id, true).expect("pin note");
+        assert!(
+            get_note(&connection, &note.id)
+                .expect("get pinned note")
+                .expect("pinned note exists")
+                .is_pinned
+        );
+
+        let duplicate = duplicate_note(&connection, &note.id).expect("duplicate note");
+        assert!(duplicate.title.ends_with("副本"));
+        assert_eq!(list_notes(&connection, "").expect("list notes").len(), 2);
+
+        delete_note(&connection, &note.id).expect("delete note");
+        assert!(get_note(&connection, &note.id)
+            .expect("get deleted note")
+            .is_none());
+    }
+
+    #[test]
+    fn exports_and_imports_notes_collection() {
+        let source = Connection::open_in_memory().expect("open source database");
+        migrate(&source).expect("migrate source database");
+        let note = create_note(&source, "导出测试").expect("create source note");
+        save_note(
+            &source,
+            SaveNoteInput {
+                id: note.id,
+                title: "导出测试".to_string(),
+                content_html: "<p>可移植笔记正文</p>".to_string(),
+                content_text: "可移植笔记正文".to_string(),
+                is_pinned: true,
+            },
+        )
+        .expect("save source note");
+
+        let notes_path =
+            std::env::temp_dir().join(format!("novel-library-notes-test-{}.json", Uuid::new_v4()));
+        let exported = export_notes(&source, &notes_path).expect("export notes");
+        assert_eq!(exported.notes, 1);
+
+        let mut target = Connection::open_in_memory().expect("open target database");
+        migrate(&target).expect("migrate target database");
+        let imported = import_notes(&mut target, &notes_path).expect("import notes");
+        assert_eq!(imported.notes, 1);
+        let restored = list_notes(&target, "可移植").expect("search restored notes");
+        assert_eq!(restored.len(), 1);
+        assert!(restored[0].is_pinned);
+
+        fs::remove_file(notes_path).expect("remove notes fixture");
     }
 
     #[test]
@@ -855,12 +1170,14 @@ mod tests {
             .expect("enable foreign keys");
         migrate(&source).expect("migrate source database");
         save_imported_book(&mut source, sample_import()).expect("save source book");
+        create_note(&source, "随书笔记").expect("save source note");
 
         let backup_path =
             std::env::temp_dir().join(format!("novel-library-backup-test-{}.json", Uuid::new_v4()));
         let exported = export_backup(&source, &backup_path).expect("export backup");
         assert_eq!(exported.books, 1);
         assert_eq!(exported.chapters, 2);
+        assert_eq!(exported.notes, 1);
 
         let mut target = Connection::open_in_memory().expect("open target database");
         target
@@ -870,7 +1187,12 @@ mod tests {
         let imported = import_backup(&mut target, &backup_path).expect("import backup");
         assert_eq!(imported.books, 1);
         assert_eq!(imported.chapters, 2);
+        assert_eq!(imported.notes, 1);
         assert_eq!(list_books(&target).expect("list restored books").len(), 1);
+        assert_eq!(
+            list_notes(&target, "").expect("list restored notes").len(),
+            1
+        );
         assert_eq!(
             search(&target, "青石长阶")
                 .expect("search restored database")

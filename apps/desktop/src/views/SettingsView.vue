@@ -28,7 +28,7 @@ async function exportBackup() {
   error.value = ''
   try {
     const result = await exportDesktopBackup(target)
-    message.value = `已备份 ${result.books} 本书、${result.chapters} 章：${result.path}`
+    message.value = `已备份 ${result.books} 本书、${result.chapters} 章、${result.notes} 篇笔记：${result.path}`
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -47,7 +47,7 @@ async function importBackup() {
   error.value = ''
   try {
     const result = await importDesktopBackup(source)
-    message.value = `已恢复 ${result.books} 本书、${result.chapters} 章`
+    message.value = `已恢复 ${result.books} 本书、${result.chapters} 章、${result.notes} 篇笔记`
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
@@ -118,7 +118,7 @@ onMounted(refreshStatus)
       <section><Database :size="20" /><div><strong>本地数据库</strong><span>{{ status?.databaseReady ? '可用' : '等待初始化' }}</span></div></section>
       <section class="data-directory-setting"><FolderOpen :size="20" /><div><strong>数据目录</strong><span>{{ status?.dataDirectory || '尚未创建' }}</span></div><div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" title="恢复默认目录" @click="resetDataDirectory"><RotateCcw :size="16" />默认</button><button type="button" class="primary-command" :disabled="busy" @click="chooseDataDirectory"><FolderOpen :size="16" />更改</button></div></section>
       <section class="database-file-setting"><Database :size="20" /><div><strong>数据库文件</strong><span>{{ status?.databasePath || '尚未创建' }}</span></div><button type="button" class="primary-command" :disabled="busy" @click="chooseDatabaseFile"><Database :size="16" />更改</button></section>
-      <section class="backup-setting"><Download :size="20" /><div><strong>书库备份</strong><span>导出或恢复书籍、章节、主题和阅读进度</span></div><div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="importBackup"><Upload :size="16" />恢复</button><button type="button" class="primary-command" :disabled="busy" @click="exportBackup"><Download :size="16" />导出</button></div></section>
+      <section class="backup-setting"><Download :size="20" /><div><strong>完整数据备份</strong><span>导出或恢复书籍、章节、阅读进度和本地笔记</span></div><div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="importBackup"><Upload :size="16" />恢复</button><button type="button" class="primary-command" :disabled="busy" @click="exportBackup"><Download :size="16" />导出</button></div></section>
     </div>
     <p v-if="message" class="settings-message">{{ message }}</p>
     <p v-if="error" class="inline-error">{{ error }}</p>

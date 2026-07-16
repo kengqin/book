@@ -1,0 +1,17 @@
+#!/bin/sh
+
+while read local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    parents=$(git show -s --format=%P "$local_sha")
+    set -- $parents
+    first_parent=$1
+    second_parent=$2
+    third_parent=$3
+    develop_sha=$(git rev-parse refs/remotes/origin/develop 2>/dev/null)
+
+    if [ "$local_ref" != "refs/heads/main" ] || [ -z "$second_parent" ] || [ -n "$third_parent" ] || [ "$second_parent" != "$develop_sha" ]; then
+      echo "Direct pushes to main are disabled. Push an exact merge of origin/develop instead." >&2
+      exit 1
+    fi
+  fi
+done
