@@ -9,12 +9,12 @@
       "title": "版本中心状态同步修复",
       "channel": "stable",
       "databaseSchema": 5,
-      "published": false,
+      "published": true,
       "minimumSupportedVersion": "0.5.0",
       "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.1",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.1/NovelLibrary_0.5.1_x64-setup.exe",
-      "sha256": "",
+      "sha256": "98047b960cb5cbafa67cb666983f9a6be68369abc61ac0ae05b349b9b5edd136",
       "sections": [
         {
           "title": "修复",
