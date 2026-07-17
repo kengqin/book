@@ -5,6 +5,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useRouter } from 'vue-router'
 import { BookOpen, LibraryBig, Search, Settings, Wrench } from 'lucide-vue-next'
 import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
+import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
 import { availableUpdate, checkForUpdates, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
 
 const router = useRouter()
@@ -58,4 +59,5 @@ onBeforeUnmount(() => {
     </main>
   </div>
   <GlobalUpdateStatus />
+  <CloseBehaviorDialog />
 </template>

@@ -48,6 +48,8 @@ export interface DesktopExternalFile {
   bytes: number[]
 }
 
+export type CloseBehavior = 'ask' | 'minimizeToTray' | 'quit'
+
 export interface BundledIdePlugin {
   id: string
   label: string
@@ -145,6 +147,22 @@ export function importDesktopBackup(sourcePath: string) {
 
 export function readDesktopExternalFile(path: string) {
   return invoke<DesktopExternalFile>('read_external_file', { path })
+}
+
+export function getCloseBehavior() {
+  return invoke<CloseBehavior>('get_close_behavior')
+}
+
+export function setCloseBehavior(behavior: CloseBehavior) {
+  return invoke<CloseBehavior>('set_close_behavior', { behavior })
+}
+
+export function resolveCloseBehavior(behavior: Exclude<CloseBehavior, 'ask'>, remember: boolean) {
+  return invoke<void>('resolve_close_behavior', { behavior, remember })
+}
+
+export function cancelCloseBehaviorPrompt() {
+  return invoke<void>('cancel_close_behavior_prompt')
 }
 
 export function getIdeIntegrationStatus() {

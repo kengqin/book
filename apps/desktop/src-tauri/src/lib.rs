@@ -1,4 +1,5 @@
 mod bridge;
+mod close_behavior;
 mod database;
 mod ide_integration;
 mod models;
@@ -295,6 +296,10 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_directory = desktop_data_directory(app.handle())?;
+            app.manage(close_behavior::CloseBehaviorState::load(
+                data_directory.join("app-settings.json"),
+            ));
+            close_behavior::setup_tray(app)?;
             let database = DatabaseState::initialize(data_directory)?;
             app.manage(database);
             bridge::start(app.handle().clone())?;
@@ -334,8 +339,13 @@ pub fn run() {
             updater::download_application_update,
             updater::cancel_application_update_download,
             updater::install_downloaded_application_update,
-            updater::dismiss_application_update
+            updater::dismiss_application_update,
+            close_behavior::get_close_behavior,
+            close_behavior::set_close_behavior,
+            close_behavior::cancel_close_behavior_prompt,
+            close_behavior::resolve_close_behavior
         ])
+        .on_window_event(close_behavior::handle_window_event)
         .run(tauri::generate_context!())
         .expect("failed to run novel library desktop application");
 }
