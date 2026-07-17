@@ -90,7 +90,7 @@ onMounted(async () => {
       </div>
       <div class="update-status-copy">
         <strong v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</strong>
-        <strong v-else-if="publishedUpdateVersion"><RefreshCw :size="17" />v{{ publishedUpdateVersion }} 已发布</strong>
+        <strong v-else-if="publishedUpdateVersion"><RefreshCw :size="17" />发现新版本 v{{ publishedUpdateVersion }}</strong>
         <strong v-else><CheckCircle2 :size="17" />{{ updateMessage || '版本状态正常' }}</strong>
         <span v-if="updateError" class="update-error">{{ updateError }}</span>
         <span v-else-if="updateCompatibilityNote" class="update-error">{{ updateCompatibilityNote }}</span>
@@ -138,7 +138,7 @@ onMounted(async () => {
             <button v-if="release.version !== currentVersion" type="button" class="secondary-command" @click="installHistoricalVersion(release)"><Download :size="15" />安装此版本</button>
             <code v-if="release.sha256" :title="release.sha256">SHA256 {{ release.sha256.slice(0, 12) }}...</code>
           </div>
-          <div v-else class="release-pending"><ShieldAlert :size="15" />该版本尚未发布到 GitHub</div>
+          <div v-else class="release-pending"><ShieldAlert :size="15" />版本记录已同步，安装包尚未准备完成</div>
         </div>
       </article>
     </section>

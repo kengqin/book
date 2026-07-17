@@ -27,13 +27,13 @@ jobs:
       pub_date: ${{ steps.staged.outputs.pub_date }}
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 2
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -102,12 +102,12 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare-release.outputs.tag }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -116,7 +116,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -132,7 +132,47 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Reuse unchanged IDE plugin artifacts
+        id: reuse-plugins
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $resourceDir = Join-Path $PWD 'apps/desktop/src-tauri/resources/ide-plugins'
+          $stagingDir = Join-Path $PWD '.ide-plugin-reuse'
+          New-Item -ItemType Directory -Force $stagingDir | Out-Null
+          $previousTag = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq '.tag_name'
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($previousTag) -or $previousTag -eq $env:TAG) {
+            "reused=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          $files = @($manifest.plugins | ForEach-Object file)
+          $reused = $true
+          foreach ($file in $files) {
+            gh release download $previousTag --repo $env:GITHUB_REPOSITORY --pattern $file --dir $stagingDir
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $stagingDir $file))) {
+              $reused = $false
+              break
+            }
+          }
+
+          if ($reused) {
+            foreach ($file in $files) {
+              Copy-Item (Join-Path $stagingDir $file) (Join-Path $resourceDir $file) -Force
+            }
+            "reused=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Reused IDE plugin artifacts from $previousTag"
+          } else {
+            Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+            "reused=false" >> $env:GITHUB_OUTPUT
+            Write-Host "IDE plugin artifacts changed or unavailable; building them"
+          }
+
       - name: Package VS Code and Cursor plugin
+        if: steps.reuse-plugins.outputs.reused != 'true'
         shell: pwsh
         run: |
           $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
@@ -143,10 +183,12 @@ jobs:
           Pop-Location
 
       - name: Build JetBrains plugin
+        if: steps.reuse-plugins.outputs.reused != 'true'
         run: gradle buildPlugin
         working-directory: plugins/intellij
 
       - name: Copy JetBrains plugin into desktop resources
+        if: steps.reuse-plugins.outputs.reused != 'true'
         shell: pwsh
         run: |
           $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
@@ -156,6 +198,7 @@ jobs:
           Copy-Item $plugin.FullName (Join-Path apps/desktop/src-tauri/resources/ide-plugins $intellijFile)
 
       - name: Build Visual Studio plugin
+        if: steps.reuse-plugins.outputs.reused != 'true'
         shell: pwsh
         run: |
           $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
@@ -216,7 +259,7 @@ jobs:
           gh release upload $env:TAG --clobber "${{ steps.assets.outputs.installer }}" "${{ steps.assets.outputs.signature }}" "${{ steps.assets.outputs.checksum }}" "${{ steps.assets.outputs.target }}" apps/desktop/src-tauri/resources/ide-plugins/*.vsix apps/desktop/src-tauri/resources/ide-plugins/*.zip
 
       - name: Store compatibility manifest for finalize
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: latest-manifest
           path: ${{ steps.assets.outputs.latest }}
@@ -248,17 +291,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare-release.outputs.tag }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
       - name: Download compatibility manifest
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: latest-manifest
           path: finalize

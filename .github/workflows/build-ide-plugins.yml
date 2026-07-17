@@ -3,6 +3,9 @@ name: Build IDE plugins
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - develop
     paths:
       - 'plugins/**'
       - 'packages/reader-protocol/**'
@@ -12,10 +15,10 @@ jobs:
   validate-vscode:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
       - run: npm ci
       - run: npm run plugins:validate
       - run: node --check plugins/vscode/extension.js
@@ -31,7 +34,7 @@ jobs:
           Push-Location plugins/vscode
           npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out $env:VSCODE_FILE
           Pop-Location
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: novel-library-vscode
           path: plugins/vscode/${{ env.VSCODE_FILE }}
@@ -39,8 +42,8 @@ jobs:
   build-intellij:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -52,7 +55,7 @@ jobs:
           "INTELLIJ_FILE=$(($manifest.plugins | Where-Object id -eq 'intellij').file)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: gradle buildPlugin
         working-directory: plugins/intellij
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: novel-library-intellij
           path: plugins/intellij/build/distributions/${{ env.INTELLIJ_FILE }}
@@ -60,7 +63,7 @@ jobs:
   build-visual-studio:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
       - run: dotnet build plugins/visual-studio/NovelLibrary.VisualStudio.csproj --configuration Release --no-restore
       - name: Read plugin artifact name
@@ -71,7 +74,7 @@ jobs:
       - name: Package Visual Studio VSIX
         shell: pwsh
         run: ./scripts/package-visual-studio-plugin.ps1 -Root $PWD
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: novel-library-visual-studio
           path: plugins/visual-studio/bin/${{ env.VISUAL_STUDIO_FILE }}
