@@ -232,7 +232,7 @@ jobs:
           TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
           mkdir assets
-          gh release download "$TAG" --dir assets --pattern '*-setup.exe'
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --pattern '*-setup.exe'
           test -n "$(find assets -maxdepth 1 -name '*-setup.exe' -print -quit)"
 
       - name: Generate and upload SHA256SUMS
@@ -241,7 +241,7 @@ jobs:
           TAG: ${{ needs.prepare-release.outputs.tag }}
         run: |
           (cd assets && sha256sum *-setup.exe) > SHA256SUMS.txt
-          gh release upload "$TAG" SHA256SUMS.txt --clobber
+          gh release upload "$TAG" SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
 
   finalize-release:
     needs: [prepare-release, build-windows, upload-checksums]
