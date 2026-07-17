@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const files = [
   'apps/desktop/src-tauri/resources/ide-plugins/manifest.json',
+  'apps/desktop/src-tauri/src/ide_integration.rs',
   'plugins/vscode/package.json',
   'plugins/README.md',
   'plugins/vscode/bridge.js',
@@ -43,12 +44,16 @@ const requireValue = (condition, message) => {
 }
 
 const vscode = JSON.parse(source('plugins/vscode/package.json'))
-requireValue(vscode.version === '0.4.2', 'VS Code extension version must be 0.4.2')
+requireValue(vscode.version === '0.4.3', 'VS Code extension version must be 0.4.3')
 requireValue(vscode.displayName === '小说书库阅读器', 'VS Code extension display name must identify the plugin')
 requireValue(vscode.main === 'extension.js', 'VS Code extension entry point is missing')
 requireValue(vscode.activationEvents?.includes('onStartupFinished'), 'VS Code automatic startup is missing')
 requireValue(vscode.contributes?.viewsContainers?.activitybar?.some(item => item.id === 'novelLibrary'), 'VS Code activity bar container is missing')
 requireValue(vscode.contributes?.views?.novelLibrary?.some(item => item.id === 'novelLibrary.reader'), 'VS Code reader sidebar is missing')
+const vscodeViewCommands = new Set(vscode.contributes?.menus?.['view/title']?.map(item => item.command))
+for (const command of ['novelLibrary.showReader', 'novelLibrary.hideReader', 'novelLibrary.previousLine', 'novelLibrary.nextLine', 'novelLibrary.previousChapter', 'novelLibrary.nextChapter', 'novelLibrary.refreshLibrary']) {
+  requireValue(vscodeViewCommands.has(command), `VS Code reader toolbar command is missing: ${command}`)
+}
 const vscodeKeys = new Set(vscode.contributes?.keybindings?.map(item => item.key))
 for (const key of ['ctrl+alt+n', 'ctrl+alt+up', 'ctrl+alt+down', 'ctrl+alt+left', 'ctrl+alt+right']) {
   requireValue(vscodeKeys.has(key), `VS Code keybinding is missing: ${key}`)
@@ -59,7 +64,13 @@ requireMatch(vscodeExtension, /createTextEditorDecorationType/, 'VS Code inline 
 requireMatch(vscodeExtension, /registerTreeDataProvider\('novelLibrary\.reader'/, 'VS Code reader sidebar provider is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.selectBook'/, 'VS Code book selection command is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.selectChapter'/, 'VS Code chapter selection command is missing')
-requireMatch(vscodeExtension, /if \(fs\.existsSync\(bridgeFile\(\)\)\) setTimeout\(\(\) => reader\.toggle\(true\)/, 'VS Code automatic reader display is missing')
+requireMatch(vscodeExtension, /label: `书架 \(\$\{state\.books\.length\}\)`/, 'VS Code bookshelf section is missing')
+requireMatch(vscodeExtension, /label: `章节 \(\$\{state\.chapters\.length\}\)`/, 'VS Code chapter section is missing')
+requireMatch(vscodeExtension, /type: 'content'/, 'VS Code content section is missing')
+requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.openBookFromSidebar'/, 'VS Code direct sidebar book selection is missing')
+requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.openChapterFromSidebar'/, 'VS Code direct sidebar chapter selection is missing')
+requireMatch(vscodeExtension, /const connectOnStartup = async \(\) =>/, 'VS Code automatic reader display is missing')
+requireMatch(vscodeExtension, /attempt < 12[\s\S]*reader\.toggle\(true, true\)/, 'VS Code startup connection retry is missing')
 requireMatch(vscodeExtension, /for \(let attempts = 0;[\s\S]*attempts < 30/, 'VS Code empty-chapter skipping is missing')
 requireMatch(vscodeExtension, /chapter\.kind === 'chapter'/, 'VS Code non-content chapter filtering is missing')
 const vscodeBridge = source('plugins/vscode/bridge.js')
@@ -104,8 +115,12 @@ requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /Timeout = T
 requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /ConnectionClose = true/, 'Visual Studio Bridge must close each local HTTP connection')
 
 const desktopManifest = JSON.parse(source('apps/desktop/src-tauri/resources/ide-plugins/manifest.json'))
+const desktopIdeIntegration = source('apps/desktop/src-tauri/src/ide_integration.rs')
+requireMatch(desktopIdeIntegration, /env\("ELECTRON_RUN_AS_NODE", "1"\)/, 'VS Code CLI must run in Node mode without opening the IDE')
+requireMatch(desktopIdeIntegration, /--list-extensions/, 'VS Code installed state must use the IDE CLI')
+requireMatch(desktopIdeIntegration, /parse_vscode_extension_state/, 'VS Code CLI installed-state parser is missing')
 const expectedArtifacts = new Map([
-  ['vscode', ['0.4.2', 'novel-library-reader-0.4.2.vsix']],
+  ['vscode', ['0.4.3', 'novel-library-reader-0.4.3.vsix']],
   ['intellij', ['0.4.1', 'novel-library-intellij-0.4.1.zip']],
   ['visual-studio', ['0.4.0', 'novel-library-visual-studio-0.4.0.vsix']]
 ])

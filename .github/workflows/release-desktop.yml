@@ -61,7 +61,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force apps/desktop/src-tauri/resources/ide-plugins | Out-Null
           Push-Location plugins/vscode
-          npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out ../../apps/desktop/src-tauri/resources/ide-plugins/novel-library-reader-0.4.2.vsix
+          npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out ../../apps/desktop/src-tauri/resources/ide-plugins/novel-library-reader-0.4.3.vsix
           Pop-Location
 
       - name: Build JetBrains plugin
@@ -89,7 +89,7 @@ jobs:
         shell: pwsh
         run: |
           $required = @(
-            'novel-library-reader-0.4.2.vsix',
+            'novel-library-reader-0.4.3.vsix',
             'novel-library-intellij-0.4.1.zip',
             'novel-library-visual-studio-0.4.0.vsix'
           )

@@ -2,7 +2,7 @@
   "name": "novel-library-reader",
   "displayName": "小说书库阅读器",
   "description": "在 VS Code 和 Cursor 代码行内阅读本地小说，并与小说书库桌面端同步。",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "publisher": "novel-library",
   "license": "MIT",
   "engines": { "vscode": ">=1.85.0" },
@@ -11,15 +11,18 @@
   "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.selectBook", "onCommand:novelLibrary.selectChapter", "onCommand:novelLibrary.importFile"],
   "contributes": {
     "commands": [
-      { "command": "novelLibrary.openReader", "title": "小说书库: 显示或隐藏代码内阅读" },
+      { "command": "novelLibrary.openReader", "title": "小说书库: 显示或隐藏代码内阅读", "icon": "$(eye)" },
+      { "command": "novelLibrary.showReader", "title": "显示代码内阅读", "icon": "$(eye)" },
+      { "command": "novelLibrary.hideReader", "title": "隐藏代码内阅读", "icon": "$(eye-closed)" },
       { "command": "novelLibrary.selectBook", "title": "小说书库: 选择小说" },
       { "command": "novelLibrary.selectChapter", "title": "小说书库: 选择章节" },
-      { "command": "novelLibrary.nextLine", "title": "小说书库: 下一行" },
-      { "command": "novelLibrary.previousLine", "title": "小说书库: 上一行" },
-      { "command": "novelLibrary.nextChapter", "title": "小说书库: 下一章" },
-      { "command": "novelLibrary.previousChapter", "title": "小说书库: 上一章" },
-      { "command": "novelLibrary.importFile", "title": "小说书库: 导入当前文件" },
-      { "command": "novelLibrary.openDesktop", "title": "小说书库: 打开桌面端" }
+      { "command": "novelLibrary.nextLine", "title": "下一行", "icon": "$(arrow-down)" },
+      { "command": "novelLibrary.previousLine", "title": "上一行", "icon": "$(arrow-up)" },
+      { "command": "novelLibrary.nextChapter", "title": "下一章", "icon": "$(arrow-right)" },
+      { "command": "novelLibrary.previousChapter", "title": "上一章", "icon": "$(arrow-left)" },
+      { "command": "novelLibrary.refreshLibrary", "title": "刷新书架", "icon": "$(refresh)" },
+      { "command": "novelLibrary.importFile", "title": "小说书库: 导入当前文件", "icon": "$(file-add)" },
+      { "command": "novelLibrary.openDesktop", "title": "小说书库: 打开桌面端", "icon": "$(open-preview)" }
     ],
     "keybindings": [
       { "command": "novelLibrary.openReader", "key": "ctrl+alt+n" },
@@ -40,6 +43,17 @@
       ]
     },
     "menus": {
+      "view/title": [
+        { "command": "novelLibrary.showReader", "when": "view == novelLibrary.reader && !novelLibrary.readerEnabled", "group": "navigation@1" },
+        { "command": "novelLibrary.hideReader", "when": "view == novelLibrary.reader && novelLibrary.readerEnabled", "group": "navigation@1" },
+        { "command": "novelLibrary.previousLine", "when": "view == novelLibrary.reader", "group": "navigation@2" },
+        { "command": "novelLibrary.nextLine", "when": "view == novelLibrary.reader", "group": "navigation@3" },
+        { "command": "novelLibrary.previousChapter", "when": "view == novelLibrary.reader", "group": "navigation@4" },
+        { "command": "novelLibrary.nextChapter", "when": "view == novelLibrary.reader", "group": "navigation@5" },
+        { "command": "novelLibrary.refreshLibrary", "when": "view == novelLibrary.reader", "group": "navigation@6" },
+        { "command": "novelLibrary.importFile", "when": "view == novelLibrary.reader", "group": "2_actions@1" },
+        { "command": "novelLibrary.openDesktop", "when": "view == novelLibrary.reader", "group": "2_actions@2" }
+      ],
       "editor/context": [
         { "command": "novelLibrary.importFile", "when": "resourceExtname == .txt || resourceExtname == .epub", "group": "navigation@90" }
       ]

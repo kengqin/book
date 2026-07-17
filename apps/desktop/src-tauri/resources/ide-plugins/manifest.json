@@ -5,12 +5,12 @@
       "id": "vscode",
       "label": "小说书库 · VS Code / Cursor 阅读器",
       "kind": "vscode",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "identifier": "novel-library.novel-library-reader",
       "description": "在 VS Code 和 Cursor 代码行内阅读小说，固定显示 5 行，支持快捷键滚动、切章和桌面端进度同步。",
       "packageType": "VSIX",
       "supportedIdes": ["Visual Studio Code", "Cursor"],
-      "file": "novel-library-reader-0.4.2.vsix"
+      "file": "novel-library-reader-0.4.3.vsix"
     },
     {
       "id": "intellij",

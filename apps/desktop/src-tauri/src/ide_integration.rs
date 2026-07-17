@@ -211,6 +211,16 @@ fn cli_command(target: &IdeTarget) -> Result<(PathBuf, Vec<PathBuf>), String> {
     }
 }
 
+fn vscode_cli_process(target: &IdeTarget) -> Result<Command, String> {
+    let (executable, prefix) = cli_command(target)?;
+    let mut command = hidden_command(executable);
+    command
+        .env("ELECTRON_RUN_AS_NODE", "1")
+        .env_remove("VSCODE_DEV")
+        .args(prefix);
+    Ok(command)
+}
+
 fn scan_executables(root: &Path, names: &[&str], depth: usize, output: &mut Vec<PathBuf>) {
     if depth == 0 || !root.is_dir() {
         return;
@@ -409,7 +419,21 @@ fn detect_targets() -> Vec<IdeTarget> {
     targets
 }
 
-fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
+fn parse_vscode_extension_state(output: &str, identifier: &str) -> (bool, Option<String>) {
+    for line in output.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let (candidate, version) = line
+            .split_once('@')
+            .map_or((line, None), |(candidate, version)| {
+                (candidate, (!version.is_empty()).then(|| version.to_string()))
+            });
+        if candidate.eq_ignore_ascii_case(identifier) {
+            return (true, version);
+        }
+    }
+    (false, None)
+}
+
+fn vscode_extension_directory_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
     let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else {
         return (false, None);
     };
@@ -428,6 +452,23 @@ fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option
         .filter_map(|name| name.strip_prefix(&folder_prefix).map(str::to_string))
         .max_by(|left, right| compare_versions(left, right));
     (version.is_some(), version)
+}
+
+fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
+    let Ok(mut command) = vscode_cli_process(target) else {
+        return vscode_extension_directory_state(target, identifier);
+    };
+    let Ok(output) = command
+        .arg("--list-extensions")
+        .arg("--show-versions")
+        .output()
+    else {
+        return vscode_extension_directory_state(target, identifier);
+    };
+    if !output.status.success() {
+        return vscode_extension_directory_state(target, identifier);
+    }
+    parse_vscode_extension_state(&String::from_utf8_lossy(&output.stdout), identifier)
 }
 
 fn compare_versions(left: &str, right: &str) -> std::cmp::Ordering {
@@ -714,9 +755,7 @@ fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, Strin
     }
     let output = match target.kind.as_str() {
         "vscode" => {
-            let (executable, prefix) = cli_command(target)?;
-            hidden_command(executable)
-                .args(prefix)
+            vscode_cli_process(target)?
                 .arg("--install-extension")
                 .arg(plugin_path)
                 .arg("--force")
@@ -782,9 +821,7 @@ pub fn uninstall(
     if !target.can_uninstall {
         return Err("此 IDE 请在其内置插件管理器中卸载".to_string());
     }
-    let (executable, prefix) = cli_command(&target)?;
-    let output = hidden_command(executable)
-        .args(prefix)
+    let output = vscode_cli_process(&target)?
         .arg("--uninstall-extension")
         .arg(&plugin.identifier)
         .output()
@@ -792,18 +829,24 @@ pub fn uninstall(
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
+    let (installed, _) = vscode_extension_state(&target, &plugin.identifier);
+    if installed {
+        return Err("IDE 仍报告插件已安装，请关闭 IDE 后重试卸载".to_string());
+    }
     Ok(IdeInstallResult {
         target: target.label,
         plugin: plugin.label,
         installed: false,
-        message: "卸载命令已完成，重启 IDE 后生效".to_string(),
+        message: "已从 IDE 扩展清单移除；重载或重启 IDE 后，活动栏和扩展页面会同步消失"
+            .to_string(),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        compare_versions, detect_targets, read_plugin_xml_from_jar, target_id, xml_tag_value,
+        compare_versions, detect_targets, parse_vscode_extension_state, read_plugin_xml_from_jar,
+        target_id, vscode_extension_state, xml_tag_value,
     };
     use std::{collections::HashSet, fs::File, io::Write, path::Path, time::Instant};
 
@@ -813,6 +856,40 @@ mod tests {
         let second = target_id("vscode", Path::new("C:/Code/code.cmd"));
         assert_eq!(first, second);
         assert_ne!(first, target_id("jetbrains", Path::new("C:/Code/code.cmd")));
+    }
+
+    #[test]
+    fn reads_vscode_cli_extension_state_without_trusting_stale_directories() {
+        assert_eq!(
+            parse_vscode_extension_state(
+                "publisher.other@1.0.0\nnovel-library.novel-library-reader@0.4.3\n",
+                "novel-library.novel-library-reader",
+            ),
+            (true, Some("0.4.3".to_string()))
+        );
+        assert_eq!(
+            parse_vscode_extension_state(
+                "publisher.other@1.0.0\n",
+                "novel-library.novel-library-reader",
+            ),
+            (false, None)
+        );
+    }
+
+    #[test]
+    fn queries_detected_vscode_clis_without_launching_the_ide_runtime() {
+        for target in detect_targets()
+            .into_iter()
+            .filter(|target| target.kind == "vscode")
+        {
+            let started = Instant::now();
+            let _ = vscode_extension_state(&target, "novel-library.novel-library-reader");
+            assert!(
+                started.elapsed().as_secs() < 5,
+                "{} CLI query took too long",
+                target.label
+            );
+        }
     }
 
     #[test]

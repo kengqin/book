@@ -6,13 +6,14 @@ import { getIdeIntegrationStatus, installIdePlugin, uninstallIdePlugin, type Bun
 
 const router = useRouter()
 const fallbackPlugins: BundledIdePlugin[] = [
-  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.2', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 代码行内阅读小说，固定显示 5 行，支持快捷键滚动、切章和桌面端进度同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
+  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.3', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 中浏览书架、章节和 5 行正文，并在代码行内阅读，同步桌面端进度。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
   { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.1', identifier: 'com.kengqin.novellibrary.reader', description: '在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中固定阅读 5 行小说，支持快捷键滚动、切章和桌面端进度同步。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
   { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.0', identifier: 'NovelLibrary.VisualStudio', description: '在 Visual Studio 2022 中打开小说阅读面板，并与桌面端书库同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
 ]
 const status = ref<IdeIntegrationStatus>({ plugins: fallbackPlugins, targets: [] })
 const detecting = ref(true)
 const busyTarget = ref('')
+const busyAction = ref<'install' | 'uninstall' | ''>('')
 const error = ref('')
 const message = ref('')
 const query = ref('')
@@ -26,6 +27,15 @@ const visiblePlugins = computed(() => {
 
 function targetsFor(plugin: BundledIdePlugin) {
   return status.value.targets.filter(target => target.kind === plugin.kind)
+}
+
+function updateTargetState(targetId: string, installed: boolean, installedVersion?: string) {
+  status.value = {
+    ...status.value,
+    targets: status.value.targets.map(target => target.id === targetId
+      ? { ...target, installed, installedVersion, canUninstall: installed && target.kind !== 'visual-studio' }
+      : target)
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
@@ -54,32 +64,38 @@ async function refresh() {
 
 async function install(target: IdeTarget, plugin: BundledIdePlugin) {
   busyTarget.value = target.id
+  busyAction.value = 'install'
   error.value = ''
   message.value = ''
   try {
     const result = await installIdePlugin(target.id, plugin.id)
+    updateTargetState(target.id, true, plugin.version)
     message.value = `${result.plugin} 已安装到 ${result.target}。${result.message}`
     await refresh()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     busyTarget.value = ''
+    busyAction.value = ''
   }
 }
 
 async function uninstall(target: IdeTarget, plugin: BundledIdePlugin) {
   if (!target.canUninstall) return
   busyTarget.value = target.id
+  busyAction.value = 'uninstall'
   error.value = ''
   message.value = ''
   try {
     const result = await uninstallIdePlugin(target.id, plugin.id)
+    updateTargetState(target.id, false)
     message.value = `${result.plugin} 已从 ${result.target} 卸载。${result.message}`
     await refresh()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     busyTarget.value = ''
+    busyAction.value = ''
   }
 }
 
@@ -110,9 +126,10 @@ onMounted(refresh)
         <div v-if="targetsFor(plugin).length" class="ide-target-list">
           <div v-for="target in targetsFor(plugin)" :key="target.id" class="ide-target-row">
             <div><strong>{{ target.label }}</strong><small>安装位置：{{ target.path }}</small><span v-if="target.installed">插件已安装{{ target.installedVersion ? ` · v${target.installedVersion}` : '' }}</span><span v-else>插件未安装</span></div>
-            <button v-if="target.installed && target.canUninstall" type="button" class="secondary-command" :disabled="busyTarget === target.id" @click="uninstall(target, plugin)"><Trash2 :size="15" />{{ busyTarget === target.id ? '处理中' : '卸载' }}</button>
+            <button v-if="busyTarget === target.id" type="button" class="secondary-command" disabled><RotateCcw :size="15" class="spinning" />{{ busyAction === 'uninstall' ? '卸载中' : '安装中' }}</button>
+            <button v-else-if="target.installed && target.canUninstall" type="button" class="secondary-command" @click="uninstall(target, plugin)"><Trash2 :size="15" />卸载</button>
             <button v-else-if="target.installed" type="button" class="secondary-command" disabled><CheckCircle2 :size="15" />已安装</button>
-            <button v-else type="button" class="primary-command" :disabled="busyTarget === target.id || !plugin.available" @click="install(target, plugin)"><RotateCcw v-if="busyTarget === target.id" :size="15" class="spinning" /><Download v-else :size="15" />{{ busyTarget === target.id ? '安装中' : '安装' }}</button>
+            <button v-else type="button" class="primary-command" :disabled="!plugin.available" @click="install(target, plugin)"><Download :size="15" />安装</button>
           </div>
         </div>
         <div v-else class="ide-plugin-empty">{{ detecting ? '正在检测本机实例...' : `未检测到 ${plugin.supportedIdes.join('、')}，请确认 IDE 已安装` }}</div>

@@ -6,7 +6,7 @@ token and port to `%APPDATA%/NovelLibrary/bridge.json`.
 
 ## Packages
 
-- `vscode`: VS Code and Cursor extension with an activity-bar TreeView and five inline editor decorations.
+- `vscode`: VS Code and Cursor extension with a hierarchical bookshelf/chapter/content TreeView, title-bar reader controls, and five inline editor decorations.
 - `intellij`: one IntelliJ Platform plugin for IDEA, PyCharm, WebStorm, Android Studio,
   Rider, CLion, GoLand and RubyMine.
 - `visual-studio`: Visual Studio 2022 VSIX project and bridge client.

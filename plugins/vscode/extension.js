@@ -119,13 +119,27 @@ function createReader(context) {
   }
 
   const loadBook = async book => {
-    state.book = book
-    const allChapters = await request(`/v1/books/${encodeURIComponent(book.id)}/chapters`)
-    const readableChapters = allChapters.filter(chapter => !chapter.kind || chapter.kind === 'chapter')
-    state.chapters = readableChapters.length ? readableChapters : allChapters
-    if (!state.chapters.length) throw new Error('当前小说没有可阅读章节')
-    const preferred = state.chapters.find(chapter => chapter.number === book.currentChapter) || state.chapters[0]
-    await updateChapter(preferred.number, 1)
+    const previous = {
+      book: state.book,
+      chapters: state.chapters,
+      chapter: state.chapter,
+      lines: state.lines,
+      lineStart: state.lineStart
+    }
+    try {
+      state.book = book
+      const allChapters = await request(`/v1/books/${encodeURIComponent(book.id)}/chapters`)
+      const readableChapters = allChapters.filter(chapter => !chapter.kind || chapter.kind === 'chapter')
+      state.chapters = readableChapters.length ? readableChapters : allChapters
+      if (!state.chapters.length) throw new Error('当前小说没有可阅读章节')
+      const preferred = state.chapters.find(chapter => chapter.number === book.currentChapter) || state.chapters[0]
+      await updateChapter(preferred.number, 1)
+    } catch (error) {
+      Object.assign(state, previous)
+      render()
+      notifySidebar()
+      throw error
+    }
   }
 
   const loadLibrary = async () => {
@@ -141,23 +155,28 @@ function createReader(context) {
     }
   }
 
-  const toggle = async forceVisible => {
+  const toggle = async (forceVisible, silent = false) => {
     if (forceVisible === false || (forceVisible === undefined && state.enabled)) {
       state.enabled = false
       clear()
+      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
       notifySidebar()
-      return
+      return true
     }
     state.enabled = true
     try {
       if (!state.chapter) await loadLibrary()
       render()
+      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', true)
       notifySidebar()
+      return true
     } catch (error) {
       state.enabled = false
       clear()
+      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
       notifySidebar()
-      vscode.window.showErrorMessage(`小说阅读器无法连接桌面端：${error.message}`)
+      if (!silent) vscode.window.showErrorMessage(`小说阅读器无法连接桌面端：${error.message}`)
+      return false
     }
   }
 
@@ -196,6 +215,38 @@ function createReader(context) {
     if (picked) await updateChapter(picked.chapter.number, 1)
   }
 
+  const openBook = async book => {
+    const wasEnabled = state.enabled
+    state.enabled = true
+    try {
+      await loadBook(book)
+      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', true)
+      render()
+    } catch (error) {
+      state.enabled = wasEnabled
+      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', wasEnabled)
+      render()
+      notifySidebar()
+      throw error
+    }
+  }
+
+  const openChapter = async chapter => {
+    const wasEnabled = state.enabled
+    state.enabled = true
+    try {
+      await updateChapter(chapter.number, 1)
+      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', true)
+      render()
+    } catch (error) {
+      state.enabled = wasEnabled
+      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', wasEnabled)
+      render()
+      notifySidebar()
+      throw error
+    }
+  }
+
   context.subscriptions.push(decoration, status)
   context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(render))
   context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(event => {
@@ -209,6 +260,9 @@ function createReader(context) {
     moveChapter,
     selectBook,
     selectChapter,
+    openBook,
+    openChapter,
+    loadLibrary,
     setSidebarRefresh(callback) {
       notifySidebar = callback
       notifySidebar()
@@ -227,43 +281,133 @@ class ReaderTreeProvider {
   }
 
   getTreeItem(item) {
-    const treeItem = new vscode.TreeItem(item.label)
-    if (item.command) treeItem.command = { command: item.command, title: item.label }
+    const treeItem = new vscode.TreeItem(item.label, item.collapsibleState ?? vscode.TreeItemCollapsibleState.None)
+    treeItem.id = item.id
+    if (item.command) {
+      treeItem.command = { command: item.command, title: item.label, arguments: item.arguments || [] }
+    }
     treeItem.iconPath = new vscode.ThemeIcon(item.icon)
     treeItem.description = item.description
     treeItem.tooltip = item.tooltip || item.label
+    treeItem.contextValue = item.contextValue
     return treeItem
   }
 
-  getChildren() {
-    const visible = state.lines.slice(state.lineStart, state.lineStart + 5)
-    return [
-      { label: state.book?.title || '选择小说', description: '当前书籍', command: 'novelLibrary.selectBook', icon: 'book' },
-      { label: state.chapter?.title || '选择章节', description: '当前章节', command: 'novelLibrary.selectChapter', icon: 'list-selection' },
-      ...visible.map((line, index) => ({ label: line, description: `${state.lineStart + index + 1}`, tooltip: line, icon: 'quote' })),
-      { label: state.enabled ? '隐藏代码内阅读' : '显示代码内阅读', command: 'novelLibrary.openReader', icon: state.enabled ? 'eye-closed' : 'eye' },
-      { label: '上一行', command: 'novelLibrary.previousLine', icon: 'arrow-up' },
-      { label: '下一行', command: 'novelLibrary.nextLine', icon: 'arrow-down' },
-      { label: '上一章', command: 'novelLibrary.previousChapter', icon: 'arrow-left' },
-      { label: '下一章', command: 'novelLibrary.nextChapter', icon: 'arrow-right' },
-      { label: '导入当前文件', command: 'novelLibrary.importFile', icon: 'file-add' }
-    ]
+  getChildren(element) {
+    if (!element) {
+      return [
+        {
+          id: 'section.books',
+          type: 'books',
+          label: `书架 (${state.books.length})`,
+          description: state.book?.title || '',
+          tooltip: '桌面端小说书架',
+          icon: 'library',
+          collapsibleState: vscode.TreeItemCollapsibleState.Expanded
+        },
+        {
+          id: 'section.chapters',
+          type: 'chapters',
+          label: `章节 (${state.chapters.length})`,
+          description: state.chapter?.title || '',
+          tooltip: state.chapter ? `当前章节：${state.chapter.title}` : '当前小说的章节目录',
+          icon: 'list-tree',
+          collapsibleState: vscode.TreeItemCollapsibleState.Collapsed
+        },
+        {
+          id: 'section.content',
+          type: 'content',
+          label: state.lines.length
+            ? `正文 ${state.lineStart + 1}-${Math.min(state.lines.length, state.lineStart + 5)}`
+            : '正文',
+          description: state.enabled ? '代码内显示中' : '',
+          tooltip: state.chapter ? `${state.book?.title || ''} · ${state.chapter.title}` : '当前阅读正文',
+          icon: 'book-open',
+          collapsibleState: vscode.TreeItemCollapsibleState.Expanded
+        }
+      ]
+    }
+
+    if (element.type === 'books') {
+      if (!state.books.length) return [this.emptyItem('书架为空或桌面端未连接')]
+      return state.books.map(book => {
+        const current = book.id === state.book?.id
+        return {
+          id: `book.${book.id}`,
+          label: book.title,
+          description: current ? `当前${book.author ? ` · ${book.author}` : ''}` : book.author || '',
+          tooltip: current ? `正在阅读：${book.title}` : `切换到《${book.title}》`,
+          icon: current ? 'check' : 'book',
+          command: 'novelLibrary.openBookFromSidebar',
+          arguments: [book],
+          contextValue: current ? 'currentBook' : 'book'
+        }
+      })
+    }
+
+    if (element.type === 'chapters') {
+      if (!state.chapters.length) return [this.emptyItem('请先从书架选择小说')]
+      return state.chapters.map(chapter => {
+        const current = chapter.number === state.chapter?.number
+        return {
+          id: `chapter.${state.book?.id || 'none'}.${chapter.number}`,
+          label: chapter.title,
+          description: current ? '当前' : `第 ${chapter.number} 项`,
+          tooltip: current ? `正在阅读：${chapter.title}` : `切换到 ${chapter.title}`,
+          icon: current ? 'check' : 'symbol-key',
+          command: 'novelLibrary.openChapterFromSidebar',
+          arguments: [chapter],
+          contextValue: current ? 'currentChapter' : 'chapter'
+        }
+      })
+    }
+
+    if (element.type === 'content') {
+      const visible = state.lines.slice(state.lineStart, state.lineStart + 5)
+      if (!visible.length) return [this.emptyItem('暂无正文')]
+      return visible.map((line, index) => ({
+        id: `line.${state.chapter?.number || 0}.${state.lineStart + index}`,
+        label: line,
+        description: `${state.lineStart + index + 1}`,
+        tooltip: line,
+        icon: 'quote'
+      }))
+    }
+
+    return []
+  }
+
+  emptyItem(label) {
+    return { label, icon: 'info', contextValue: 'empty' }
   }
 }
 
 function activate(context) {
   const reader = createReader(context)
   const treeProvider = new ReaderTreeProvider()
+  const runReaderAction = action => async (...args) => {
+    try {
+      await action(...args)
+    } catch (error) {
+      vscode.window.showErrorMessage(`小说阅读器操作失败：${error.message}`)
+    }
+  }
   reader.setSidebarRefresh(() => treeProvider.refresh())
   context.subscriptions.push(treeProvider.changed)
   context.subscriptions.push(vscode.window.registerTreeDataProvider('novelLibrary.reader', treeProvider))
+  vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openReader', () => reader.toggle()))
-  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.selectBook', () => reader.selectBook()))
-  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.selectChapter', () => reader.selectChapter()))
-  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextLine', () => reader.moveLines(1)))
-  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousLine', () => reader.moveLines(-1)))
-  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextChapter', () => reader.moveChapter(1)))
-  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousChapter', () => reader.moveChapter(-1)))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.showReader', () => reader.toggle(true)))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.hideReader', () => reader.toggle(false)))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.selectBook', runReaderAction(() => reader.selectBook())))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.selectChapter', runReaderAction(() => reader.selectChapter())))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openBookFromSidebar', runReaderAction(book => reader.openBook(book))))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openChapterFromSidebar', runReaderAction(chapter => reader.openChapter(chapter))))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.refreshLibrary', runReaderAction(() => reader.loadLibrary())))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextLine', runReaderAction(() => reader.moveLines(1))))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousLine', runReaderAction(() => reader.moveLines(-1))))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextChapter', runReaderAction(() => reader.moveChapter(1))))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousChapter', runReaderAction(() => reader.moveChapter(-1))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openDesktop', async () => {
     try {
       await vscode.env.openExternal(vscode.Uri.parse('novellibrary://open'))
@@ -286,7 +430,15 @@ function activate(context) {
     }
   }))
 
-  if (fs.existsSync(bridgeFile())) setTimeout(() => reader.toggle(true), 500)
+  const connectOnStartup = async () => {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      if (await reader.toggle(true, true)) return
+      await new Promise(resolve => setTimeout(resolve, 750))
+    }
+    vscode.window.showErrorMessage('小说阅读器暂时无法连接桌面端，请确认桌面端已启动后点击刷新书架。')
+  }
+
+  if (fs.existsSync(bridgeFile())) setTimeout(connectOnStartup, 500)
 }
 
 module.exports = { activate, deactivate() {} }
