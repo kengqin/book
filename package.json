@@ -18,6 +18,8 @@
     "desktop:web:build": "npm run build --workspace @novel-library/desktop",
     "desktop:build": "npm run tauri --workspace @novel-library/desktop -- build",
     "release:validate": "node scripts/validate-release.mjs",
+    "release:manifest": "node scripts/release/build-target-manifest.mjs",
+    "release:verify": "node scripts/release/verify-published-release.mjs",
     "test": "vitest run",
     "plugins:validate": "node scripts/validate-ide-integrations.mjs"
   },

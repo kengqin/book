@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router'
 import { BookOpen, LibraryBig, Search, Settings, Wrench } from 'lucide-vue-next'
 import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
 import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
-import { availableUpdate, checkForUpdates, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
+import { availableUpdate, checkForUpdates, configureBackgroundUpdateChecks, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
 
 const router = useRouter()
 let unlistenImport: UnlistenFn | undefined
@@ -23,6 +23,7 @@ onMounted(async () => {
   })
   void initializeUpdateEvents().then(() => {
     if (isAutoCheckEnabled()) void checkForUpdates(true)
+    configureBackgroundUpdateChecks()
   })
 })
 

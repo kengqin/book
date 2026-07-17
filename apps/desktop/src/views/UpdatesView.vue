@@ -5,15 +5,21 @@ import { ArrowUpRight, CheckCircle2, Download, History, RefreshCw, ShieldAlert }
 import {
   availableUpdate,
   checkForUpdates,
+  cancelUpdateDownload,
   compareVersions,
   downloadAvailableUpdate,
   getCurrentVersion,
   installDownloadedUpdate,
   isAutoCheckEnabled,
+  isAutoDownloadEnabled,
+  isBackgroundCheckEnabled,
   loadReleaseManifest,
   publishedUpdateVersion,
   setAutoCheckEnabled,
+  setAutoDownloadEnabled,
+  setBackgroundCheckEnabled,
   updateChecking,
+  updateCompatibilityNote,
   updateError,
   updateMessage,
   updateProgress,
@@ -25,12 +31,22 @@ const currentVersion = ref('0.0.0')
 const releases = ref<ReleaseEntry[]>([])
 const manifestSource = ref<'remote' | 'local'>('local')
 const autoCheck = ref(isAutoCheckEnabled())
+const backgroundCheck = ref(isBackgroundCheckEnabled())
+const autoDownload = ref(isAutoDownloadEnabled())
 const loadingHistory = ref(true)
 
 const currentRelease = computed(() => releases.value.find((release) => release.version === currentVersion.value))
 
 function updateAutoCheck() {
   setAutoCheckEnabled(autoCheck.value)
+}
+
+function updateBackgroundCheck() {
+  setBackgroundCheckEnabled(backgroundCheck.value)
+}
+
+function updateAutoDownload() {
+  setAutoDownloadEnabled(autoDownload.value)
 }
 
 async function installHistoricalVersion(release: ReleaseEntry) {
@@ -77,19 +93,29 @@ onMounted(async () => {
         <strong v-else-if="publishedUpdateVersion"><RefreshCw :size="17" />v{{ publishedUpdateVersion }} 已发布</strong>
         <strong v-else><CheckCircle2 :size="17" />{{ updateMessage || '版本状态正常' }}</strong>
         <span v-if="updateError" class="update-error">{{ updateError }}</span>
+        <span v-else-if="updateCompatibilityNote" class="update-error">{{ updateCompatibilityNote }}</span>
         <span v-else>{{ autoCheck ? '启动时自动检查更新' : '仅手动检查更新' }}</span>
         <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
       </div>
       <div class="header-actions">
-        <button type="button" class="secondary-command" :disabled="updateChecking || ['downloading', 'cancelling', 'installing'].includes(updateStage)" @click="checkForUpdates(false)"><RefreshCw :size="16" :class="{ spinning: updateChecking }" />检查</button>
-        <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'error')" type="button" class="primary-command" @click="downloadAvailableUpdate"><Download :size="16" />下载更新</button>
-        <button v-else-if="updateStage === 'downloaded'" type="button" class="primary-command" @click="installDownloadedUpdate"><RefreshCw :size="16" />安装并重启</button>
+        <button type="button" class="secondary-command" :disabled="updateChecking || ['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateStage)" @click="checkForUpdates(false)"><RefreshCw :size="16" :class="{ spinning: updateChecking }" />检查</button>
+        <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'download-error')" type="button" class="primary-command" @click="downloadAvailableUpdate()"><Download :size="16" />下载更新</button>
+        <button v-else-if="updateStage === 'downloading'" type="button" class="secondary-command" @click="cancelUpdateDownload">取消下载</button>
+        <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate"><RefreshCw :size="16" />安装并重启</button>
       </div>
     </section>
 
     <label class="auto-update-setting">
       <input v-model="autoCheck" type="checkbox" @change="updateAutoCheck">
       <span><strong>自动检查更新</strong><small>应用启动后静默检查稳定版本</small></span>
+    </label>
+    <label class="auto-update-setting">
+      <input v-model="backgroundCheck" type="checkbox" @change="updateBackgroundCheck">
+      <span><strong>后台定时检查</strong><small>每 6 小时静默检查一次，默认关闭</small></span>
+    </label>
+    <label class="auto-update-setting">
+      <input v-model="autoDownload" type="checkbox" @change="updateAutoDownload">
+      <span><strong>后台自动下载</strong><small>仅下载通过校验且无需备份的更新，仍由你确认安装和重启</small></span>
     </label>
 
     <section class="release-history">
