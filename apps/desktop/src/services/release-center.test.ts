@@ -77,7 +77,7 @@ describe('release center update consistency', () => {
     expect(availableUpdate.value).toBeNull()
     expect(publishedUpdateVersion.value).toBe('0.3.1')
     expect(updateStage.value).toBe('published-but-not-ready')
-    expect(updateError.value).toContain('更新组件正在同步')
+    expect(updateError.value).toContain('安装包正在准备')
     expect(updateMessage.value).not.toContain('已是最新')
   })
 

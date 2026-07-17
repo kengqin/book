@@ -115,7 +115,7 @@ function errorDetail(cause: unknown) {
 function userMessageFor(stage: UpdateStage) {
   const messages: Partial<Record<UpdateStage, string>> = {
     'manifest-error': '暂时无法连接更新服务，请稍后重试',
-    'published-but-not-ready': '新版已发布，更新组件正在同步',
+    'published-but-not-ready': '发现新版本，安装包正在准备',
     'version-mismatch': '更新信息尚未同步完成，请稍后重试',
     'signature-error': '更新包校验失败，已阻止安装',
     'download-error': '下载失败，可重试或打开历史版本页面',
