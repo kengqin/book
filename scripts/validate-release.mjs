@@ -18,15 +18,26 @@ function validateReleaseEntry(release, manifest) {
   if (!['stable', 'preview'].includes(release.channel)) throw new Error(`${prefix} channel 无效`)
   if (!Number.isInteger(release.databaseSchema) || release.databaseSchema < 1) throw new Error(`${prefix} databaseSchema 无效`)
   if (typeof release.published !== 'boolean') throw new Error(`${prefix} 缺少 published`)
-  normalizeVersion(release.minimumSupportedVersion)
-  if (compareSemver(release.minimumSupportedVersion, release.version) > 0) {
-    throw new Error(`${prefix} minimumSupportedVersion 不能高于当前版本`)
+  const isLatestRelease = release.version === manifest.latest
+  if (release.minimumSupportedVersion !== undefined) {
+    normalizeVersion(release.minimumSupportedVersion)
+    if (compareSemver(release.minimumSupportedVersion, release.version) > 0) {
+      throw new Error(`${prefix} minimumSupportedVersion 不能高于当前版本`)
+    }
+  } else if (isLatestRelease) {
+    throw new Error(`${prefix} 缺少 minimumSupportedVersion`)
   }
-  if (typeof release.requiresBackup !== 'boolean') throw new Error(`${prefix} 缺少 requiresBackup`)
+  if (release.requiresBackup !== undefined && typeof release.requiresBackup !== 'boolean') {
+    throw new Error(`${prefix} requiresBackup 无效`)
+  }
+  if (isLatestRelease && release.requiresBackup === undefined) throw new Error(`${prefix} 缺少 requiresBackup`)
   if (!Array.isArray(release.sections) || release.sections.length === 0 || release.sections.some((section) => {
     return !section?.title || !Array.isArray(section.items) || section.items.length === 0 || section.items.some((item) => typeof item !== 'string' || !item.trim())
   })) throw new Error(`${prefix} 缺少有效的更新章节`)
-  if (!Array.isArray(release.upgradeNotes)) throw new Error(`${prefix} upgradeNotes 必须是数组`)
+  if (release.upgradeNotes !== undefined && !Array.isArray(release.upgradeNotes)) {
+    throw new Error(`${prefix} upgradeNotes 必须是数组`)
+  }
+  if (isLatestRelease && release.upgradeNotes === undefined) throw new Error(`${prefix} 缺少 upgradeNotes`)
 
   if (release.published) {
     const expectedReleaseUrl = `https://github.com/${manifest.repository}/releases/tag/v${release.version}`
