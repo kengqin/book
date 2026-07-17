@@ -153,7 +153,8 @@ jobs:
           $reused = $true
           foreach ($file in $files) {
             gh release download $previousTag --repo $env:GITHUB_REPOSITORY --pattern $file --dir $stagingDir
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $stagingDir $file))) {
+            $downloadExitCode = $LASTEXITCODE
+            if ($downloadExitCode -ne 0 -or -not (Test-Path (Join-Path $stagingDir $file))) {
               $reused = $false
               break
             }
@@ -167,6 +168,7 @@ jobs:
             Write-Host "Reused IDE plugin artifacts from $previousTag"
           } else {
             Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+            $global:LASTEXITCODE = 0
             "reused=false" >> $env:GITHUB_OUTPUT
             Write-Host "IDE plugin artifacts changed or unavailable; building them"
           }
