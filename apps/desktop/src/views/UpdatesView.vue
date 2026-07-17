@@ -69,11 +69,20 @@ async function openRelease(release: ReleaseEntry) {
   }
 }
 
-onMounted(async () => {
-  currentVersion.value = await getCurrentVersion()
+async function refreshReleaseHistory() {
   const result = await loadReleaseManifest()
   releases.value = result.manifest.releases
   manifestSource.value = result.remote ? 'remote' : 'local'
+}
+
+async function checkForUpdatesFromView() {
+  await checkForUpdates(false)
+  await refreshReleaseHistory()
+}
+
+onMounted(async () => {
+  currentVersion.value = await getCurrentVersion()
+  await refreshReleaseHistory()
   loadingHistory.value = false
 })
 </script>
@@ -91,6 +100,7 @@ onMounted(async () => {
       <div class="update-status-copy">
         <strong v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</strong>
         <strong v-else-if="publishedUpdateVersion"><RefreshCw :size="17" />发现新版本 v{{ publishedUpdateVersion }}</strong>
+        <strong v-else-if="updateError"><ShieldAlert :size="17" />更新状态暂不可用</strong>
         <strong v-else><CheckCircle2 :size="17" />{{ updateMessage || '版本状态正常' }}</strong>
         <span v-if="updateError" class="update-error">{{ updateError }}</span>
         <span v-else-if="updateCompatibilityNote" class="update-error">{{ updateCompatibilityNote }}</span>
@@ -98,7 +108,7 @@ onMounted(async () => {
         <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
       </div>
       <div class="header-actions">
-        <button type="button" class="secondary-command" :disabled="updateChecking || ['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateStage)" @click="checkForUpdates(false)"><RefreshCw :size="16" :class="{ spinning: updateChecking }" />检查</button>
+        <button type="button" class="secondary-command" :disabled="updateChecking || ['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateStage)" @click="checkForUpdatesFromView"><RefreshCw :size="16" :class="{ spinning: updateChecking }" />检查</button>
         <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'download-error')" type="button" class="primary-command" @click="downloadAvailableUpdate()"><Download :size="16" />下载更新</button>
         <button v-else-if="updateStage === 'downloading'" type="button" class="secondary-command" @click="cancelUpdateDownload">取消下载</button>
         <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate"><RefreshCw :size="16" />安装并重启</button>
@@ -138,7 +148,7 @@ onMounted(async () => {
             <button v-if="release.version !== currentVersion" type="button" class="secondary-command" @click="installHistoricalVersion(release)"><Download :size="15" />安装此版本</button>
             <code v-if="release.sha256" :title="release.sha256">SHA256 {{ release.sha256.slice(0, 12) }}...</code>
           </div>
-          <div v-else class="release-pending"><ShieldAlert :size="15" />版本记录已同步，安装包尚未准备完成</div>
+          <div v-else-if="release.version !== currentVersion" class="release-pending"><ShieldAlert :size="15" />版本记录已同步，安装包尚未准备完成</div>
         </div>
       </article>
     </section>

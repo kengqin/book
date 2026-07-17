@@ -1,8 +1,33 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.5.0",
+  "latest": "0.5.1",
   "releases": [
+    {
+      "version": "0.5.1",
+      "date": "2026-07-17",
+      "title": "版本中心状态同步修复",
+      "channel": "stable",
+      "databaseSchema": 5,
+      "published": false,
+      "minimumSupportedVersion": "0.5.0",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.1",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.1/NovelLibrary_0.5.1_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "更新中心检查完成后同步刷新历史版本清单，避免网络恢复后仍显示安装包未准备完成",
+            "当前已安装版本不再显示待发布标记，更新服务不可用时明确显示状态暂不可用"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "本版本无需迁移数据库，现有书库、阅读进度、笔记和自定义数据目录保持不变。"
+      ]
+    },
     {
       "version": "0.5.0",
       "date": "2026-07-17",

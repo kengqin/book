@@ -13,6 +13,18 @@ use std::os::windows::process::CommandExt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+fn decode_process_output(bytes: &[u8]) -> String {
+    if let Ok(value) = std::str::from_utf8(bytes) {
+        return value.to_string();
+    }
+    #[cfg(windows)]
+    {
+        return encoding_rs::GBK.decode(bytes).0.into_owned();
+    }
+    #[cfg(not(windows))]
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
 fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     let mut command = Command::new(program);
     #[cfg(windows)]
@@ -163,7 +175,7 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
     if !output.status.success() {
         return None;
     }
-    String::from_utf8_lossy(&output.stdout)
+    decode_process_output(&output.stdout)
         .lines()
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -172,7 +184,7 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
 }
 
 fn vscode_script_process(target: &IdeTarget, arguments: &[&str]) -> Result<Command, String> {
-    let launcher = PathBuf::from(&target.path);
+    let launcher = PathBuf::from(target.path.trim().trim_matches('"'));
     let is_script = launcher
         .extension()
         .and_then(|value| value.to_str())
@@ -180,12 +192,10 @@ fn vscode_script_process(target: &IdeTarget, arguments: &[&str]) -> Result<Comma
     if !launcher.is_file() || !is_script {
         return Err("未找到 IDE 官方命令行启动脚本，请重新检测".to_string());
     }
-    let command_line = std::iter::once(format!("call \"{}\"", launcher.display()))
-        .chain(arguments.iter().map(|argument| format!("\"{argument}\"")))
-        .collect::<Vec<_>>()
-        .join(" ");
     let mut command = hidden_command("cmd.exe");
-    command.args(["/d", "/s", "/c", &command_line]);
+    command.args(["/d", "/c", "call"]);
+    command.arg(&launcher);
+    command.args(arguments);
     Ok(command)
 }
 
@@ -443,7 +453,7 @@ fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option
     if !output.status.success() {
         return vscode_extension_directory_state(target, identifier);
     }
-    parse_vscode_extension_state(&String::from_utf8_lossy(&output.stdout), identifier)
+    parse_vscode_extension_state(&decode_process_output(&output.stdout), identifier)
 }
 
 fn compare_versions(left: &str, right: &str) -> std::cmp::Ordering {
@@ -675,14 +685,14 @@ fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, Strin
     }
     .map_err(|error| error.to_string())?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stderr = decode_process_output(&output.stderr).trim().to_string();
         return Err(if stderr.is_empty() {
             format!("安装器退出代码：{}", output.status)
         } else {
             stderr
         });
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    Ok(decode_process_output(&output.stdout).trim().to_string())
 }
 
 pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInstallResult, String> {
@@ -731,7 +741,7 @@ pub fn uninstall(
             .output()
             .map_err(|error| error.to_string())?;
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stderr = decode_process_output(&output.stderr).trim().to_string();
             return Err(if stderr.is_empty() {
                 format!("JetBrains 官方卸载命令退出代码：{}", output.status)
             } else {
@@ -762,7 +772,7 @@ pub fn uninstall(
     .output()
     .map_err(|error| error.to_string())?;
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        return Err(decode_process_output(&output.stderr).trim().to_string());
     }
     let (installed, _) = vscode_extension_state(&target, &plugin.identifier);
     if installed {
@@ -824,6 +834,25 @@ mod tests {
                 started.elapsed().as_secs() < 5,
                 "{} CLI query took too long",
                 target.label
+            );
+        }
+    }
+
+    #[test]
+    fn executes_detected_vscode_launchers_with_real_paths() {
+        for target in detect_targets()
+            .into_iter()
+            .filter(|target| target.kind == "vscode")
+        {
+            let output = vscode_script_process(&target, &["--list-extensions"])
+                .expect("official launcher command")
+                .output()
+                .expect("run official launcher command");
+            assert!(
+                output.status.success(),
+                "{} launcher failed: {}",
+                target.label,
+                String::from_utf8_lossy(&output.stderr)
             );
         }
     }
