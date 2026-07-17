@@ -16,7 +16,7 @@ use models::{
 use tauri::{Manager, State};
 use updater::UpdateDownloadState;
 
-fn desktop_data_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn legacy_data_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let default_directory = app
         .path()
         .app_data_dir()
@@ -25,6 +25,18 @@ fn desktop_data_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .parent()
         .ok_or_else(|| "无法定位 AppData 目录".to_string())?;
     Ok(app_data_root.join("NovelLibrary"))
+}
+
+fn installation_directory() -> Result<PathBuf, String> {
+    std::env::current_exe()
+        .map_err(|error| error.to_string())?
+        .parent()
+        .map(PathBuf::from)
+        .ok_or_else(|| "无法定位 NovelLibrary 安装目录".to_string())
+}
+
+fn default_data_directory(install_directory: &PathBuf) -> Result<PathBuf, String> {
+    Ok(install_directory.join("NovelLibraryData"))
 }
 
 #[tauri::command]
@@ -169,10 +181,12 @@ fn get_storage_status(state: State<'_, DatabaseState>) -> StorageStatus {
 
 #[tauri::command]
 fn change_data_directory(
+    app: tauri::AppHandle,
     state: State<'_, DatabaseState>,
     data_directory: String,
 ) -> Result<StorageStatus, String> {
     state.change_data_directory(PathBuf::from(data_directory))?;
+    bridge::sync_storage_paths(&app)?;
     let (data_directory, database_path) = state.storage_paths()?;
     Ok(StorageStatus {
         database_ready: database::database_exists(&database_path),
@@ -182,8 +196,12 @@ fn change_data_directory(
 }
 
 #[tauri::command]
-fn reset_data_directory(state: State<'_, DatabaseState>) -> Result<StorageStatus, String> {
+fn reset_data_directory(
+    app: tauri::AppHandle,
+    state: State<'_, DatabaseState>,
+) -> Result<StorageStatus, String> {
     state.reset_to_default_directory()?;
+    bridge::sync_storage_paths(&app)?;
     let (data_directory, database_path) = state.storage_paths()?;
     Ok(StorageStatus {
         database_ready: database::database_exists(&database_path),
@@ -194,10 +212,12 @@ fn reset_data_directory(state: State<'_, DatabaseState>) -> Result<StorageStatus
 
 #[tauri::command]
 fn change_database_file(
+    app: tauri::AppHandle,
     state: State<'_, DatabaseState>,
     database_path: String,
 ) -> Result<StorageStatus, String> {
     state.change_database_file(PathBuf::from(database_path))?;
+    bridge::sync_storage_paths(&app)?;
     let (data_directory, database_path) = state.storage_paths()?;
     Ok(StorageStatus {
         database_ready: database::database_exists(&database_path),
@@ -295,12 +315,25 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let data_directory = desktop_data_directory(app.handle())?;
+            let legacy_directory = legacy_data_directory(app.handle())?;
+            let install_directory = installation_directory()?;
+            let data_directory = default_data_directory(&install_directory)?;
+            let old_settings = legacy_directory.join("app-settings.json");
+            let new_settings = data_directory.join("app-settings.json");
+            if !new_settings.exists() && old_settings.is_file() {
+                fs::create_dir_all(&data_directory)?;
+                let _ = fs::copy(&old_settings, &new_settings);
+                let _ = fs::remove_file(old_settings);
+            }
             app.manage(close_behavior::CloseBehaviorState::load(
                 data_directory.join("app-settings.json"),
             ));
             close_behavior::setup_tray(app)?;
-            let database = DatabaseState::initialize(data_directory)?;
+            let database = DatabaseState::initialize_for_installation(
+                data_directory.clone(),
+                install_directory.join("NovelLibrary.storage.json"),
+                legacy_directory,
+            )?;
             app.manage(database);
             bridge::start(app.handle().clone())?;
             app.manage(UpdateDownloadState::default());
@@ -348,4 +381,19 @@ pub fn run() {
         .on_window_event(close_behavior::handle_window_event)
         .run(tauri::generate_context!())
         .expect("failed to run novel library desktop application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_data_directory;
+    use std::path::PathBuf;
+
+    #[test]
+    fn default_data_directory_is_inside_the_selected_install_directory() {
+        let install_directory = PathBuf::from(r"D:\Software\NovelLibrary");
+        assert_eq!(
+            default_data_directory(&install_directory).expect("default data path"),
+            PathBuf::from(r"D:\Software\NovelLibrary\NovelLibraryData")
+        );
+    }
 }

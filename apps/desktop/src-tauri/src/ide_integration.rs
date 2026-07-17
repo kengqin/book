@@ -2,7 +2,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     fs::{self, File},
     hash::{Hash, Hasher},
-    io::{self, Read},
+    io::Read,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -100,6 +100,8 @@ pub struct IdeInstallResult {
     target: String,
     plugin: String,
     installed: bool,
+    verified: bool,
+    installed_version: Option<String>,
     message: String,
 }
 
@@ -169,55 +171,21 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
-fn expand_launcher_token(script: &Path, token: &str) -> Option<PathBuf> {
-    let relative = token.trim().strip_prefix("%~dp0")?;
-    let path = script.parent()?.join(relative);
-    path.is_file().then_some(path)
-}
-
-fn cli_command(target: &IdeTarget) -> Result<(PathBuf, Vec<PathBuf>), String> {
+fn vscode_script_process(target: &IdeTarget, arguments: &[&str]) -> Result<Command, String> {
     let launcher = PathBuf::from(&target.path);
-    if launcher
+    let is_script = launcher
         .extension()
         .and_then(|value| value.to_str())
-        .is_some_and(|value| value.eq_ignore_ascii_case("cmd"))
-    {
-        let script = fs::read_to_string(&launcher)
-            .map_err(|error| format!("无法读取 IDE 启动脚本：{error}"))?;
-        let paths = script
-            .lines()
-            .flat_map(|line| line.split('"'))
-            .filter_map(|token| expand_launcher_token(&launcher, token))
-            .collect::<Vec<_>>();
-        let executable = paths
-            .iter()
-            .find(|path| {
-                path.extension()
-                    .and_then(|value| value.to_str())
-                    .is_some_and(|value| value.eq_ignore_ascii_case("exe"))
-            })
-            .cloned()
-            .ok_or_else(|| "无法从 IDE 启动脚本定位可执行文件".to_string())?;
-        let prefix = paths
-            .into_iter()
-            .filter(|path| path != &executable)
-            .collect();
-        return Ok((executable, prefix));
+        .is_some_and(|value| value.eq_ignore_ascii_case("cmd"));
+    if !launcher.is_file() || !is_script {
+        return Err("未找到 IDE 官方命令行启动脚本，请重新检测".to_string());
     }
-    if launcher.is_file() {
-        Ok((launcher, Vec::new()))
-    } else {
-        Err("目标 IDE 已被移动或删除，请重新检测".to_string())
-    }
-}
-
-fn vscode_cli_process(target: &IdeTarget) -> Result<Command, String> {
-    let (executable, prefix) = cli_command(target)?;
-    let mut command = hidden_command(executable);
-    command
-        .env("ELECTRON_RUN_AS_NODE", "1")
-        .env_remove("VSCODE_DEV")
-        .args(prefix);
+    let command_line = std::iter::once(format!("call \"{}\"", launcher.display()))
+        .chain(arguments.iter().map(|argument| format!("\"{argument}\"")))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut command = hidden_command("cmd.exe");
+    command.args(["/d", "/s", "/c", &command_line]);
     Ok(command)
 }
 
@@ -465,14 +433,11 @@ fn vscode_extension_directory_state(
 }
 
 fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
-    let Ok(mut command) = vscode_cli_process(target) else {
+    let Ok(mut command) = vscode_script_process(target, &["--list-extensions", "--show-versions"])
+    else {
         return vscode_extension_directory_state(target, identifier);
     };
-    let Ok(output) = command
-        .arg("--list-extensions")
-        .arg("--show-versions")
-        .output()
-    else {
+    let Ok(output) = command.output() else {
         return vscode_extension_directory_state(target, identifier);
     };
     if !output.status.success() {
@@ -569,78 +534,6 @@ fn read_plugin_xml_from_jar(path: PathBuf) -> Option<String> {
     let mut payload = String::new();
     entry.read_to_string(&mut payload).ok()?;
     Some(payload)
-}
-
-fn install_jetbrains_plugin(target: &IdeTarget, plugin_path: &Path) -> Result<String, String> {
-    let plugin_root = jetbrains_plugin_root(target)?;
-    fs::create_dir_all(&plugin_root)
-        .map_err(|error| format!("无法创建 JetBrains 插件目录：{error}"))?;
-
-    let archive_file = File::open(plugin_path).map_err(|error| error.to_string())?;
-    let mut archive = zip::ZipArchive::new(archive_file)
-        .map_err(|error| format!("JetBrains 插件包无效：{error}"))?;
-    let temporary = plugin_root.join(format!(".novel-library-install-{}", std::process::id()));
-    if temporary.exists() {
-        fs::remove_dir_all(&temporary).map_err(|error| error.to_string())?;
-    }
-    fs::create_dir_all(&temporary).map_err(|error| error.to_string())?;
-
-    let extract_result = (|| -> Result<String, String> {
-        let mut top_level: Option<String> = None;
-        for index in 0..archive.len() {
-            let mut entry = archive
-                .by_index(index)
-                .map_err(|error| format!("无法读取 JetBrains 插件包：{error}"))?;
-            let enclosed = entry
-                .enclosed_name()
-                .ok_or_else(|| "JetBrains 插件包包含不安全路径".to_string())?;
-            let first = enclosed
-                .components()
-                .next()
-                .and_then(|value| value.as_os_str().to_str())
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| "JetBrains 插件包目录结构无效".to_string())?;
-            if top_level.as_deref().is_some_and(|value| value != first) {
-                return Err("JetBrains 插件包必须只有一个顶层目录".to_string());
-            }
-            top_level.get_or_insert_with(|| first.to_string());
-            if entry
-                .unix_mode()
-                .is_some_and(|mode| mode & 0o170000 == 0o120000)
-            {
-                return Err("JetBrains 插件包不能包含符号链接".to_string());
-            }
-            let destination = temporary.join(enclosed);
-            if entry.is_dir() {
-                fs::create_dir_all(&destination).map_err(|error| error.to_string())?;
-            } else {
-                if let Some(parent) = destination.parent() {
-                    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-                }
-                let mut output = File::create(&destination).map_err(|error| error.to_string())?;
-                io::copy(&mut entry, &mut output).map_err(|error| error.to_string())?;
-            }
-        }
-        top_level.ok_or_else(|| "JetBrains 插件包为空".to_string())
-    })();
-
-    let top_level = match extract_result {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = fs::remove_dir_all(&temporary);
-            return Err(error);
-        }
-    };
-    let staged = temporary.join(&top_level);
-    let destination = plugin_root.join(&top_level);
-    if destination.exists() {
-        fs::remove_dir_all(&destination)
-            .map_err(|error| format!("无法替换已安装的 JetBrains 插件：{error}"))?;
-    }
-    fs::rename(&staged, &destination)
-        .map_err(|error| format!("无法写入 JetBrains 插件目录：{error}"))?;
-    let _ = fs::remove_dir_all(&temporary);
-    Ok("本地插件已部署，重启 IDE 后生效".to_string())
 }
 
 fn scan_files_named(root: &Path, name: &str, depth: usize, output: &mut Vec<PathBuf>) {
@@ -763,13 +656,17 @@ fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, Strin
     if !executable.is_file() {
         return Err("目标 IDE 已被移动或删除，请重新检测".to_string());
     }
+    let plugin_argument = plugin_path.display().to_string();
     let output = match target.kind.as_str() {
-        "vscode" => vscode_cli_process(target)?
-            .arg("--install-extension")
+        "vscode" => vscode_script_process(
+            target,
+            &["--install-extension", plugin_argument.as_str(), "--force"],
+        )?
+        .output(),
+        "jetbrains" => hidden_command(&executable)
+            .arg("installPlugins")
             .arg(plugin_path)
-            .arg("--force")
             .output(),
-        "jetbrains" => return install_jetbrains_plugin(target, plugin_path),
         "visual-studio" => hidden_command(&executable)
             .arg("/quiet")
             .arg(plugin_path)
@@ -796,10 +693,23 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
         return Err(format!("桌面安装包未包含插件文件：{}", plugin.file));
     }
     let output = run_installer(&target, &plugin_path)?;
+    let (verified, installed_version) = match target.kind.as_str() {
+        "vscode" => vscode_extension_state(&target, &plugin.identifier),
+        "jetbrains" => jetbrains_plugin_location(&target, &plugin.identifier)
+            .map(|(_, version)| (true, version))
+            .unwrap_or((false, None)),
+        "visual-studio" => (true, None),
+        _ => (false, None),
+    };
+    if !verified {
+        return Err("安装命令已完成，但复检未发现插件；请重载或重启 IDE 后重试".to_string());
+    }
     Ok(IdeInstallResult {
         target: target.label,
         plugin: plugin.label,
         installed: true,
+        verified,
+        installed_version,
         message: if output.is_empty() {
             "安装命令已完成，重启 IDE 后生效".to_string()
         } else {
@@ -815,25 +725,42 @@ pub fn uninstall(
     let (_directory, plugin, target) =
         resolve_target_plugin(app, &input.target_id, &input.plugin_id)?;
     if target.kind == "jetbrains" {
-        let (directory, _) = jetbrains_plugin_location(&target, &plugin.identifier)
-            .ok_or_else(|| "未找到已安装的 JetBrains 插件".to_string())?;
-        fs::remove_dir_all(&directory)
-            .map_err(|error| format!("无法卸载 JetBrains 插件：{error}"))?;
+        let output = hidden_command(&target.path)
+            .arg("uninstallPlugins")
+            .arg(&plugin.identifier)
+            .output()
+            .map_err(|error| error.to_string())?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(if stderr.is_empty() {
+                format!("JetBrains 官方卸载命令退出代码：{}", output.status)
+            } else {
+                stderr
+            });
+        }
+        if jetbrains_plugin_location(&target, &plugin.identifier).is_some() {
+            return Err(
+                "JetBrains 官方卸载命令已返回，但复检仍发现插件；请关闭 IDE 后重试".to_string(),
+            );
+        }
         return Ok(IdeInstallResult {
             target: target.label,
             plugin: plugin.label,
             installed: false,
-            message: "插件目录已删除，重启 IDE 后生效".to_string(),
+            verified: true,
+            installed_version: None,
+            message: "JetBrains 官方卸载命令已完成，重启 IDE 后生效".to_string(),
         });
     }
     if !target.can_uninstall {
         return Err("此 IDE 请在其内置插件管理器中卸载".to_string());
     }
-    let output = vscode_cli_process(&target)?
-        .arg("--uninstall-extension")
-        .arg(&plugin.identifier)
-        .output()
-        .map_err(|error| error.to_string())?;
+    let output = vscode_script_process(
+        &target,
+        &["--uninstall-extension", plugin.identifier.as_str()],
+    )?
+    .output()
+    .map_err(|error| error.to_string())?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
@@ -845,6 +772,8 @@ pub fn uninstall(
         target: target.label,
         plugin: plugin.label,
         installed: false,
+        verified: true,
+        installed_version: None,
         message: "已从 IDE 扩展清单移除；重载或重启 IDE 后，活动栏和扩展页面会同步消失".to_string(),
     })
 }
@@ -853,7 +782,7 @@ pub fn uninstall(
 mod tests {
     use super::{
         compare_versions, detect_targets, parse_vscode_extension_state, read_plugin_xml_from_jar,
-        target_id, vscode_extension_state, xml_tag_value,
+        target_id, vscode_extension_state, vscode_script_process, xml_tag_value, IdeTarget,
     };
     use std::{collections::HashSet, fs::File, io::Write, path::Path, time::Instant};
 
@@ -957,5 +886,32 @@ mod tests {
             targets.len(),
             started.elapsed()
         );
+    }
+
+    #[test]
+    fn vscode_and_cursor_installation_never_constructs_a_cli_js_file_argument() {
+        let forbidden = concat!("cli", ".js");
+        assert!(!include_str!("ide_integration.rs").contains(forbidden));
+        let launcher =
+            std::env::temp_dir().join(format!("novel-library-{}.cmd", uuid::Uuid::new_v4()));
+        File::create(&launcher).expect("create launcher fixture");
+        let target = IdeTarget {
+            id: "vscode-test".to_string(),
+            label: "Cursor".to_string(),
+            kind: "vscode".to_string(),
+            path: launcher.display().to_string(),
+            installed: false,
+            installed_version: None,
+            can_uninstall: true,
+        };
+        let command =
+            vscode_script_process(&target, &["--install-extension", "fixture.vsix", "--force"])
+                .expect("official launcher command");
+        let args = command
+            .get_args()
+            .map(|value| value.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        assert!(!args.join(" ").contains(forbidden));
+        std::fs::remove_file(launcher).expect("remove launcher fixture");
     }
 }

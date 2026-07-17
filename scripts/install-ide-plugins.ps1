@@ -11,7 +11,16 @@ param(
 $ErrorActionPreference = 'Stop'
 if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
 $artifactRoot = Join-Path $Root '.release-local\ide-plugins'
+$pluginManifestPath = Join-Path $Root 'apps\desktop\src-tauri\resources\ide-plugins\manifest.json'
+if (-not (Test-Path -LiteralPath $pluginManifestPath)) { throw "IDE plugin manifest was not found: $pluginManifestPath" }
+$pluginManifest = Get-Content -Raw -LiteralPath $pluginManifestPath | ConvertFrom-Json
 $results = [System.Collections.Generic.List[object]]::new()
+
+function Get-PluginDefinition([string]$Id) {
+  $definition = @($pluginManifest.plugins | Where-Object id -eq $Id) | Select-Object -First 1
+  if (-not $definition) { throw "IDE plugin manifest entry was not found: $Id" }
+  return $definition
+}
 
 function Add-Result([string]$Name, [string]$Status, [string]$Message) {
   $results.Add([pscustomobject]@{ Name = $Name; Status = $Status; Message = $Message })
@@ -69,7 +78,7 @@ function Select-InstallGroup {
 
 function Package-VSCode {
   $source = Join-Path $Root 'plugins\vscode'
-  $output = Join-Path $artifactRoot 'novel-library-reader-0.4.4.vsix'
+  $output = Join-Path $artifactRoot (Get-PluginDefinition 'vscode').file
   New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
   $npx = Find-Executable @('npx.cmd', 'npx')
   if (-not $npx) { throw 'npx was not found; cannot package the VS Code/Cursor extension' }
@@ -118,28 +127,8 @@ function Get-JetBrainsExecutables {
   return $executables
 }
 
-function Install-JetBrainsArchive([System.IO.FileInfo]$Executable, [string]$PluginPath) {
-  $installRoot = Split-Path -Parent (Split-Path -Parent $Executable.FullName)
-  $productInfoPath = Join-Path $installRoot 'product-info.json'
-  if (-not (Test-Path $productInfoPath)) { throw "JetBrains product-info.json not found: $installRoot" }
-  $productInfo = Get-Content -Raw $productInfoPath | ConvertFrom-Json
-  $dataDirectory = [string]$productInfo.dataDirectoryName
-  if (-not $dataDirectory -or $dataDirectory -match '[\\/]' -or $dataDirectory.Contains('..')) { throw 'Invalid JetBrains data directory name' }
-  $pluginRoot = Join-Path $env:APPDATA "JetBrains\$dataDirectory\plugins"
-  $temporary = Join-Path $pluginRoot ".novel-library-install-$PID"
-  New-Item -ItemType Directory -Force $pluginRoot | Out-Null
-  if (Test-Path $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force }
-  New-Item -ItemType Directory -Force $temporary | Out-Null
-  try {
-    Expand-Archive -LiteralPath $PluginPath -DestinationPath $temporary -Force
-    $entries = @(Get-ChildItem $temporary -Force)
-    if ($entries.Count -ne 1 -or -not $entries[0].PSIsContainer) { throw 'JetBrains plugin archive must contain exactly one top-level directory' }
-    $destination = Join-Path $pluginRoot $entries[0].Name
-    if (Test-Path $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
-    Move-Item -LiteralPath $entries[0].FullName -Destination $destination
-  } finally {
-    if (Test-Path $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force }
-  }
+function Install-JetBrainsOfficial([System.IO.FileInfo]$Executable, [string]$PluginPath) {
+  Invoke-External $Executable.FullName @('installPlugins', $PluginPath) $Root
 }
 
 function Install-JetBrains([string]$PluginPath) {
@@ -159,8 +148,8 @@ function Install-JetBrains([string]$PluginPath) {
   }
   if (-not $targets.Count) { throw 'No JetBrains IDE was selected' }
   foreach ($executable in $targets) {
-    if ($WhatIf) { Write-Host "WHATIF: deploy $PluginPath to $($executable.FullName) plugin directory"; continue }
-    Install-JetBrainsArchive $executable $PluginPath
+    if ($WhatIf) { Write-Host "WHATIF: $($executable.FullName) installPlugins $PluginPath"; continue }
+    Install-JetBrainsOfficial $executable $PluginPath
   }
   return "$($targets.Count) JetBrains IDE(s)"
 }
@@ -192,7 +181,8 @@ function Build-VisualStudioPlugin {
   $project = Join-Path $Root 'plugins\visual-studio\NovelLibrary.VisualStudio.csproj'
   Invoke-External $dotnet @('build', $project, '--configuration', 'Release') $Root
   & (Join-Path $Root 'scripts\package-visual-studio-plugin.ps1') -Root $Root
-  return Join-Path $Root 'plugins\visual-studio\bin\novel-library-visual-studio-0.4.0.vsix'
+  $visualOutput = Join-Path (Join-Path $Root 'plugins\visual-studio\bin') (Get-PluginDefinition 'visual-studio').file
+  return $visualOutput
 }
 
 function Install-VSCode([string]$PluginPath) {
@@ -227,7 +217,7 @@ $Only = Select-InstallGroup
 
 if ($Only -in @('All', 'VSCode')) {
   try {
-    $plugin = if ($SkipBuild) { Join-Path $artifactRoot 'novel-library-reader-0.4.4.vsix' } else { Package-VSCode }
+    $plugin = if ($SkipBuild) { Join-Path $artifactRoot (Get-PluginDefinition 'vscode').file } else { Package-VSCode }
     if (-not (Test-Path $plugin)) { throw "VS Code VSIX does not exist: $plugin" }
     Add-Result 'VS Code / Cursor' 'installed' (Install-VSCode $plugin)
   } catch { Add-Result 'VS Code / Cursor' 'failed' $_.Exception.Message }

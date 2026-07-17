@@ -1,8 +1,42 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.4.0",
+  "latest": "0.5.0",
   "releases": [
+    {
+      "version": "0.5.0",
+      "date": "2026-07-17",
+      "title": "更新迁移与 IDE 插件一致性改造",
+      "channel": "stable",
+      "databaseSchema": 5,
+      "published": false,
+      "minimumSupportedVersion": "0.4.0",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.0",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.0/NovelLibrary_0.5.0_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "更新",
+          "items": [
+            "默认数据迁移到安装目录内的 NovelLibraryData，旧版 C 盘受管配置和数据库在校验成功后清理",
+            "选择新的数据目录或数据库文件时自动迁移并清理旧数据库，安装目录配置同步更新",
+            "桌面端与 IDE 插件版本独立维护，桌面端发布不再强制升级插件"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "VS Code 和 Cursor 安装、检测、卸载统一调用官方命令脚本，不再直接打开 cli.js",
+            "插件安装和卸载完成后强制复检，并向桌面端返回 verified 结果"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "首次启动会把旧版受管数据迁移到安装目录内的 NovelLibraryData；迁移完成前请勿强制结束应用。",
+        "用户选择的自定义数据目录仍会保留，切换时会复制当前数据库并清理旧受管数据库文件。"
+      ]
+    },
     {
       "version": "0.4.0",
       "date": "2026-07-17",
@@ -10,6 +44,8 @@
       "channel": "stable",
       "databaseSchema": 5,
       "published": true,
+      "minimumSupportedVersion": "0.1.0",
+      "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.4.0",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe",
       "sha256": "1259850a585f4cbf7c0584b3c3fd6ca44f62c3138bed20eecf64353678a29f88",
@@ -52,6 +88,8 @@
       "channel": "stable",
       "databaseSchema": 5,
       "published": true,
+      "minimumSupportedVersion": "0.1.0",
+      "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.2",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.2/NovelLibrary_0.3.2_x64-setup.exe",
       "sha256": "32d5b224c32fda22447e7b5bdbc62d2a881cd5948eda644f2ac5d127adfa70f9",
@@ -84,6 +122,8 @@
       "channel": "stable",
       "databaseSchema": 4,
       "published": true,
+      "minimumSupportedVersion": "0.1.0",
+      "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.1",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.1/NovelLibrary_0.3.1_x64-setup.exe",
       "sha256": "94bb4572709ecf0ae2868849365493e6d84b22bd5bdc3dd2ffcbaac894e32996",
@@ -115,6 +155,8 @@
       "channel": "stable",
       "databaseSchema": 4,
       "published": true,
+      "minimumSupportedVersion": "0.1.0",
+      "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.0",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.0/NovelLibrary_0.3.0_x64-setup.exe",
       "sha256": "14540b47987e5be275c6ec4c87e88fd64845701090ff83eba533276b13929613",
@@ -156,6 +198,8 @@
       "channel": "stable",
       "databaseSchema": 3,
       "published": true,
+      "minimumSupportedVersion": "0.1.0",
+      "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.2.0",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.2.0/NovelLibrary_0.2.0_x64-setup.exe",
       "sha256": "ae6691a422acb1ca95bf27aa2bc849bd791a72301a0216cd67fa981f1286b939",
@@ -177,7 +221,8 @@
             "笔记跟随自定义数据目录和数据库文件迁移"
           ]
         }
-      ]
+      ],
+      "upgradeNotes": []
     },
     {
       "version": "0.1.2",
@@ -186,6 +231,8 @@
       "channel": "stable",
       "databaseSchema": 2,
       "published": true,
+      "minimumSupportedVersion": "0.1.0",
+      "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.2",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.2/NovelLibrary_0.1.2_x64-setup.exe",
       "sha256": "a73b708d6c484d3cdf02e5e7ee473a46c70e4f0a0b2ef0bb04bc136ebae14723",
@@ -218,6 +265,8 @@
       "channel": "stable",
       "databaseSchema": 2,
       "published": true,
+      "minimumSupportedVersion": "0.1.0",
+      "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.1",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.1/NovelLibrary_0.1.1_x64-setup.exe",
       "sha256": "9ad5247446149fea8b4d28aedb79e48b83b88f256d2bd98a83f1a4e8d86aae32",
@@ -234,7 +283,8 @@
             "默认安装目录、安装包、快捷方式和卸载项使用 NovelLibrary 英文名称"
           ]
         }
-      ]
+      ],
+      "upgradeNotes": []
     },
     {
       "version": "0.1.0",
@@ -243,6 +293,8 @@
       "channel": "stable",
       "databaseSchema": 2,
       "published": true,
+      "minimumSupportedVersion": "0.1.0",
+      "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.0",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.0/NovelLibrary_0.1.0_x64-setup.exe",
       "sha256": "5a06917932eedfee57ec172f39d04582c05fa0930ddd3ebe3be3de9b03e387f3",
@@ -257,7 +309,8 @@
             "版本中心、自动更新和历史版本安装入口"
           ]
         }
-      ]
+      ],
+      "upgradeNotes": []
     }
   ]
 }

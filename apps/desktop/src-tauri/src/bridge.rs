@@ -28,6 +28,10 @@ pub struct BridgeInfo {
     pub token: String,
     pub pid: u32,
     pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub database_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,12 +164,10 @@ fn handle_request(
     let segments = path.trim_matches('/').split('/').collect::<Vec<_>>();
     let response = match (method, segments.as_slice()) {
         ("GET", ["v1", "manifest"]) => {
-            let bridge = state
-                .storage_paths()
-                .ok()
-                .map(|paths| paths.0.join("bridge.json"))
-                .and_then(|path| std::fs::read(path).ok())
-                .and_then(|bytes| serde_json::from_slice::<BridgeInfo>(&bytes).ok());
+            let bridge = bridge_file_candidates(&state)
+                .into_iter()
+                .filter_map(|path| std::fs::read(path).ok())
+                .find_map(|bytes| serde_json::from_slice::<BridgeInfo>(&bytes).ok());
             json!({
                 "protocolVersion": 1,
                 "appVersion": env!("CARGO_PKG_VERSION"),
@@ -293,7 +295,8 @@ pub fn start(app: AppHandle) -> Result<BridgeInfo, String> {
             Err(_) => break,
         }
     });
-    let data_directory = app.state::<database::DatabaseState>().storage_paths()?.0;
+    let state = app.state::<database::DatabaseState>();
+    let (data_directory, database_path) = state.storage_paths()?;
     let info = BridgeInfo {
         protocol_version: 1,
         app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -301,14 +304,97 @@ pub fn start(app: AppHandle) -> Result<BridgeInfo, String> {
         token,
         pid: std::process::id(),
         session_id,
+        data_directory: Some(data_directory.display().to_string()),
+        database_path: Some(database_path.display().to_string()),
     };
-    fs::create_dir_all(&data_directory).map_err(|error| error.to_string())?;
-    fs::write(
-        data_directory.join("bridge.json"),
-        serde_json::to_vec_pretty(&info).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    write_bridge_files(&app, &info)?;
     Ok(info)
+}
+
+fn bridge_file_candidates(state: &database::DatabaseState) -> Vec<std::path::PathBuf> {
+    let mut directories = Vec::new();
+    if let Ok(path) = std::env::current_exe() {
+        if let Some(parent) = path.parent() {
+            directories.push(parent.to_path_buf());
+        }
+    }
+    directories.push(state.default_data_directory());
+    if let Ok((data_directory, _)) = state.storage_paths() {
+        directories.push(data_directory);
+    }
+    directories
+        .into_iter()
+        .filter(|path| !path.as_os_str().is_empty())
+        .fold(Vec::new(), |mut paths, directory| {
+            let path = directory.join("bridge.json");
+            if !paths.contains(&path) {
+                paths.push(path);
+            }
+            paths
+        })
+}
+
+fn bridge_directories(state: &database::DatabaseState) -> Vec<std::path::PathBuf> {
+    bridge_file_candidates(state)
+        .into_iter()
+        .filter_map(|path| path.parent().map(std::path::Path::to_path_buf))
+        .fold(Vec::new(), |mut directories, directory| {
+            if !directories.contains(&directory) {
+                directories.push(directory);
+            }
+            directories
+        })
+}
+
+fn write_bridge_files(app: &AppHandle, info: &BridgeInfo) -> Result<(), String> {
+    let state = app.state::<database::DatabaseState>();
+    let payload = serde_json::to_vec_pretty(info).map_err(|error| error.to_string())?;
+    let mut written = false;
+    let mut errors = Vec::new();
+    for directory in bridge_directories(&state) {
+        if let Err(error) = fs::create_dir_all(&directory)
+            .and_then(|_| fs::write(directory.join("bridge.json"), &payload))
+        {
+            errors.push(format!("{}：{}", directory.display(), error));
+        } else {
+            written = true;
+        }
+    }
+    if written {
+        if let Ok(install_directory) = std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+            .ok_or(())
+        {
+            let locator = state.default_data_directory().join("bridge-location.json");
+            let location = json!({
+                "schemaVersion": 1,
+                "bridgePath": install_directory.join("bridge.json").display().to_string()
+            });
+            let _ = fs::create_dir_all(&state.default_data_directory()).and_then(|_| {
+                fs::write(
+                    locator,
+                    serde_json::to_vec_pretty(&location).unwrap_or_default(),
+                )
+            });
+        }
+        Ok(())
+    } else {
+        Err(format!("无法写入 Bridge 配置：{}", errors.join("；")))
+    }
+}
+
+pub fn sync_storage_paths(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<database::DatabaseState>();
+    let (data_directory, database_path) = state.storage_paths()?;
+    let mut info = bridge_file_candidates(&state)
+        .into_iter()
+        .filter_map(|path| fs::read(path).ok())
+        .find_map(|bytes| serde_json::from_slice::<BridgeInfo>(&bytes).ok())
+        .ok_or_else(|| "Bridge 配置尚未启动".to_string())?;
+    info.data_directory = Some(data_directory.display().to_string());
+    info.database_path = Some(database_path.display().to_string());
+    write_bridge_files(app, &info)
 }
 
 #[cfg(test)]

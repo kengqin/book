@@ -6,9 +6,9 @@ import { getIdeIntegrationStatus, installIdePlugin, uninstallIdePlugin, type Bun
 
 const router = useRouter()
 const fallbackPlugins: BundledIdePlugin[] = [
-  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.4', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 中浏览书架、章节和 5 行正文，并可切换段落或行尾显示模式，同步桌面端进度。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
-  { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.2', identifier: 'com.kengqin.novellibrary.reader', description: '在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中阅读 5 行小说，可切换段落或行尾模式并同步桌面端进度。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
-  { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.1', identifier: 'NovelLibrary.VisualStudio', description: '在 Visual Studio 2022 中打开小说阅读面板，可切换段落或行尾模式，并与桌面端书库同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
+  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.5', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 中浏览书架、章节和 5 行正文，并可切换段落或行尾显示模式，同步桌面端进度。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
+  { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.5', identifier: 'com.kengqin.novellibrary.reader', description: '在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中阅读 5 行小说，可切换段落或行尾模式并同步桌面端进度。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
+  { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.5', identifier: 'NovelLibrary.VisualStudio', description: '在 Visual Studio 2022 中打开小说阅读面板，可切换段落或行尾模式，并与桌面端书库同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
 ]
 const status = ref<IdeIntegrationStatus>({ plugins: fallbackPlugins, targets: [] })
 const detecting = ref(true)
@@ -27,15 +27,6 @@ const visiblePlugins = computed(() => {
 
 function targetsFor(plugin: BundledIdePlugin) {
   return status.value.targets.filter(target => target.kind === plugin.kind)
-}
-
-function updateTargetState(targetId: string, installed: boolean, installedVersion?: string) {
-  status.value = {
-    ...status.value,
-    targets: status.value.targets.map(target => target.id === targetId
-      ? { ...target, installed, installedVersion, canUninstall: installed && target.kind !== 'visual-studio' }
-      : target)
-  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
@@ -69,8 +60,9 @@ async function install(target: IdeTarget, plugin: BundledIdePlugin) {
   message.value = ''
   try {
     const result = await installIdePlugin(target.id, plugin.id)
-    updateTargetState(target.id, true, plugin.version)
-    message.value = `${result.plugin} 已安装到 ${result.target}。${result.message}`
+    if (!result.installed || !result.verified) throw new Error(`${result.plugin} 安装命令已返回，但复检未确认安装完成`)
+    const version = result.installedVersion ? ` · v${result.installedVersion}` : ''
+    message.value = `${result.plugin} 已安装到 ${result.target}${version}。${result.message}`
     await refresh()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
@@ -88,7 +80,7 @@ async function uninstall(target: IdeTarget, plugin: BundledIdePlugin) {
   message.value = ''
   try {
     const result = await uninstallIdePlugin(target.id, plugin.id)
-    updateTargetState(target.id, false)
+    if (result.installed || !result.verified) throw new Error(`${result.plugin} 卸载命令已返回，但复检未确认卸载完成`)
     message.value = `${result.plugin} 已从 ${result.target} 卸载。${result.message}`
     await refresh()
   } catch (cause) {

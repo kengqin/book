@@ -2,7 +2,10 @@
 
 All integrations use the desktop bridge described in `packages/reader-protocol`.
 They never open the SQLite file directly. The desktop application writes a per-process
-token and port to `%APPDATA%/NovelLibrary/bridge.json`.
+The desktop application writes the token and port to `bridge.json` beside its
+running executable. Each integration resolves the running NovelLibrary process
+and reads that installation-local file; `%APPDATA%/NovelLibrary/bridge.json`
+is retained only as a fallback for pre-migration desktop versions.
 
 ## Packages
 

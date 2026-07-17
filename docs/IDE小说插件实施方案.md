@@ -8,7 +8,7 @@
 
 ## 同步协议
 
-Bridge 监听 `127.0.0.1` 的动态端口，并在 `%APPDATA%/NovelLibrary/bridge.json` 中写入端口、协议版本、进程号、会话 ID 和每次启动轮换的 token。除 `/v1/health` 外的接口必须使用 `Authorization: Bearer <token>`。
+Bridge 监听 `127.0.0.1` 的动态端口，并在用户安装目录内的 `bridge.json` 中写入端口、协议版本、进程号、会话 ID、当前数据目录和每次启动轮换的 token。插件通过运行中的桌面进程定位该文件；旧 `%APPDATA%/NovelLibrary/bridge.json` 仅作为旧版本兼容回退。除 `/v1/health` 外的接口必须使用 `Authorization: Bearer <token>`。
 
 核心接口为：
 
@@ -28,19 +28,19 @@ Bridge 监听 `127.0.0.1` 的动态端口，并在 `%APPDATA%/NovelLibrary/bridg
 
 ## 适配器
 
-- `plugins/intellij`：`0.4.2`，Kotlin + IntelliJ Platform Gradle Plugin，提供工具窗口、可持久化切换的段落/行尾 5 行 Inlay、启动自动加载和快捷键，一个包覆盖多个 JetBrains IDE；原行尾模式完整保留。阅读会话与工具窗口解耦，方向快捷键不会展开右侧面板；工具栏按可用宽度自动换行，入口使用与 VS Code 一致的书本图标。
-- `plugins/vscode`：`0.4.4`，CommonJS 扩展，侧边栏按书架、章节、正文分层展示，书籍和章节可直接点击；逐行、切章、显示隐藏、刷新和段落/行尾模式切换使用标题栏图标，同时保留原有 5 行行尾 Decoration 与可配置快捷键。显示状态持久化，关闭后翻行或切章不会自动重新开启。
-- `plugins/visual-studio`：`0.4.1`，Visual Studio 2022 官方 VSIX，提供 WPF 工具窗口、可持久化切换的段落/行尾 5 行 Adornment、选书选章和快捷键；原行尾模式完整保留。
+- `plugins/intellij`：独立维护版本（当前 `0.4.5`），Kotlin + IntelliJ Platform Gradle Plugin，提供工具窗口、可持久化切换的段落/行尾 5 行 Inlay、启动自动加载和快捷键，一个包覆盖多个 JetBrains IDE；原行尾模式完整保留。阅读会话与工具窗口解耦，方向快捷键不会展开右侧面板；工具栏按可用宽度自动换行，入口使用与 VS Code 一致的书本图标。
+- `plugins/vscode`：独立维护版本（当前 `0.4.5`），CommonJS 扩展，侧边栏按书架、章节、正文分层展示，书籍和章节可直接点击；逐行、切章、显示隐藏、刷新和段落/行尾模式切换使用标题栏图标，同时保留原有 5 行行尾 Decoration 与可配置快捷键。显示状态持久化，关闭后翻行或切章不会自动重新开启。
+- `plugins/visual-studio`：独立维护版本（当前 `0.4.5`），Visual Studio 2022 官方 VSIX，提供 WPF 工具窗口、可持久化切换的段落/行尾 5 行 Adornment、选书选章和快捷键；原行尾模式完整保留。
 
 插件读取章节列表后优先过滤 `frontmatter` 和 `volume`，自动从 `kind=chapter` 的正文开始；附近空正文最多向前搜索 30 项。Bridge 请求最长 5 秒，避免 IDE 或桌面端失去响应；IDE 启动时采用有限后台重试，避免桌面端刚启动尚未就绪导致侧边栏永久为空，重试期间不重复弹错。
 
 ## 安装
 
-桌面端资源目录固定包含 `novel-library-reader-0.4.4.vsix`、`novel-library-intellij-0.4.2.zip`、`novel-library-visual-studio-0.4.1.vsix` 和清单。工具页默认展示全部支持插件并提供搜索，检测到每个 IDE 后由用户单独选择安装目标。已安装实例展示实际版本和卸载操作。
+桌面端资源目录包含清单中声明的 VS Code/Cursor、JetBrains 和 Visual Studio 插件制品；每个插件版本独立维护，文件名和元数据必须与各自版本一致。工具页默认展示全部支持插件并提供搜索，检测到每个 IDE 后由用户单独选择安装目标。已安装实例展示实际版本和卸载操作。
 
 桌面端侧栏主导航只保留书架、搜索和工具；设置固定在侧栏底部，不展示“本地模式”文案。版本与更新不占用独立主导航位置，设置页展示当前版本和更新状态，并提供进入完整版本历史页的入口；存在更新时提示圆点显示在设置入口。
 
-JetBrains ZIP 根据目标产品 `product-info.json` 部署到准确插件目录，不调用只支持 Marketplace ID 的 `installPlugins`。检测和安装子进程均隐藏命令行窗口。命令行入口支持交互选择，也支持 `-Only ... -AllTargets` 自动化验收。
+JetBrains ZIP 交给目标产品官方 `installPlugins` 命令安装，卸载使用官方 `uninstallPlugins`，不自行解压或删除插件目录。VS Code/Cursor 使用官方 `.cmd --install-extension/--uninstall-extension`，Visual Studio 使用官方 `VSIXInstaller.exe`。检测和安装子进程均隐藏命令行窗口。命令行入口支持交互选择，也支持 `-Only ... -AllTargets` 自动化验收。
 
 ## 验收
 
@@ -50,7 +50,7 @@ JetBrains ZIP 根据目标产品 `product-info.json` 部署到准确插件目录
 
 同日 `0.4.3` 回归：VS Code 与 Cursor 均确认安装 `novel-library.novel-library-reader@0.4.3`；真实 Bridge 读取 3 本书，层级树验证书架、当前章节、正文 5 行、直接点击书籍/章节和 `1-5 -> 2-6` 逐行移动。冷启动测试模拟前两次 Bridge 连接失败，扩展在后台重试窗口内自动恢复且不重复弹错。正式 NSIS 安装包隔离安装后包含 `0.4.3` VSIX，文件哈希与桌面端资源完全一致，静默卸载后目录清理完成。
 
-卸载状态以对应 IDE 的 `--list-extensions --show-versions` 输出为准，不扫描可能等待 IDE 重启才清理的旧版本目录。桌面端解析官方 `.cmd` 启动器后必须设置 `ELECTRON_RUN_AS_NODE=1` 再执行 `cli.js`；否则会错误启动 VS Code/Cursor 并把 `cli.js` 打开为编辑文件。卸载成功后页面立即切换为“安装”，并提示重载或重启 IDE 以清除已加载的活动栏和扩展详情界面。
+卸载状态以对应 IDE 的 `--list-extensions --show-versions` 输出为准，不扫描可能等待 IDE 重启才清理的旧版本目录。桌面端统一调用官方 `code.cmd` / `cursor.cmd`，不解析、不拼接、也不直接传入 `cli.js`；安装和卸载命令返回后还会强制复检，只有确认完成才向页面报告成功。卸载成功后页面立即切换为“安装”，并提示重载或重启 IDE 以清除已加载的活动栏和扩展详情界面。
 
 2026-07-17 本机端到端复验：先关闭旧缺陷误启动的 `cli.js - Cursor` 窗口，再从新桌面端执行 Cursor 安装与卸载。安装成功后 Cursor 保持 `isRunning=false`；卸载过程中按钮显示“卸载中”，完成后切换为“安装”，Cursor 仍保持未运行且没有新增 `cli.js` 窗口。CLI 查询测试前后 IDE 进程数一致。
 

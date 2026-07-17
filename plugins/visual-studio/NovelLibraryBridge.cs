@@ -6,12 +6,14 @@ using System.Text;
 using System.Web.Script.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace NovelLibrary.VisualStudio;
 
 internal sealed class NovelLibraryBridge
 {
     private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+    private static string InstalledBridgePath;
 
     private sealed class BridgeConfig
     {
@@ -28,12 +30,49 @@ internal sealed class NovelLibraryBridge
     private static (int Port, string Token) ReadConfig()
     {
         var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var payload = File.ReadAllText(Path.Combine(root, "NovelLibrary", "bridge.json"));
+        var legacyDirectory = Path.Combine(root, "NovelLibrary");
+        var legacyBridge = Path.Combine(legacyDirectory, "bridge.json");
+        var bridgePath = FindInstalledBridge() ?? legacyBridge;
+        var payload = File.ReadAllText(bridgePath);
         var config = CreateSerializer().Deserialize<BridgeConfig>(payload)
             ?? throw new InvalidOperationException("Bridge config was empty");
         if (config.Port <= 0 || string.IsNullOrWhiteSpace(config.Token))
             throw new InvalidOperationException("Bridge config is invalid");
         return (config.Port, config.Token);
+    }
+
+    private static string FindInstalledBridge()
+    {
+        if (!string.IsNullOrWhiteSpace(InstalledBridgePath) && File.Exists(InstalledBridgePath))
+            return InstalledBridgePath;
+        foreach (var processName in new[] { "novel-library-desktop", "NovelLibrary" })
+        {
+            foreach (var process in Process.GetProcessesByName(processName))
+            {
+                try
+                {
+                    var executable = process.MainModule?.FileName;
+                    if (!string.IsNullOrWhiteSpace(executable))
+                    {
+                        var candidate = Path.Combine(Path.GetDirectoryName(executable)!, "bridge.json");
+                        if (File.Exists(candidate))
+                        {
+                            InstalledBridgePath = candidate;
+                            return candidate;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Process path access can be denied; continue with the other candidates.
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            }
+        }
+        return null;
     }
 
     public async Task<T> GetAsync<T>(string route, CancellationToken cancellationToken = default)

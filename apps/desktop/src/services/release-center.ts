@@ -1,12 +1,17 @@
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { ref } from 'vue'
+import { reactive, ref, toRefs } from 'vue'
 import { relaunch } from '@tauri-apps/plugin-process'
 import localManifest from '../../../../releases/releases.json'
 
 const REMOTE_MANIFEST_URL = 'https://raw.githubusercontent.com/kengqin/book/main/releases/releases.json'
+const OFFICIAL_REPOSITORY = 'kengqin/book'
 const AUTO_CHECK_KEY = 'novel-library:auto-check-updates'
+const BACKGROUND_CHECK_KEY = 'novel-library:background-check-updates'
+const AUTO_DOWNLOAD_KEY = 'novel-library:auto-download-updates'
+const BACKGROUND_CHECK_INTERVAL = 6 * 60 * 60 * 1000
+const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 
 export interface ReleaseSection {
   title: string
@@ -20,10 +25,13 @@ export interface ReleaseEntry {
   channel: 'stable' | 'preview'
   databaseSchema: number
   published: boolean
+  minimumSupportedVersion: string
+  requiresBackup: boolean
   releaseUrl: string
   installerUrl: string
   sha256: string
   sections: ReleaseSection[]
+  upgradeNotes: string[]
 }
 
 export interface ReleaseManifest {
@@ -47,24 +55,101 @@ interface DownloadProgressEvent {
   message?: string
 }
 
-export type UpdateStage = 'idle' | 'available' | 'downloading' | 'cancelling' | 'downloaded' | 'installing' | 'error'
+export type UpdateStage =
+  | 'idle'
+  | 'available'
+  | 'downloading'
+  | 'cancelling'
+  | 'downloaded'
+  | 'installing'
+  | 'published-but-not-ready'
+  | 'manifest-error'
+  | 'version-mismatch'
+  | 'signature-error'
+  | 'download-error'
+  | 'install-error'
+  | 'relaunch-error'
+
+interface UpdateTaskState {
+  stage: UpdateStage
+  version: string
+  progress: number
+  message: string
+  error: string
+  downloadedBytes: number
+  totalBytes: number
+  retryCount: number
+}
 
 export const availableUpdate = ref<AvailableUpdate | null>(null)
 export const updateChecking = ref(false)
-export const updateStage = ref<UpdateStage>('idle')
-export const updateProgress = ref(0)
-export const updateMessage = ref('')
-export const updateError = ref('')
 export const publishedUpdateVersion = ref<string | null>(null)
+export const updateCompatibilityNote = ref('')
+export const updateTask = reactive<UpdateTaskState>({
+  stage: 'idle',
+  version: '',
+  progress: 0,
+  message: '',
+  error: '',
+  downloadedBytes: 0,
+  totalBytes: 0,
+  retryCount: 0
+})
+export const {
+  stage: updateStage,
+  progress: updateProgress,
+  message: updateMessage,
+  error: updateError,
+  downloadedBytes: updateDownloadedBytes,
+  totalBytes: updateTotalBytes
+} = toRefs(updateTask)
 
+let targetRelease: ReleaseEntry | null = null
 let updateEventListener: Promise<UnlistenFn> | undefined
+let backgroundCheckTimer: number | undefined
 
-function describeUpdateError(cause: unknown) {
-  const detail = cause instanceof Error ? cause.message : String(cause)
-  if (/valid release JSON|404|failed to fetch|network|connection/i.test(detail)) {
-    return '暂时无法连接更新服务，请稍后再试'
+function errorDetail(cause: unknown) {
+  return cause instanceof Error ? cause.message : String(cause)
+}
+
+function userMessageFor(stage: UpdateStage) {
+  const messages: Partial<Record<UpdateStage, string>> = {
+    'manifest-error': '暂时无法连接更新服务，请稍后重试',
+    'published-but-not-ready': '新版已发布，更新组件正在同步',
+    'version-mismatch': '更新信息尚未同步完成，请稍后重试',
+    'signature-error': '更新包校验失败，已阻止安装',
+    'download-error': '下载失败，可重试或打开历史版本页面',
+    'install-error': '更新包已下载，但安装失败，可重新安装',
+    'relaunch-error': '更新已安装，请手动重启应用'
   }
-  return `检查更新失败：${detail}`
+  return messages[stage] || '更新操作失败，请稍后重试'
+}
+
+function setFailure(stage: UpdateStage) {
+  updateTask.stage = stage
+  updateTask.error = userMessageFor(stage)
+  updateTask.message = ''
+  updateTask.retryCount += 1
+  console.error('application-update-error', {
+    stage,
+    version: updateTask.version,
+    manifestUrl: updateTask.version
+      ? `https://github.com/${OFFICIAL_REPOSITORY}/releases/download/v${updateTask.version}/latest-windows-x86_64-nsis.json`
+      : REMOTE_MANIFEST_URL,
+    installerUrl: targetRelease?.installerUrl || '',
+    error: stage,
+    retryCount: updateTask.retryCount
+  })
+}
+
+function classifyFailure(cause: unknown, fallback: UpdateStage): UpdateStage {
+  const detail = errorDetail(cause)
+  if (/VERSION_MISMATCH/i.test(detail)) return 'version-mismatch'
+  if (/SIGNATURE_ERROR|DOWNLOAD_URL_NOT_ALLOWED|signature|minisign/i.test(detail)) return 'signature-error'
+  if (/MANIFEST_NOT_READY|valid release JSON|404|failed to fetch|network|connection/i.test(detail)) {
+    return 'published-but-not-ready'
+  }
+  return fallback
 }
 
 export function isAutoCheckEnabled() {
@@ -75,15 +160,92 @@ export function setAutoCheckEnabled(enabled: boolean) {
   localStorage.setItem(AUTO_CHECK_KEY, String(enabled))
 }
 
-function isReleaseManifest(value: unknown): value is ReleaseManifest {
+export function isBackgroundCheckEnabled() {
+  return localStorage.getItem(BACKGROUND_CHECK_KEY) === 'true'
+}
+
+export function setBackgroundCheckEnabled(enabled: boolean) {
+  localStorage.setItem(BACKGROUND_CHECK_KEY, String(enabled))
+  configureBackgroundUpdateChecks()
+}
+
+export function isAutoDownloadEnabled() {
+  return localStorage.getItem(AUTO_DOWNLOAD_KEY) === 'true'
+}
+
+export function setAutoDownloadEnabled(enabled: boolean) {
+  localStorage.setItem(AUTO_DOWNLOAD_KEY, String(enabled))
+}
+
+export function configureBackgroundUpdateChecks() {
+  if (backgroundCheckTimer !== undefined) window.clearInterval(backgroundCheckTimer)
+  backgroundCheckTimer = undefined
+  if (isBackgroundCheckEnabled()) {
+    backgroundCheckTimer = window.setInterval(() => void checkForUpdates(true), BACKGROUND_CHECK_INTERVAL)
+  }
+}
+
+function parseSemver(value: string) {
+  const normalized = value.replace(/^v/, '')
+  const match = normalized.match(SEMVER_PATTERN)
+  if (!match) throw new Error(`无效版本号：${value}`)
+  return {
+    core: match.slice(1, 4).map(Number),
+    prerelease: match[4]?.split('.') || []
+  }
+}
+
+export function compareVersions(left: string, right: string) {
+  const a = parseSemver(left)
+  const b = parseSemver(right)
+  for (let index = 0; index < 3; index += 1) {
+    if (a.core[index] !== b.core[index]) return a.core[index] - b.core[index]
+  }
+  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+    return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length === 0 ? 1 : -1
+  }
+  for (let index = 0; index < Math.max(a.prerelease.length, b.prerelease.length); index += 1) {
+    const leftPart = a.prerelease[index]
+    const rightPart = b.prerelease[index]
+    if (leftPart === undefined || rightPart === undefined) return leftPart === undefined ? -1 : 1
+    if (leftPart === rightPart) continue
+    const leftNumeric = /^\d+$/.test(leftPart)
+    const rightNumeric = /^\d+$/.test(rightPart)
+    if (leftNumeric && rightNumeric) return Number(leftPart) - Number(rightPart)
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1
+    return leftPart.localeCompare(rightPart)
+  }
+  return 0
+}
+
+export function isReleaseManifest(value: unknown): value is ReleaseManifest {
   if (!value || typeof value !== 'object') return false
   const manifest = value as Partial<ReleaseManifest>
-  return manifest.schemaVersion === 1 && typeof manifest.latest === 'string' && Array.isArray(manifest.releases)
+  if (manifest.schemaVersion !== 1 || manifest.repository !== OFFICIAL_REPOSITORY || !manifest.latest || !Array.isArray(manifest.releases)) return false
+  try {
+    parseSemver(manifest.latest)
+  } catch {
+    return false
+  }
+  const versions = new Set<string>()
+  for (const release of manifest.releases) {
+    if (!release || typeof release !== 'object') return false
+    try {
+      parseSemver(release.version)
+      parseSemver(release.minimumSupportedVersion)
+    } catch {
+      return false
+    }
+    if (versions.has(release.version) || typeof release.published !== 'boolean' || typeof release.requiresBackup !== 'boolean') return false
+    if (!Array.isArray(release.sections) || !release.releaseUrl || !release.installerUrl) return false
+    versions.add(release.version)
+  }
+  return manifest.releases[0]?.version === manifest.latest && manifest.releases[0]?.published === true
 }
 
 export async function loadReleaseManifest(): Promise<{ manifest: ReleaseManifest; remote: boolean }> {
   try {
-    const response = await fetch(REMOTE_MANIFEST_URL + '?t=' + Date.now(), { cache: 'no-store' })
+    const response = await fetch(`${REMOTE_MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const manifest: unknown = await response.json()
     if (!isReleaseManifest(manifest)) throw new Error('版本清单格式无效')
@@ -100,27 +262,29 @@ export async function getCurrentVersion() {
 export function initializeUpdateEvents() {
   if (!updateEventListener) {
     updateEventListener = listen<DownloadProgressEvent>('application-update-download', ({ payload }) => {
+      updateTask.downloadedBytes = payload.downloaded
+      updateTask.totalBytes = payload.total || updateTask.totalBytes
       if (payload.status === 'started') {
-        updateStage.value = 'downloading'
-        updateProgress.value = 0
-        updateMessage.value = `正在下载 v${availableUpdate.value?.version || ''}`
+        updateTask.stage = 'downloading'
+        updateTask.progress = 0
+        updateTask.message = `正在下载 v${availableUpdate.value?.version || updateTask.version}`
       } else if (payload.status === 'downloading') {
-        updateStage.value = 'downloading'
+        updateTask.stage = 'downloading'
         if (payload.total && payload.total > 0) {
-          updateProgress.value = Math.min(100, Math.round((payload.downloaded / payload.total) * 100))
+          updateTask.progress = Math.min(100, Math.round((payload.downloaded / payload.total) * 100))
         }
       } else if (payload.status === 'downloaded') {
-        updateStage.value = 'downloaded'
-        updateProgress.value = 100
-        updateMessage.value = '下载完成，等待安装'
+        updateTask.stage = 'downloaded'
+        updateTask.progress = 100
+        updateTask.message = '下载完成，等待安装'
       } else if (payload.status === 'cancelled') {
-        updateStage.value = 'available'
-        updateProgress.value = 0
-        updateMessage.value = '下载已取消'
+        updateTask.stage = 'available'
+        updateTask.progress = 0
+        updateTask.downloadedBytes = 0
+        updateTask.totalBytes = 0
+        updateTask.message = '下载已取消'
       } else if (payload.status === 'error') {
-        updateStage.value = 'error'
-        updateError.value = describeUpdateError(payload.message || '下载失败')
-        updateMessage.value = ''
+        setFailure(classifyFailure(payload.message || '', 'download-error'))
       }
     })
   }
@@ -128,99 +292,123 @@ export function initializeUpdateEvents() {
 }
 
 export async function checkForUpdates(silent = false) {
-  if (updateChecking.value || ['downloading', 'cancelling', 'downloaded', 'installing'].includes(updateStage.value)) return availableUpdate.value
+  const busy = ['downloading', 'cancelling', 'downloaded', 'installing'].includes(updateTask.stage)
+  if (updateChecking.value || busy) return availableUpdate.value
   updateChecking.value = true
-  updateError.value = ''
-  if (!silent) updateMessage.value = '正在检查更新...'
+  updateTask.error = ''
+  if (!silent) updateTask.message = '正在检查更新...'
   let expectedVersion: string | null = null
   try {
     const currentVersion = await getCurrentVersion()
-    const { manifest } = await loadReleaseManifest()
+    const { manifest, remote } = await loadReleaseManifest()
     expectedVersion = compareVersions(manifest.latest, currentVersion) > 0 ? manifest.latest : null
-    const update = await invoke<AvailableUpdate | null>('check_application_update', {
-      expectedVersion
-    })
+    targetRelease = expectedVersion ? manifest.releases.find((release) => release.version === expectedVersion) || null : null
+    updateCompatibilityNote.value = targetRelease && compareVersions(currentVersion, targetRelease.minimumSupportedVersion) < 0
+      ? `当前版本低于直接升级基线 v${targetRelease.minimumSupportedVersion}，建议先导出完整备份。`
+      : targetRelease?.requiresBackup
+        ? '此版本升级前需要先导出完整备份。'
+        : ''
+
+    if (!expectedVersion) {
+      availableUpdate.value = null
+      publishedUpdateVersion.value = null
+      updateTask.version = ''
+      if (remote) {
+        updateTask.stage = 'idle'
+        updateTask.message = '当前已是最新版本'
+      } else {
+        setFailure('manifest-error')
+      }
+      return null
+    }
+
+    updateTask.version = expectedVersion
+    const update = await invoke<AvailableUpdate | null>('check_application_update', { expectedVersion })
+    if (update && compareVersions(update.version, expectedVersion) !== 0) {
+      throw new Error(`VERSION_MISMATCH: expected ${expectedVersion}, received ${update.version}`)
+    }
     availableUpdate.value = update
-    updateStage.value = update ? 'available' : 'idle'
-    publishedUpdateVersion.value = !update && expectedVersion ? expectedVersion : null
-    updateMessage.value = update
-      ? '发现新版本 ' + update.version
-      : expectedVersion
-        ? 'v' + expectedVersion + ' 已发布，自动更新信息正在同步'
-        : '当前已是最新版本'
+    publishedUpdateVersion.value = update ? null : expectedVersion
+    if (update) {
+      updateTask.stage = 'available'
+      updateTask.message = `发现新版本 ${update.version}`
+      updateTask.error = ''
+      if (silent && isAutoDownloadEnabled() && !targetRelease?.requiresBackup && !updateCompatibilityNote.value) {
+        void downloadAvailableUpdate(true)
+      }
+    } else {
+      setFailure('published-but-not-ready')
+    }
     return update
   } catch (cause) {
+    availableUpdate.value = null
     publishedUpdateVersion.value = expectedVersion
-    updateStage.value = 'idle'
-    updateMessage.value = ''
-    updateError.value = describeUpdateError(cause)
+    setFailure(classifyFailure(cause, expectedVersion ? 'published-but-not-ready' : 'manifest-error'))
     return null
   } finally {
     updateChecking.value = false
   }
 }
 
-export async function downloadAvailableUpdate() {
-  if (!availableUpdate.value || ['downloading', 'cancelling', 'downloaded', 'installing'].includes(updateStage.value)) return
+export async function downloadAvailableUpdate(automatic = false) {
+  const blocked = ['downloading', 'cancelling', 'downloaded', 'installing'].includes(updateTask.stage)
+  if (!availableUpdate.value || blocked) return
+  if (targetRelease?.requiresBackup) {
+    if (automatic || !window.confirm('该版本要求升级前导出完整备份。确认已完成备份并继续下载吗？')) return
+  }
   await initializeUpdateEvents()
-  updateStage.value = 'downloading'
-  updateProgress.value = 0
-  updateError.value = ''
-  updateMessage.value = `正在下载 v${availableUpdate.value.version}`
+  updateTask.stage = 'downloading'
+  updateTask.progress = 0
+  updateTask.downloadedBytes = 0
+  updateTask.totalBytes = 0
+  updateTask.error = ''
+  updateTask.message = `正在下载 v${availableUpdate.value.version}`
   try {
     await invoke<boolean>('download_application_update')
   } catch (cause) {
-    updateStage.value = 'error'
-    updateError.value = describeUpdateError(cause)
-    updateMessage.value = ''
+    setFailure(classifyFailure(cause, 'download-error'))
   }
 }
 
 export async function cancelUpdateDownload() {
-  if (updateStage.value !== 'downloading') return
-  updateStage.value = 'cancelling'
-  updateMessage.value = '正在取消下载...'
+  if (updateTask.stage !== 'downloading') return
+  updateTask.stage = 'cancelling'
+  updateTask.message = '正在取消下载...'
   try {
     await invoke<boolean>('cancel_application_update_download')
-  } catch (cause) {
-    updateStage.value = 'error'
-    updateError.value = describeUpdateError(cause)
+  } catch {
+    setFailure('download-error')
   }
 }
 
 export async function installDownloadedUpdate() {
-  if (updateStage.value !== 'downloaded') return
-  updateStage.value = 'installing'
-  updateError.value = ''
-  updateMessage.value = '正在安装更新...'
+  if (!['downloaded', 'install-error'].includes(updateTask.stage)) return
+  updateTask.stage = 'installing'
+  updateTask.error = ''
+  updateTask.message = '正在安装更新...'
   try {
     await invoke('install_downloaded_application_update')
-    updateMessage.value = '安装完成，正在重启...'
+  } catch {
+    setFailure('install-error')
+    updateTask.message = '更新已下载，可重新安装'
+    return
+  }
+  updateTask.message = '安装完成，正在重启...'
+  try {
     await relaunch()
-  } catch (cause) {
-    updateStage.value = 'downloaded'
-    updateError.value = describeUpdateError(cause)
-    updateMessage.value = '更新已下载，可重新安装'
+  } catch {
+    setFailure('relaunch-error')
   }
 }
 
 export async function dismissUpdate() {
+  if (['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateTask.stage)) return
   await invoke('dismiss_application_update')
   availableUpdate.value = null
   publishedUpdateVersion.value = null
-  updateStage.value = 'idle'
-  updateProgress.value = 0
-  updateMessage.value = ''
-  updateError.value = ''
-}
-
-export function compareVersions(left: string, right: string) {
-  const normalize = (value: string) => value.replace(/^v/, '').split('.').map((part) => Number.parseInt(part, 10) || 0)
-  const a = normalize(left)
-  const b = normalize(right)
-  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
-    const difference = (a[index] ?? 0) - (b[index] ?? 0)
-    if (difference !== 0) return difference
-  }
-  return 0
+  targetRelease = null
+  updateCompatibilityNote.value = ''
+  Object.assign(updateTask, {
+    stage: 'idle', version: '', progress: 0, message: '', error: '', downloadedBytes: 0, totalBytes: 0, retryCount: 0
+  })
 }

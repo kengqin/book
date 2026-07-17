@@ -6,10 +6,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
-if (-not $Output) { $Output = Join-Path $Root 'plugins\visual-studio\bin\novel-library-visual-studio-0.4.1.vsix' }
 
 $projectRoot = Join-Path $Root 'plugins\visual-studio'
-$artifact = Join-Path $projectRoot 'bin\novel-library-visual-studio-0.4.1.vsix'
+$projectFile = Join-Path $projectRoot 'NovelLibrary.VisualStudio.csproj'
+$projectXml = [xml](Get-Content -Raw -LiteralPath $projectFile)
+$version = [string]$projectXml.Project.PropertyGroup.Version
+if (-not $version -or $version -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+  throw "Visual Studio plugin version is invalid: $version"
+}
+if (-not $Output) { $Output = Join-Path $Root "plugins\visual-studio\bin\novel-library-visual-studio-$version.vsix" }
+
+$artifact = Join-Path $projectRoot "bin\novel-library-visual-studio-$version.vsix"
 if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
   throw "Official Visual Studio VSIX is missing. Build NovelLibrary.VisualStudio.csproj first: $artifact"
 }
@@ -33,7 +40,7 @@ try {
   $manifestReader = [System.IO.StreamReader]::new($manifestEntry.Open())
   try { [xml]$manifest = $manifestReader.ReadToEnd() } finally { $manifestReader.Dispose() }
   $identity = $manifest.PackageManifest.Metadata.Identity
-  if ($identity.Id -ne 'NovelLibrary.VisualStudio' -or $identity.Version -ne '0.4.1') {
+  if ($identity.Id -ne 'NovelLibrary.VisualStudio' -or $identity.Version -ne $version) {
     throw "Unexpected Visual Studio extension identity: $($identity.Id)@$($identity.Version)"
   }
 

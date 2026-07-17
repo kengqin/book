@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag, for example v0.1.0
+        description: Existing version tag, for example v0.4.0
         required: true
         type: string
 
@@ -15,20 +15,101 @@ permissions:
   contents: write
 
 concurrency:
-  group: desktop-release-${{ github.ref_name || inputs.tag }}
+  group: desktop-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      pub_date: ${{ steps.staged.outputs.pub_date }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Resolve and validate release
+        id: release
+        env:
+          REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG="$REQUESTED_TAG"
+          VERSION="${TAG#v}"
+          if [[ "$TAG" != "v$VERSION" ]]; then echo "Tag must start with v" >&2; exit 1; fi
+          git fetch origin main develop --no-tags
+          tag_commit=$(git rev-parse "$TAG^{commit}")
+          git merge-base --is-ancestor "$tag_commit" origin/main || {
+            echo "Release Tag must point to a commit merged into main" >&2
+            exit 1
+          }
+          read -ra parents <<<"$(git show -s --format=%P "$tag_commit")"
+          if [[ "${#parents[@]}" != "2" ]] || ! git merge-base --is-ancestor "${parents[1]}" origin/develop; then
+            echo "Release Tag must point to the reviewed develop -> main merge" >&2
+            exit 1
+          fi
+          npm run release:validate -- --tag="$TAG" --baseline-ref="${TAG}^1"
+          node scripts/generate-release-notes.mjs --tag="$TAG" --output=release-notes.md
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create or reuse staged Release
+        id: staged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if state=$(gh release view "$TAG" --json isDraft,isPrerelease,createdAt 2>/dev/null); then
+            draft=$(jq -r '.isDraft' <<<"$state")
+            prerelease=$(jq -r '.isPrerelease' <<<"$state")
+            if [[ "$draft" != "true" && "$prerelease" != "true" ]]; then
+              echo "v${TAG#v} is already a formal Release and cannot be overwritten" >&2
+              exit 1
+            fi
+            gh release edit "$TAG" --title "NovelLibrary $TAG" --notes-file release-notes.md
+            pub_date=$(jq -r '.createdAt' <<<"$state")
+          else
+            gh release create "$TAG" --verify-tag --draft --title "NovelLibrary $TAG" --notes-file release-notes.md
+            pub_date=$(gh release view "$TAG" --json createdAt --jq '.createdAt')
+          fi
+          echo "pub_date=$pub_date" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve previous legacy manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          previous_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')
+          if [[ -z "$previous_tag" || "$previous_tag" == "$TAG" ]]; then
+            echo "A distinct previous Latest Release is required to protect legacy clients" >&2
+            exit 1
+          fi
+          gh release download "$previous_tag" --pattern latest.json --output legacy-latest.json
+          test -s legacy-latest.json
+          gh release upload "$TAG" legacy-latest.json --clobber
+
+  build-windows:
+    needs: prepare-release
     runs-on: windows-latest
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ needs.prepare-release.outputs.tag }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -59,9 +140,11 @@ jobs:
       - name: Package VS Code and Cursor plugin
         shell: pwsh
         run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $vscodeFile = ($manifest.plugins | Where-Object id -eq 'vscode').file
           New-Item -ItemType Directory -Force apps/desktop/src-tauri/resources/ide-plugins | Out-Null
           Push-Location plugins/vscode
-          npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out ../../apps/desktop/src-tauri/resources/ide-plugins/novel-library-reader-0.4.4.vsix
+          npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out "../../apps/desktop/src-tauri/resources/ide-plugins/$vscodeFile"
           Pop-Location
 
       - name: Build JetBrains plugin
@@ -71,118 +154,163 @@ jobs:
       - name: Copy JetBrains plugin into desktop resources
         shell: pwsh
         run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $intellijFile = ($manifest.plugins | Where-Object id -eq 'intellij').file
           $plugin = Get-ChildItem plugins/intellij/build/distributions/*.zip | Select-Object -First 1
           if (-not $plugin) { throw 'JetBrains plugin ZIP not found' }
-          Copy-Item $plugin.FullName apps/desktop/src-tauri/resources/ide-plugins/novel-library-intellij-0.4.2.zip
+          Copy-Item $plugin.FullName (Join-Path apps/desktop/src-tauri/resources/ide-plugins $intellijFile)
 
       - name: Build Visual Studio plugin
         shell: pwsh
         run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $visualStudioFile = ($manifest.plugins | Where-Object id -eq 'visual-studio').file
           dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
           dotnet build plugins/visual-studio/NovelLibrary.VisualStudio.csproj --configuration Release --no-restore
           ./scripts/package-visual-studio-plugin.ps1 -Root $PWD
-          $plugin = 'plugins/visual-studio/bin/novel-library-visual-studio-0.4.1.vsix'
+          $plugin = Join-Path 'plugins/visual-studio/bin' $visualStudioFile
           if (-not (Test-Path $plugin)) { throw 'Visual Studio VSIX not found' }
-          Copy-Item $plugin apps/desktop/src-tauri/resources/ide-plugins/novel-library-visual-studio-0.4.1.vsix
+          Copy-Item $plugin (Join-Path apps/desktop/src-tauri/resources/ide-plugins $visualStudioFile)
 
       - name: Verify bundled IDE plugins
         shell: pwsh
         run: |
-          $required = @(
-            'novel-library-reader-0.4.4.vsix',
-            'novel-library-intellij-0.4.2.zip',
-            'novel-library-visual-studio-0.4.1.vsix'
-          )
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $required = @($manifest.plugins | ForEach-Object file)
           foreach ($file in $required) {
-            $path = Join-Path apps/desktop/src-tauri/resources/ide-plugins $file
-            if (-not (Test-Path $path)) { throw "Missing bundled IDE plugin: $file" }
+            if (-not (Test-Path "apps/desktop/src-tauri/resources/ide-plugins/$file")) { throw "Missing bundled IDE plugin: $file" }
           }
 
-      - name: Test
-        run: npm test
+      - name: Test and validate
+        run: |
+          npm test
+          npm run desktop:web:build
+          cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+          npm run release:validate -- --tag=${{ needs.prepare-release.outputs.tag }}
 
-      - name: Validate desktop build
-        run: npm run desktop:web:build
+      - name: Build signed NSIS installer
+        run: npm run desktop:build
 
-      - name: Validate release metadata
+      - name: Generate target and compatibility manifests
+        id: assets
         shell: pwsh
-        run: npm run release:validate -- --tag=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-
-      - name: Build and publish GitHub Release
-        id: tauri
-        uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: apps/desktop
-          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          releaseName: NovelLibrary ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          releaseBody: 正在生成完整版本日志。
-          releaseDraft: false
-          prerelease: false
-          uploadUpdaterJson: false
-          updaterJsonPreferNsis: true
-
-      - name: Create updater metadata
-        id: updater
-        shell: pwsh
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          PUB_DATE: ${{ needs.prepare-release.outputs.pub_date }}
         run: |
-          $tag = "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
-          $version = $tag.TrimStart('v')
-          $installer = Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
-          if (-not $installer) { throw "NSIS installer not found" }
-          $signatureFile = "$($installer.FullName).sig"
-          if (-not (Test-Path $signatureFile)) { throw "Updater signature not found" }
-          $signature = (Get-Content -Raw $signatureFile).Trim()
-          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/$($installer.Name)"
-          $releaseManifest = Get-Content -Raw "releases/releases.json" | ConvertFrom-Json
-          $release = $releaseManifest.releases | Where-Object { $_.version -eq $version } | Select-Object -First 1
-          if (-not $release) { throw "Release metadata not found for $tag" }
-          $notes = @($release.sections | ForEach-Object { "$($_.title)：$($_.items -join '；')" }) -join "`n"
-          $platform = [ordered]@{ signature = $signature; url = $downloadUrl }
-          $metadata = [ordered]@{
-            version = $version
-            notes = "$($release.title)`n`n$notes"
-            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            platforms = [ordered]@{
-              "windows-x86_64" = $platform
-              "windows-x86_64-nsis" = $platform
-            }
+          $installer = Get-ChildItem 'apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer not found' }
+          $signature = "$($installer.FullName).sig"
+          if (-not (Test-Path $signature)) { throw 'Updater signature not found' }
+          $target = Join-Path $PWD 'latest-windows-x86_64-nsis.json'
+          $latest = Join-Path $PWD 'latest.json'
+          $checksum = "$($installer.FullName).sha256"
+          npm run release:manifest -- --version=$env:VERSION --manifest=releases/releases.json --installer="$($installer.FullName)" --signature="$signature" --output="$target" --latest-output="$latest" --checksum-output="$checksum" --pub-date=$env:PUB_DATE
+          "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+          "signature=$signature" >> $env:GITHUB_OUTPUT
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+          "target=$target" >> $env:GITHUB_OUTPUT
+          "latest=$latest" >> $env:GITHUB_OUTPUT
+
+      - name: Upload staged Release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          gh release upload $env:TAG --clobber "${{ steps.assets.outputs.installer }}" "${{ steps.assets.outputs.signature }}" "${{ steps.assets.outputs.checksum }}" "${{ steps.assets.outputs.target }}" apps/desktop/src-tauri/resources/ide-plugins/*.vsix apps/desktop/src-tauri/resources/ide-plugins/*.zip
+
+      - name: Store compatibility manifest for finalize
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-manifest
+          path: ${{ steps.assets.outputs.latest }}
+          if-no-files-found: error
+
+  upload-checksums:
+    needs: [prepare-release, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download staged installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          mkdir assets
+          gh release download "$TAG" --dir assets --pattern '*-setup.exe'
+          test -n "$(find assets -maxdepth 1 -name '*-setup.exe' -print -quit)"
+
+      - name: Generate and upload SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          (cd assets && sha256sum *-setup.exe) > SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber
+
+  finalize-release:
+    needs: [prepare-release, build-windows, upload-checksums]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Download compatibility manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: latest-manifest
+          path: finalize
+
+      - name: Publish prerelease and verify fixed Tag URLs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --draft=false --prerelease=true --latest=false
+          for attempt in {1..12}; do
+            if npm run release:verify -- --repository="$GITHUB_REPOSITORY" --tag="$TAG" --version="$VERSION" --manifest=releases/releases.json --expected-state=prerelease --verify-latest=false; then
+              break
+            fi
+            if [[ "$attempt" == "12" ]]; then exit 1; fi
+            sleep 10
+          done
+
+      - name: Upload final legacy manifest and promote Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test -s finalize/latest.json
+          gh release upload "$TAG" finalize/latest.json --clobber
+          gh release edit "$TAG" --prerelease=false --latest
+
+      - name: Verify final Latest URLs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          rollback() {
+            echo 'Final verification failed; demoting the release to protect legacy clients.' >&2
+            gh release edit "$TAG" --prerelease --latest=false || true
           }
-          $latestFile = Join-Path $PWD "latest.json"
-          $metadata | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 $latestFile
-          "file=$latestFile" >> $env:GITHUB_OUTPUT
-
-      - name: Create installer checksum
-        id: checksum
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
-          if (-not $installer) { throw "NSIS installer not found" }
-          $checksumFile = "$($installer.FullName).sha256"
-          $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
-          "$hash  $($installer.Name)" | Set-Content -Encoding ascii $checksumFile
-          "file=$checksumFile" >> $env:GITHUB_OUTPUT
-          "hash=$hash" >> $env:GITHUB_OUTPUT
-          "installer_name=$($installer.Name)" >> $env:GITHUB_OUTPUT
-
-      - name: Generate release notes
-        id: notes
-        shell: pwsh
-        run: |
-          $tag = "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
-          $notesFile = Join-Path $PWD "release-notes.md"
-          node scripts/generate-release-notes.mjs --tag=$tag --output=$notesFile --sha256=${{ steps.checksum.outputs.hash }} --installer-name=${{ steps.checksum.outputs.installer_name }}
-          "file=$notesFile" >> $env:GITHUB_OUTPUT
-
-      - name: Upload installer checksum
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          name: NovelLibrary ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          body_path: ${{ steps.notes.outputs.file }}
-          files: |
-            ${{ steps.checksum.outputs.file }}
-            ${{ steps.updater.outputs.file }}
-            apps/desktop/src-tauri/resources/ide-plugins/*.vsix
-            apps/desktop/src-tauri/resources/ide-plugins/*.zip
+          trap rollback ERR
+          for attempt in {1..12}; do
+            if npm run release:verify -- --repository="$GITHUB_REPOSITORY" --tag="$TAG" --version="$VERSION" --manifest=releases/releases.json --expected-state=stable --verify-latest=true; then
+              break
+            fi
+            if [[ "$attempt" == "12" ]]; then exit 1; fi
+            sleep 10
+          done
+          trap - ERR

@@ -52,8 +52,9 @@ button { letter-spacing: 0; }
 .empty-library p { margin: 0; font-size: 12px; }
 .book-list { display: grid; margin-top: 22px; border-top: 1px solid #d7dbd4; }
 .book-list article { min-height: 72px; display: grid; grid-template-columns: 40px minmax(180px,1fr) 80px 100px 150px 84px; align-items: center; gap: 16px; border-bottom: 1px solid #d7dbd4; }
-.book-seal { width: 38px; height: 48px; display: grid; place-items: center; padding: 0; color: #f3dfac; border: 0; background: #263631; font-family: SimSun, serif; cursor: pointer; }
-.book-seal img { width: 100%; height: 100%; object-fit: cover; }
+.book-seal { width: 38px; height: 48px; min-width: 38px; min-height: 48px; display: grid; place-items: center; overflow: hidden; padding: 0; color: #f3dfac; border: 0; background: #263631; font-family: SimSun, serif; cursor: pointer; }
+.book-seal--image { background: transparent; }
+.book-seal img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
 .format-badge { display: inline-block; margin-right: 4px; padding: 1px 4px; color: #315f55; border: 1px solid #9cb7ae; font-size: 8px; line-height: 1.4; }
 .book-copy { display: grid; gap: 4px; }
 .book-copy { padding: 0; text-align: left; border: 0; background: transparent; cursor: pointer; }
@@ -263,8 +264,9 @@ button { letter-spacing: 0; }
 
 .book-detail-view > .text-command { margin-bottom: 20px; }
 .book-detail-header { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 30px; padding: 30px; color: var(--book-text); background: var(--book-bg); }
-.book-detail-seal { width: 150px; aspect-ratio: 3 / 4; display: grid; place-items: center; color: var(--book-accent); border: 1px solid color-mix(in srgb, var(--book-text) 24%, transparent); font-family: SimSun, serif; font-size: 58px; }
-.book-detail-seal img { width: 100%; height: 100%; object-fit: cover; }
+.book-detail-seal { width: 150px; min-width: 150px; aspect-ratio: 3 / 4; display: grid; place-items: center; overflow: hidden; color: var(--book-accent); border: 1px solid color-mix(in srgb, var(--book-text) 24%, transparent); font-family: SimSun, serif; font-size: 58px; }
+.book-detail-seal--image { background: transparent; }
+.book-detail-seal img { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
 .book-detail-header p { margin: 2px 0 10px; color: var(--book-accent); font-size: 10px; font-weight: 800; }
 .book-detail-header h1 { margin: 0; font-family: "Noto Serif SC", SimSun, serif; font-size: 34px; letter-spacing: 0; }
 .book-detail-header > div > span { display: block; margin-top: 5px; opacity: .72; font-size: 12px; }

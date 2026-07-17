@@ -2,7 +2,7 @@
   "name": "novel-library-reader",
   "displayName": "小说书库阅读器",
   "description": "在 VS Code 和 Cursor 代码行内阅读本地小说，并与小说书库桌面端同步。",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "publisher": "novel-library",
   "license": "MIT",
   "engines": { "vscode": ">=1.85.0" },

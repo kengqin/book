@@ -20,12 +20,21 @@ jobs:
       - run: npm run plugins:validate
       - run: node --check plugins/vscode/extension.js
       - run: node --check plugins/vscode/bridge.js
-      - run: npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out novel-library-reader-0.4.4.vsix
-        working-directory: plugins/vscode
+      - name: Read plugin artifact names
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          foreach ($plugin in $manifest.plugins) { "$($plugin.id.ToUpperInvariant().Replace('-', '_'))_FILE=$($plugin.file)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
+      - name: Package VS Code / Cursor plugin
+        shell: pwsh
+        run: |
+          Push-Location plugins/vscode
+          npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out $env:VSCODE_FILE
+          Pop-Location
       - uses: actions/upload-artifact@v4
         with:
           name: novel-library-vscode
-          path: plugins/vscode/novel-library-reader-0.4.4.vsix
+          path: plugins/vscode/${{ env.VSCODE_FILE }}
 
   build-intellij:
     runs-on: windows-latest
@@ -36,12 +45,17 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Read plugin artifact name
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          "INTELLIJ_FILE=$(($manifest.plugins | Where-Object id -eq 'intellij').file)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - run: gradle buildPlugin
         working-directory: plugins/intellij
       - uses: actions/upload-artifact@v4
         with:
           name: novel-library-intellij
-          path: plugins/intellij/build/distributions/novel-library-intellij-0.4.2.zip
+          path: plugins/intellij/build/distributions/${{ env.INTELLIJ_FILE }}
 
   build-visual-studio:
     runs-on: windows-latest
@@ -49,10 +63,15 @@ jobs:
       - uses: actions/checkout@v4
       - run: dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
       - run: dotnet build plugins/visual-studio/NovelLibrary.VisualStudio.csproj --configuration Release --no-restore
+      - name: Read plugin artifact name
+        shell: pwsh
+        run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          "VISUAL_STUDIO_FILE=$(($manifest.plugins | Where-Object id -eq 'visual-studio').file)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Package Visual Studio VSIX
         shell: pwsh
         run: ./scripts/package-visual-studio-plugin.ps1 -Root $PWD
       - uses: actions/upload-artifact@v4
         with:
           name: novel-library-visual-studio
-          path: plugins/visual-studio/bin/novel-library-visual-studio-0.4.1.vsix
+          path: plugins/visual-studio/bin/${{ env.VISUAL_STUDIO_FILE }}

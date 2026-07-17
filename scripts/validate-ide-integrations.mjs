@@ -45,7 +45,8 @@ const requireValue = (condition, message) => {
 }
 
 const vscode = JSON.parse(source('plugins/vscode/package.json'))
-requireValue(vscode.version === '0.4.4', 'VS Code extension version must be 0.4.4')
+const semver = value => typeof value === 'string' && /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(value)
+requireValue(semver(vscode.version), 'VS Code extension version must be valid SemVer')
 requireValue(vscode.displayName === '小说书库阅读器', 'VS Code extension display name must identify the plugin')
 requireValue(vscode.main === 'extension.js', 'VS Code extension entry point is missing')
 requireValue(vscode.activationEvents?.includes('onStartupFinished'), 'VS Code automatic startup is missing')
@@ -82,12 +83,14 @@ requireValue(!/moveLines = async direction => \{\s*if \(!state\.enabled\) await 
 const vscodeBridge = source('plugins/vscode/bridge.js')
 requireMatch(vscodeBridge, /AbortSignal\.timeout\(5000\)/, 'VS Code Bridge timeout must be five seconds')
 requireMatch(vscodeBridge, /Connection: 'close'/, 'VS Code Bridge must close each local HTTP connection')
+requireMatch(vscodeBridge, /novel-library-desktop/, 'VS Code Bridge must resolve the running desktop installation')
 
 const intellijBuild = source('plugins/intellij/build.gradle.kts')
 const intellijXml = source('plugins/intellij/src/main/resources/META-INF/plugin.xml')
 const intellijCode = source('plugins/intellij/src/main/kotlin/com/kengqin/novellibrary/NovelLibraryPlugin.kt')
 const intellijIcon = source('plugins/intellij/src/main/resources/icons/novelLibrary.svg')
-requireMatch(intellijBuild, /version = "0\.4\.2"/, 'JetBrains plugin version must be 0.4.2')
+const intellijVersion = intellijBuild.match(/^version\s*=\s*"([^"]+)"/m)?.[1]
+requireValue(semver(intellijVersion), 'JetBrains plugin version must be valid SemVer')
 requireMatch(intellijBuild, /jvmTarget = JvmTarget\.JVM_17/, 'JetBrains Kotlin bytecode must target Java 17')
 requireMatch(intellijBuild, /targetCompatibility = JavaVersion\.VERSION_17/, 'JetBrains Java bytecode must target Java 17')
 requireMatch(intellijXml, /<toolWindow id="小说书库"[^>]+icon="\/icons\/novelLibrary\.svg"/, 'JetBrains tool window icon is missing')
@@ -110,6 +113,7 @@ requireMatch(intellijCode, /val refresh = JButton\("刷新"\)/, 'JetBrains manua
 requireMatch(intellijCode, /while \(resultLines\.isEmpty\(\) && attempts < 30\)/, 'JetBrains empty-chapter skipping is missing')
 requireMatch(intellijCode, /it\.kind == null \|\| it\.kind == "chapter"/, 'JetBrains non-content chapter filtering is missing')
 requireMatch(intellijCode, /timeout\(Duration\.ofSeconds\(5\)\)/, 'JetBrains Bridge timeout must be five seconds')
+requireMatch(intellijCode, /ProcessHandle\.allProcesses/, 'JetBrains Bridge must resolve the running desktop installation')
 for (const action of ['PreviousLineAction', 'NextLineAction', 'PreviousChapterAction', 'NextChapterAction']) {
   requireMatch(
     intellijCode,
@@ -125,7 +129,8 @@ const visualSession = source('plugins/visual-studio/NovelLibraryReaderSession.cs
 const visualAdornment = source('plugins/visual-studio/NovelLibraryAdornment.cs')
 requireMatch(visualProject, /<TargetFramework>net472<\/TargetFramework>/, 'Visual Studio target framework is missing')
 requireMatch(visualProject, /novel-library-visual-studio-\$\(Version\)\.vsix/, 'Official Visual Studio VSIX output is missing')
-requireMatch(visualManifest, /Identity Id="NovelLibrary\.VisualStudio" Version="0\.4\.1"/, 'Visual Studio extension identity is invalid')
+const visualVersion = visualManifest.match(/Identity Id="NovelLibrary\.VisualStudio" Version="([^"]+)"/)?.[1]
+requireValue(semver(visualVersion), 'Visual Studio extension version must be valid SemVer')
 requireMatch(visualManifest, /Microsoft\.VisualStudio\.VsPackage/, 'Visual Studio package asset is missing')
 requireMatch(visualManifest, /Microsoft\.VisualStudio\.MefComponent/, 'Visual Studio editor component asset is missing')
 for (const key of ['N', 'VK_UP', 'VK_DOWN', 'VK_LEFT', 'VK_RIGHT']) {
@@ -141,16 +146,19 @@ requireMatch(visualAdornment, /if \(!NovelLibraryReaderSession\.IsReaderVisible\
 requireMatch(visualSession, /ReaderDisplayMode\.LineEnd/, 'Visual Studio original line-end display mode is missing')
 requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /Timeout = TimeSpan\.FromSeconds\(5\)/, 'Visual Studio Bridge timeout must be five seconds')
 requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /ConnectionClose = true/, 'Visual Studio Bridge must close each local HTTP connection')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /GetProcessesByName/, 'Visual Studio Bridge must resolve the running desktop installation')
 
 const desktopManifest = JSON.parse(source('apps/desktop/src-tauri/resources/ide-plugins/manifest.json'))
 const desktopIdeIntegration = source('apps/desktop/src-tauri/src/ide_integration.rs')
-requireMatch(desktopIdeIntegration, /env\("ELECTRON_RUN_AS_NODE", "1"\)/, 'VS Code CLI must run in Node mode without opening the IDE')
+requireMatch(desktopIdeIntegration, /vscode_script_process/, 'VS Code and Cursor must use their official command scripts')
+requireMatch(desktopIdeIntegration, /\.arg\("installPlugins"\)/, 'JetBrains must use its official installation command')
+requireValue(!desktopIdeIntegration.includes('cli' + '.js'), 'Desktop plugin installation must never construct a cli.js argument')
 requireMatch(desktopIdeIntegration, /--list-extensions/, 'VS Code installed state must use the IDE CLI')
 requireMatch(desktopIdeIntegration, /parse_vscode_extension_state/, 'VS Code CLI installed-state parser is missing')
 const expectedArtifacts = new Map([
-  ['vscode', ['0.4.4', 'novel-library-reader-0.4.4.vsix']],
-  ['intellij', ['0.4.2', 'novel-library-intellij-0.4.2.zip']],
-  ['visual-studio', ['0.4.1', 'novel-library-visual-studio-0.4.1.vsix']]
+  ['vscode', [vscode.version, `novel-library-reader-${vscode.version}.vsix`]],
+  ['intellij', [intellijVersion, `novel-library-intellij-${intellijVersion}.zip`]],
+  ['visual-studio', [visualVersion, `novel-library-visual-studio-${visualVersion}.vsix`]]
 ])
 for (const [id, [version, file]] of expectedArtifacts) {
   const plugin = desktopManifest.plugins.find(item => item.id === id)
@@ -158,8 +166,8 @@ for (const [id, [version, file]] of expectedArtifacts) {
 }
 
 const installer = source('scripts/install-ide-plugins.ps1')
-requireMatch(installer, /Install-JetBrainsArchive/, 'JetBrains local ZIP installation is missing')
-requireValue(!installer.includes('installPlugins'), 'JetBrains Marketplace-only installPlugins command must not be used')
+requireMatch(installer, /Install-JetBrainsOfficial/, 'JetBrains official installation command is missing')
+requireMatch(installer, /installPlugins/, 'JetBrains official installPlugins command is missing')
 requireMatch(installer, /\[switch\]\$AllTargets/, 'Non-interactive all-target installation is missing')
 const visualPackager = source('scripts/package-visual-studio-plugin.ps1')
 for (const entry of ['[Content_Types].xml', 'NovelLibrary.VisualStudio.dll', 'NovelLibrary.VisualStudio.pkgdef']) {
@@ -167,7 +175,7 @@ for (const entry of ['[Content_Types].xml', 'NovelLibrary.VisualStudio.dll', 'No
 }
 for (const workflow of ['.github/workflows/build-ide-plugins.yml', '.github/workflows/release-desktop.yml']) {
   const value = source(workflow)
-  for (const [, [, artifact]] of expectedArtifacts) requireValue(value.includes(artifact), `${workflow} is missing ${artifact}`)
+  requireMatch(value, /manifest\.json/, `${workflow} must read the plugin manifest for artifact names`)
 }
 
 console.log(`validated ${files.length} IDE integration files and all three plugin contracts`)
