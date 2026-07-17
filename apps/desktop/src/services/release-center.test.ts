@@ -129,4 +129,24 @@ describe('release center update consistency', () => {
     delete (missingMinimum.releases[0] as Partial<(typeof missingMinimum.releases)[number]>).minimumSupportedVersion
     expect(isReleaseManifest(missingMinimum)).toBe(false)
   })
+
+  it('accepts legacy history entries without a direct upgrade baseline', () => {
+    const catalog = remoteManifest()
+    catalog.releases.push({
+      version: '0.2.0',
+      date: '2026-07-16',
+      title: 'Legacy',
+      channel: 'stable',
+      databaseSchema: 3,
+      published: true,
+      requiresBackup: false,
+      releaseUrl: 'https://github.com/kengqin/book/releases/tag/v0.2.0',
+      installerUrl: 'https://github.com/kengqin/book/releases/download/v0.2.0/NovelLibrary_0.2.0_x64-setup.exe',
+      sha256: 'b'.repeat(64),
+      sections: [{ title: 'Legacy', items: ['One'] }],
+      upgradeNotes: []
+    } as unknown as (typeof catalog.releases)[number])
+
+    expect(isReleaseManifest(catalog)).toBe(true)
+  })
 })

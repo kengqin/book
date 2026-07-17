@@ -25,7 +25,7 @@ export interface ReleaseEntry {
   channel: 'stable' | 'preview'
   databaseSchema: number
   published: boolean
-  minimumSupportedVersion: string
+  minimumSupportedVersion?: string
   requiresBackup: boolean
   releaseUrl: string
   installerUrl: string
@@ -232,7 +232,8 @@ export function isReleaseManifest(value: unknown): value is ReleaseManifest {
     if (!release || typeof release !== 'object') return false
     try {
       parseSemver(release.version)
-      parseSemver(release.minimumSupportedVersion)
+      if (release.minimumSupportedVersion !== undefined) parseSemver(release.minimumSupportedVersion)
+      else if (release.version === manifest.latest) throw new Error('最新版本缺少直接升级基线')
     } catch {
       return false
     }
@@ -303,7 +304,7 @@ export async function checkForUpdates(silent = false) {
     const { manifest, remote } = await loadReleaseManifest()
     expectedVersion = compareVersions(manifest.latest, currentVersion) > 0 ? manifest.latest : null
     targetRelease = expectedVersion ? manifest.releases.find((release) => release.version === expectedVersion) || null : null
-    updateCompatibilityNote.value = targetRelease && compareVersions(currentVersion, targetRelease.minimumSupportedVersion) < 0
+    updateCompatibilityNote.value = targetRelease?.minimumSupportedVersion && compareVersions(currentVersion, targetRelease.minimumSupportedVersion) < 0
       ? `当前版本低于直接升级基线 v${targetRelease.minimumSupportedVersion}，建议先导出完整备份。`
       : targetRelease?.requiresBackup
         ? '此版本升级前需要先导出完整备份。'
