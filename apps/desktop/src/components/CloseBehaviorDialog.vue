@@ -60,7 +60,7 @@ onBeforeUnmount(() => {
           <div><span>关闭小说书库</span><h2 id="close-dialog-title">关闭窗口后要做什么？</h2></div>
           <button type="button" class="icon-button" title="取消关闭" :disabled="busy" @click="cancel"><X :size="17" /></button>
         </header>
-        <p>缩小到托盘后，IDE 插件仍可同步书库和阅读进度；直接退出会停止桌面 Bridge。</p>
+        <p>缩小到托盘后，IDE 插件仍可正常同步；直接退出后，需要重新打开小说书库才能继续同步。</p>
         <label class="remember-close-choice"><input v-model="remember" type="checkbox" /><span>记住我的选择，下次不再询问</span></label>
         <p v-if="error" class="inline-error">{{ error }}</p>
         <footer>
