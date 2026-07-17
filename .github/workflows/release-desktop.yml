@@ -122,7 +122,7 @@ jobs:
           java-version: '21'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
@@ -142,36 +142,38 @@ jobs:
           $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
           $resourceDir = Join-Path $PWD 'apps/desktop/src-tauri/resources/ide-plugins'
           $stagingDir = Join-Path $PWD '.ide-plugin-reuse'
-          New-Item -ItemType Directory -Force $stagingDir | Out-Null
-          $previousTag = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" --jq '.tag_name'
-          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($previousTag) -or $previousTag -eq $env:TAG) {
+          $files = @($manifest.plugins | ForEach-Object file)
+          $releaseJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            $global:LASTEXITCODE = 0
             "reused=false" >> $env:GITHUB_OUTPUT
             exit 0
           }
 
-          $files = @($manifest.plugins | ForEach-Object file)
-          $reused = $true
+          $previousRelease = $releaseJson | ConvertFrom-Json
+          $previousTag = $previousRelease.tag_name
+          $assetNames = @($previousRelease.assets | ForEach-Object name)
+          $canReuse = -not [string]::IsNullOrWhiteSpace($previousTag) -and $previousTag -ne $env:TAG
           foreach ($file in $files) {
-            gh release download $previousTag --repo $env:GITHUB_REPOSITORY --pattern $file --dir $stagingDir
-            $downloadExitCode = $LASTEXITCODE
-            if ($downloadExitCode -ne 0 -or -not (Test-Path (Join-Path $stagingDir $file))) {
-              $reused = $false
-              break
-            }
+            if ($assetNames -notcontains $file) { $canReuse = $false }
           }
 
-          if ($reused) {
-            foreach ($file in $files) {
-              Copy-Item (Join-Path $stagingDir $file) (Join-Path $resourceDir $file) -Force
-            }
-            "reused=true" >> $env:GITHUB_OUTPUT
-            Write-Host "Reused IDE plugin artifacts from $previousTag"
-          } else {
-            Remove-Item $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
-            $global:LASTEXITCODE = 0
+          if (-not $canReuse) {
             "reused=false" >> $env:GITHUB_OUTPUT
             Write-Host "IDE plugin artifacts changed or unavailable; building them"
+            exit 0
           }
+
+          New-Item -ItemType Directory -Force $stagingDir | Out-Null
+          foreach ($file in $files) {
+            gh release download $previousTag --repo $env:GITHUB_REPOSITORY --pattern $file --dir $stagingDir
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $stagingDir $file))) {
+              throw "Failed to download reusable IDE plugin artifact: $file"
+            }
+            Copy-Item (Join-Path $stagingDir $file) (Join-Path $resourceDir $file) -Force
+          }
+          "reused=true" >> $env:GITHUB_OUTPUT
+          Write-Host "Reused IDE plugin artifacts from $previousTag"
 
       - name: Package VS Code and Cursor plugin
         if: steps.reuse-plugins.outputs.reused != 'true'
