@@ -139,7 +139,6 @@ describe('release center update consistency', () => {
       channel: 'stable',
       databaseSchema: 3,
       published: true,
-      requiresBackup: false,
       releaseUrl: 'https://github.com/kengqin/book/releases/tag/v0.2.0',
       installerUrl: 'https://github.com/kengqin/book/releases/download/v0.2.0/NovelLibrary_0.2.0_x64-setup.exe',
       sha256: 'b'.repeat(64),
