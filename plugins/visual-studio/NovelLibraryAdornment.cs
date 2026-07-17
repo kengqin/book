@@ -65,29 +65,51 @@ internal sealed class NovelLibraryAdornment
     {
         if (_view.IsClosed) return;
         _layer.RemoveAllAdornments();
+        if (!NovelLibraryReaderSession.IsReaderVisible) return;
         var lines = NovelLibraryReaderSession.VisibleLines;
         if (lines.Count == 0 || _view.TextSnapshot.LineCount == 0) return;
 
         var count = Math.Min(5, Math.Min(lines.Count, _view.TextSnapshot.LineCount));
         var caretLine = _view.Caret.Position.BufferPosition.GetContainingLine().LineNumber;
         var firstLine = Math.Min(caretLine, Math.Max(0, _view.TextSnapshot.LineCount - count));
+        var paragraphMode = NovelLibraryReaderSession.DisplayMode == ReaderDisplayMode.Paragraph;
         for (var index = 0; index < count; index++)
         {
             var snapshotLine = _view.TextSnapshot.GetLineFromLineNumber(firstLine + index);
             var viewLine = _view.GetTextViewLineContainingBufferPosition(snapshotLine.Start);
             if (viewLine == null || !viewLine.IsValid) continue;
+            var properties = _view.FormattedLineSource.DefaultTextProperties;
             var label = new TextBlock
             {
-                Text = $"  // {lines[index]}",
-                FontFamily = new FontFamily("Consolas"),
-                FontSize = 13,
-                FontStyle = FontStyles.Italic,
-                Foreground = new SolidColorBrush(Color.FromRgb(128, 136, 148)),
+                Text = paragraphMode ? lines[index] : $"  // {lines[index]}",
+                FontFamily = paragraphMode ? properties.Typeface.FontFamily : new FontFamily("Consolas"),
+                FontSize = paragraphMode ? properties.FontRenderingEmSize : 13,
+                FontStyle = paragraphMode ? FontStyles.Normal : FontStyles.Italic,
+                Foreground = paragraphMode
+                    ? properties.ForegroundBrush
+                    : new SolidColorBrush(Color.FromRgb(128, 136, 148)),
                 IsHitTestVisible = false
             };
-            Canvas.SetLeft(label, Math.Max(viewLine.TextRight + 24, _view.ViewportLeft + _view.ViewportWidth * 0.5));
-            Canvas.SetTop(label, viewLine.Top);
-            _layer.AddAdornment(AdornmentPositioningBehavior.ViewportRelative, null, null, label, null);
+            FrameworkElement adornment = label;
+            if (paragraphMode)
+            {
+                adornment = new Border
+                {
+                    Width = Math.Max(220, Math.Min(_view.ViewportWidth * 0.72, _view.ViewportWidth - 32)),
+                    Height = viewLine.Height,
+                    Background = _view.Background,
+                    Padding = new Thickness(12, 0, 8, 0),
+                    Child = label,
+                    IsHitTestVisible = false
+                };
+                Canvas.SetLeft(adornment, _view.ViewportLeft + 12);
+            }
+            else
+            {
+                Canvas.SetLeft(adornment, Math.Max(viewLine.TextRight + 24, _view.ViewportLeft + _view.ViewportWidth * 0.5));
+            }
+            Canvas.SetTop(adornment, viewLine.Top);
+            _layer.AddAdornment(AdornmentPositioningBehavior.ViewportRelative, null, null, adornment, null);
         }
     }
 }

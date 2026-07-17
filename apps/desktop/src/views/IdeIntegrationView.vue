@@ -6,9 +6,9 @@ import { getIdeIntegrationStatus, installIdePlugin, uninstallIdePlugin, type Bun
 
 const router = useRouter()
 const fallbackPlugins: BundledIdePlugin[] = [
-  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.3', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 中浏览书架、章节和 5 行正文，并在代码行内阅读，同步桌面端进度。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
-  { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.1', identifier: 'com.kengqin.novellibrary.reader', description: '在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中固定阅读 5 行小说，支持快捷键滚动、切章和桌面端进度同步。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
-  { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.0', identifier: 'NovelLibrary.VisualStudio', description: '在 Visual Studio 2022 中打开小说阅读面板，并与桌面端书库同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
+  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.4', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 中浏览书架、章节和 5 行正文，并可切换段落或行尾显示模式，同步桌面端进度。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
+  { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.2', identifier: 'com.kengqin.novellibrary.reader', description: '在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中阅读 5 行小说，可切换段落或行尾模式并同步桌面端进度。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
+  { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.1', identifier: 'NovelLibrary.VisualStudio', description: '在 Visual Studio 2022 中打开小说阅读面板，可切换段落或行尾模式，并与桌面端书库同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
 ]
 const status = ref<IdeIntegrationStatus>({ plugins: fallbackPlugins, targets: [] })
 const detecting = ref(true)

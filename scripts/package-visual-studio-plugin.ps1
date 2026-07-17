@@ -6,10 +6,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
-if (-not $Output) { $Output = Join-Path $Root 'plugins\visual-studio\bin\novel-library-visual-studio-0.4.0.vsix' }
+if (-not $Output) { $Output = Join-Path $Root 'plugins\visual-studio\bin\novel-library-visual-studio-0.4.1.vsix' }
 
 $projectRoot = Join-Path $Root 'plugins\visual-studio'
-$artifact = Join-Path $projectRoot 'bin\novel-library-visual-studio-0.4.0.vsix'
+$artifact = Join-Path $projectRoot 'bin\novel-library-visual-studio-0.4.1.vsix'
 if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
   throw "Official Visual Studio VSIX is missing. Build NovelLibrary.VisualStudio.csproj first: $artifact"
 }
@@ -33,7 +33,7 @@ try {
   $manifestReader = [System.IO.StreamReader]::new($manifestEntry.Open())
   try { [xml]$manifest = $manifestReader.ReadToEnd() } finally { $manifestReader.Dispose() }
   $identity = $manifest.PackageManifest.Metadata.Identity
-  if ($identity.Id -ne 'NovelLibrary.VisualStudio' -or $identity.Version -ne '0.4.0') {
+  if ($identity.Id -ne 'NovelLibrary.VisualStudio' -or $identity.Version -ne '0.4.1') {
     throw "Unexpected Visual Studio extension identity: $($identity.Id)@$($identity.Version)"
   }
 

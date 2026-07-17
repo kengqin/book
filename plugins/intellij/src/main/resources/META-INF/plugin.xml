@@ -5,7 +5,7 @@
   <description>在 JetBrains IDE 中显示 5 行小说内容，通过快捷键滚动、切章并与小说书库桌面端同步。</description>
   <depends>com.intellij.modules.platform</depends>
   <extensions defaultExtensionNs="com.intellij">
-    <toolWindow id="小说书库" anchor="right" factoryClass="com.kengqin.novellibrary.NovelToolWindowFactory" />
+    <toolWindow id="小说书库" anchor="right" icon="/icons/novelLibrary.svg" factoryClass="com.kengqin.novellibrary.NovelToolWindowFactory" />
     <postStartupActivity implementation="com.kengqin.novellibrary.NovelStartupActivity" />
   </extensions>
   <actions>
@@ -24,6 +24,8 @@
     <action id="NovelLibrary.NextChapter" class="com.kengqin.novellibrary.NextChapterAction" text="小说书库: 下一章">
       <keyboard-shortcut first-keystroke="ctrl alt RIGHT" keymap="$default" />
     </action>
+    <action id="NovelLibrary.ToggleDisplayMode" class="com.kengqin.novellibrary.ToggleDisplayModeAction" text="小说书库: 切换段落/行尾显示模式" />
+    <action id="NovelLibrary.ToggleReaderVisibility" class="com.kengqin.novellibrary.ToggleReaderVisibilityAction" text="小说书库: 开启或关闭代码内阅读" />
     <action id="NovelLibrary.ImportFile" class="com.kengqin.novellibrary.ImportFileAction" text="小说书库: 导入当前文件" />
   </actions>
 </idea-plugin>

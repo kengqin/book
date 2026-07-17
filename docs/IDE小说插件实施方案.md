@@ -28,15 +28,15 @@ Bridge 监听 `127.0.0.1` 的动态端口，并在 `%APPDATA%/NovelLibrary/bridg
 
 ## 适配器
 
-- `plugins/intellij`：`0.4.1`，Kotlin + IntelliJ Platform Gradle Plugin，提供工具窗口、5 行行尾 Inlay、启动自动加载和快捷键，一个包覆盖多个 JetBrains IDE。
-- `plugins/vscode`：`0.4.3`，CommonJS 扩展，侧边栏按书架、章节、正文分层展示，书籍和章节可直接点击；逐行、切章、显示隐藏和刷新使用标题栏图标，同时保留 5 行行尾 Decoration 与可配置快捷键。
-- `plugins/visual-studio`：`0.4.0`，Visual Studio 2022 官方 VSIX，提供 WPF 工具窗口、5 行行尾 Adornment、选书选章和快捷键。
+- `plugins/intellij`：`0.4.2`，Kotlin + IntelliJ Platform Gradle Plugin，提供工具窗口、可持久化切换的段落/行尾 5 行 Inlay、启动自动加载和快捷键，一个包覆盖多个 JetBrains IDE；原行尾模式完整保留。阅读会话与工具窗口解耦，方向快捷键不会展开右侧面板；工具栏按可用宽度自动换行，入口使用与 VS Code 一致的书本图标。
+- `plugins/vscode`：`0.4.4`，CommonJS 扩展，侧边栏按书架、章节、正文分层展示，书籍和章节可直接点击；逐行、切章、显示隐藏、刷新和段落/行尾模式切换使用标题栏图标，同时保留原有 5 行行尾 Decoration 与可配置快捷键。显示状态持久化，关闭后翻行或切章不会自动重新开启。
+- `plugins/visual-studio`：`0.4.1`，Visual Studio 2022 官方 VSIX，提供 WPF 工具窗口、可持久化切换的段落/行尾 5 行 Adornment、选书选章和快捷键；原行尾模式完整保留。
 
 插件读取章节列表后优先过滤 `frontmatter` 和 `volume`，自动从 `kind=chapter` 的正文开始；附近空正文最多向前搜索 30 项。Bridge 请求最长 5 秒，避免 IDE 或桌面端失去响应；IDE 启动时采用有限后台重试，避免桌面端刚启动尚未就绪导致侧边栏永久为空，重试期间不重复弹错。
 
 ## 安装
 
-桌面端资源目录固定包含 `novel-library-reader-0.4.3.vsix`、`novel-library-intellij-0.4.1.zip`、`novel-library-visual-studio-0.4.0.vsix` 和清单。工具页默认展示全部支持插件并提供搜索，检测到每个 IDE 后由用户单独选择安装目标。已安装实例展示实际版本和卸载操作。
+桌面端资源目录固定包含 `novel-library-reader-0.4.4.vsix`、`novel-library-intellij-0.4.2.zip`、`novel-library-visual-studio-0.4.1.vsix` 和清单。工具页默认展示全部支持插件并提供搜索，检测到每个 IDE 后由用户单独选择安装目标。已安装实例展示实际版本和卸载操作。
 
 JetBrains ZIP 根据目标产品 `product-info.json` 部署到准确插件目录，不调用只支持 Marketplace ID 的 `installPlugins`。检测和安装子进程均隐藏命令行窗口。命令行入口支持交互选择，也支持 `-Only ... -AllTargets` 自动化验收。
 
@@ -51,3 +51,7 @@ JetBrains ZIP 根据目标产品 `product-info.json` 部署到准确插件目录
 卸载状态以对应 IDE 的 `--list-extensions --show-versions` 输出为准，不扫描可能等待 IDE 重启才清理的旧版本目录。桌面端解析官方 `.cmd` 启动器后必须设置 `ELECTRON_RUN_AS_NODE=1` 再执行 `cli.js`；否则会错误启动 VS Code/Cursor 并把 `cli.js` 打开为编辑文件。卸载成功后页面立即切换为“安装”，并提示重载或重启 IDE 以清除已加载的活动栏和扩展详情界面。
 
 2026-07-17 本机端到端复验：先关闭旧缺陷误启动的 `cli.js - Cursor` 窗口，再从新桌面端执行 Cursor 安装与卸载。安装成功后 Cursor 保持 `isRunning=false`；卸载过程中按钮显示“卸载中”，完成后切换为“安装”，Cursor 仍保持未运行且没有新增 `cli.js` 窗口。CLI 查询测试前后 IDE 进程数一致。
+
+同日 IDEA `0.4.2` 复验：强制清理 Gradle 缓存后重建并安装 ZIP，中文正文不再显示方框；段落模式与原行尾模式均可切换。关闭右侧面板后执行下一行快捷键，代码内正文正常滚动且 Tool Window 保持关闭。窄宽度工具栏使用 WrapLayout 自动换行，“下一行”等操作不再被裁掉；JetBrains Tool Window 与 VS Code Activity Bar 使用同一书本轮廓图标。
+
+Bridge 会话切换回归：旧桌面进程退出、新进程更新 `bridge.json` 的窗口期内，JetBrains 读取请求最多使用最新端口和 token 重试 3 次；书库、章节和正文加载失败后后台最多重连 11 次，工具窗口提供手动“刷新”。错误信息包含 Bridge 返回的具体原因，不再只显示无上下文的 HTTP 400。桌面 Bridge 已对 `雪中悍刀行` 的章节列表和前 8 章逐章请求完成真实 200 响应验证。

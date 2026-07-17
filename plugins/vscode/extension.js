@@ -10,6 +10,7 @@ const state = {
   lines: [],
   lineStart: 0,
   enabled: false,
+  displayMode: 'paragraph',
   loading: false
 }
 
@@ -35,6 +36,14 @@ function currentProgress() {
 }
 
 function createReader(context) {
+  const storage = context.globalState || {
+    get: (_key, fallback) => fallback,
+    update: async () => {}
+  }
+  state.displayMode = storage.get('novelLibrary.displayMode', 'paragraph') === 'lineEnd'
+    ? 'lineEnd'
+    : 'paragraph'
+  state.enabled = storage.get('novelLibrary.readerEnabled', true) !== false
   const decoration = vscode.window.createTextEditorDecorationType({
     rangeBehavior: vscode.DecorationRangeBehavior.ClosedOpen
   })
@@ -68,22 +77,40 @@ function createReader(context) {
     const sourceStart = Math.min(cursorLine, maximumStart)
     const options = visible.map((text, index) => {
       const line = editor.document.lineAt(sourceStart + index)
+      const isParagraph = state.displayMode === 'paragraph'
       return {
-        range: new vscode.Range(line.range.end, line.range.end),
+        range: isParagraph
+          ? new vscode.Range(line.range.start, line.range.start)
+          : new vscode.Range(line.range.end, line.range.end),
         hoverMessage: `${state.book?.title || ''} · ${state.chapter.title}`,
         renderOptions: {
-          after: {
-            contentText: `  ${text}`,
-            color: new vscode.ThemeColor('editorCodeLens.foreground'),
-            fontStyle: 'italic',
-            margin: '0 0 0 2em'
-          }
+          ...(isParagraph
+            ? {
+                before: {
+                  contentText: text,
+                  color: new vscode.ThemeColor('editor.foreground'),
+                  backgroundColor: new vscode.ThemeColor('editor.background'),
+                  fontStyle: 'normal',
+                  width: '74ch',
+                  margin: '0 2em 0 0',
+                  textDecoration: 'none; display: inline-block; white-space: pre; overflow: hidden;'
+                }
+              }
+            : {
+                after: {
+                  contentText: `  ${text}`,
+                  color: new vscode.ThemeColor('editorCodeLens.foreground'),
+                  fontStyle: 'italic',
+                  margin: '0 0 0 2em'
+                }
+              })
         }
       }
     })
     editor.setDecorations(decoration, options)
     const end = Math.min(state.lines.length, state.lineStart + 5)
-    status.text = `$(book) ${state.book?.title || '小说'} · ${state.lineStart + 1}-${end}`
+    const mode = state.displayMode === 'paragraph' ? '段落' : '行尾'
+    status.text = `$(book) ${state.book?.title || '小说'} · ${state.lineStart + 1}-${end} · ${mode}`
     status.show()
   }
 
@@ -158,12 +185,14 @@ function createReader(context) {
   const toggle = async (forceVisible, silent = false) => {
     if (forceVisible === false || (forceVisible === undefined && state.enabled)) {
       state.enabled = false
+      await storage.update('novelLibrary.readerEnabled', false)
       clear()
       vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
       notifySidebar()
       return true
     }
     state.enabled = true
+    await storage.update('novelLibrary.readerEnabled', true)
     try {
       if (!state.chapter) await loadLibrary()
       render()
@@ -181,7 +210,7 @@ function createReader(context) {
   }
 
   const moveLines = async direction => {
-    if (!state.enabled) await toggle(true)
+    if (!state.chapter) await loadLibrary()
     const maximumStart = Math.max(0, state.lines.length - 5)
     state.lineStart = Math.max(0, Math.min(maximumStart, state.lineStart + direction))
     render()
@@ -190,11 +219,18 @@ function createReader(context) {
   }
 
   const moveChapter = async direction => {
-    if (!state.enabled) await toggle(true)
+    if (!state.chapter) await loadLibrary()
     if (!state.chapters.length || !state.chapter) return
     const currentIndex = state.chapters.findIndex(chapter => chapter.number === state.chapter.number)
     const nextIndex = Math.max(0, Math.min(state.chapters.length - 1, currentIndex + direction))
     if (nextIndex !== currentIndex) await updateChapter(state.chapters[nextIndex].number, direction)
+  }
+
+  const toggleDisplayMode = async () => {
+    state.displayMode = state.displayMode === 'paragraph' ? 'lineEnd' : 'paragraph'
+    await storage.update('novelLibrary.displayMode', state.displayMode)
+    render()
+    notifySidebar()
   }
 
   const selectBook = async () => {
@@ -263,6 +299,7 @@ function createReader(context) {
     openBook,
     openChapter,
     loadLibrary,
+    toggleDisplayMode,
     setSidebarRefresh(callback) {
       notifySidebar = callback
       notifySidebar()
@@ -320,7 +357,9 @@ class ReaderTreeProvider {
           label: state.lines.length
             ? `正文 ${state.lineStart + 1}-${Math.min(state.lines.length, state.lineStart + 5)}`
             : '正文',
-          description: state.enabled ? '代码内显示中' : '',
+          description: state.enabled
+            ? `${state.displayMode === 'paragraph' ? '段落模式' : '行尾模式'} · 代码内显示中`
+            : state.displayMode === 'paragraph' ? '段落模式' : '行尾模式',
           tooltip: state.chapter ? `${state.book?.title || ''} · ${state.chapter.title}` : '当前阅读正文',
           icon: 'book-open',
           collapsibleState: vscode.TreeItemCollapsibleState.Expanded
@@ -404,6 +443,7 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openBookFromSidebar', runReaderAction(book => reader.openBook(book))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openChapterFromSidebar', runReaderAction(chapter => reader.openChapter(chapter))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.refreshLibrary', runReaderAction(() => reader.loadLibrary())))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.toggleDisplayMode', runReaderAction(() => reader.toggleDisplayMode())))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextLine', runReaderAction(() => reader.moveLines(1))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousLine', runReaderAction(() => reader.moveLines(-1))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextChapter', runReaderAction(() => reader.moveChapter(1))))
@@ -431,6 +471,11 @@ function activate(context) {
   }))
 
   const connectOnStartup = async () => {
+    if (!state.enabled) {
+      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
+      notifySidebar()
+      return
+    }
     for (let attempt = 0; attempt < 12; attempt += 1) {
       if (await reader.toggle(true, true)) return
       await new Promise(resolve => setTimeout(resolve, 750))

@@ -17,6 +17,7 @@ const files = [
   'plugins/intellij/build.gradle.kts',
   'plugins/intellij/src/main/kotlin/com/kengqin/novellibrary/NovelLibraryPlugin.kt',
   'plugins/intellij/src/main/resources/META-INF/plugin.xml',
+  'plugins/intellij/src/main/resources/icons/novelLibrary.svg',
   'plugins/visual-studio/NovelLibrary.VisualStudio.csproj',
   'plugins/visual-studio/NovelLibraryBridge.cs',
   'plugins/visual-studio/NovelLibraryPackage.cs',
@@ -44,7 +45,7 @@ const requireValue = (condition, message) => {
 }
 
 const vscode = JSON.parse(source('plugins/vscode/package.json'))
-requireValue(vscode.version === '0.4.3', 'VS Code extension version must be 0.4.3')
+requireValue(vscode.version === '0.4.4', 'VS Code extension version must be 0.4.4')
 requireValue(vscode.displayName === '小说书库阅读器', 'VS Code extension display name must identify the plugin')
 requireValue(vscode.main === 'extension.js', 'VS Code extension entry point is missing')
 requireValue(vscode.activationEvents?.includes('onStartupFinished'), 'VS Code automatic startup is missing')
@@ -61,6 +62,9 @@ for (const key of ['ctrl+alt+n', 'ctrl+alt+up', 'ctrl+alt+down', 'ctrl+alt+left'
 const vscodeExtension = source('plugins/vscode/extension.js')
 requireMatch(vscodeExtension, /slice\(state\.lineStart, state\.lineStart \+ 5\)/, 'VS Code five-line reader is missing')
 requireMatch(vscodeExtension, /createTextEditorDecorationType/, 'VS Code inline editor decorations are missing')
+requireMatch(vscodeExtension, /displayMode === 'paragraph'/, 'VS Code paragraph display mode is missing')
+requireMatch(vscodeExtension, /displayMode.*lineEnd/, 'VS Code original line-end display mode is missing')
+requireMatch(vscodeExtension, /toggleDisplayMode/, 'VS Code display mode toggle is missing')
 requireMatch(vscodeExtension, /registerTreeDataProvider\('novelLibrary\.reader'/, 'VS Code reader sidebar provider is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.selectBook'/, 'VS Code book selection command is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.selectChapter'/, 'VS Code chapter selection command is missing')
@@ -73,6 +77,8 @@ requireMatch(vscodeExtension, /const connectOnStartup = async \(\) =>/, 'VS Code
 requireMatch(vscodeExtension, /attempt < 12[\s\S]*reader\.toggle\(true, true\)/, 'VS Code startup connection retry is missing')
 requireMatch(vscodeExtension, /for \(let attempts = 0;[\s\S]*attempts < 30/, 'VS Code empty-chapter skipping is missing')
 requireMatch(vscodeExtension, /chapter\.kind === 'chapter'/, 'VS Code non-content chapter filtering is missing')
+requireMatch(vscodeExtension, /storage\.update\('novelLibrary\.readerEnabled'/, 'VS Code reader visibility preference is missing')
+requireValue(!/moveLines = async direction => \{\s*if \(!state\.enabled\) await toggle\(true\)/.test(vscodeExtension), 'VS Code line shortcuts must not force hidden reading back on')
 const vscodeBridge = source('plugins/vscode/bridge.js')
 requireMatch(vscodeBridge, /AbortSignal\.timeout\(5000\)/, 'VS Code Bridge timeout must be five seconds')
 requireMatch(vscodeBridge, /Connection: 'close'/, 'VS Code Bridge must close each local HTTP connection')
@@ -80,19 +86,37 @@ requireMatch(vscodeBridge, /Connection: 'close'/, 'VS Code Bridge must close eac
 const intellijBuild = source('plugins/intellij/build.gradle.kts')
 const intellijXml = source('plugins/intellij/src/main/resources/META-INF/plugin.xml')
 const intellijCode = source('plugins/intellij/src/main/kotlin/com/kengqin/novellibrary/NovelLibraryPlugin.kt')
-requireMatch(intellijBuild, /version = "0\.4\.1"/, 'JetBrains plugin version must be 0.4.1')
+const intellijIcon = source('plugins/intellij/src/main/resources/icons/novelLibrary.svg')
+requireMatch(intellijBuild, /version = "0\.4\.2"/, 'JetBrains plugin version must be 0.4.2')
 requireMatch(intellijBuild, /jvmTarget = JvmTarget\.JVM_17/, 'JetBrains Kotlin bytecode must target Java 17')
 requireMatch(intellijBuild, /targetCompatibility = JavaVersion\.VERSION_17/, 'JetBrains Java bytecode must target Java 17')
-requireMatch(intellijXml, /<toolWindow id="小说书库"/, 'JetBrains tool window is missing')
+requireMatch(intellijXml, /<toolWindow id="小说书库"[^>]+icon="\/icons\/novelLibrary\.svg"/, 'JetBrains tool window icon is missing')
+requireMatch(intellijIcon, /M2 2\.5C2 1\.67/, 'JetBrains tool window must use the shared book icon shape')
 requireMatch(intellijXml, /<postStartupActivity/, 'JetBrains automatic startup activity is missing')
 for (const shortcut of ['ctrl alt N', 'ctrl alt UP', 'ctrl alt DOWN', 'ctrl alt LEFT', 'ctrl alt RIGHT']) {
   requireValue(intellijXml.includes(`first-keystroke="${shortcut}"`), `JetBrains keybinding is missing: ${shortcut}`)
 }
 requireMatch(intellijCode, /take\(5\)/, 'JetBrains five-line reader is missing')
 requireMatch(intellijCode, /addAfterLineEndElement/, 'JetBrains inline editor inlays are missing')
-requireMatch(intellijCode, /attempts < 30 && lines\.isEmpty\(\)/, 'JetBrains empty-chapter skipping is missing')
+requireMatch(intellijCode, /addInlineElement/, 'JetBrains paragraph editor inlays are missing')
+requireMatch(intellijCode, /ReaderDisplayMode\.PARAGRAPH/, 'JetBrains paragraph display mode is missing')
+requireMatch(intellijCode, /ReaderDisplayMode\.LINE_END/, 'JetBrains original line-end display mode is missing')
+requireMatch(intellijCode, /class WrapLayout[\s\S]*availableWidth/, 'JetBrains reader toolbar must wrap instead of clipping actions')
+requireMatch(intellijCode, /object ReaderVisibilitySettings/, 'JetBrains reader visibility preference is missing')
+requireMatch(intellijCode, /class ToggleReaderVisibilityAction/, 'JetBrains reader visibility action is missing')
+requireMatch(intellijCode, /repeat\(if \(body == null\) 3 else 1\)/, 'JetBrains Bridge GET retry is missing')
+requireMatch(intellijCode, /连接中断，正在重试/, 'JetBrains session reconnect handling is missing')
+requireMatch(intellijCode, /val refresh = JButton\("刷新"\)/, 'JetBrains manual reader refresh is missing')
+requireMatch(intellijCode, /while \(resultLines\.isEmpty\(\) && attempts < 30\)/, 'JetBrains empty-chapter skipping is missing')
 requireMatch(intellijCode, /it\.kind == null \|\| it\.kind == "chapter"/, 'JetBrains non-content chapter filtering is missing')
 requireMatch(intellijCode, /timeout\(Duration\.ofSeconds\(5\)\)/, 'JetBrains Bridge timeout must be five seconds')
+for (const action of ['PreviousLineAction', 'NextLineAction', 'PreviousChapterAction', 'NextChapterAction']) {
+  requireMatch(
+    intellijCode,
+    new RegExp(`class ${action}[^]*?ReaderSessions\\.get\\(it\\)\\.move(?:Line|Chapter)\\(`),
+    `JetBrains ${action} must update the background reader session without opening the tool window`,
+  )
+}
 
 const visualProject = source('plugins/visual-studio/NovelLibrary.VisualStudio.csproj')
 const visualManifest = source('plugins/visual-studio/source.extension.vsixmanifest')
@@ -101,7 +125,7 @@ const visualSession = source('plugins/visual-studio/NovelLibraryReaderSession.cs
 const visualAdornment = source('plugins/visual-studio/NovelLibraryAdornment.cs')
 requireMatch(visualProject, /<TargetFramework>net472<\/TargetFramework>/, 'Visual Studio target framework is missing')
 requireMatch(visualProject, /novel-library-visual-studio-\$\(Version\)\.vsix/, 'Official Visual Studio VSIX output is missing')
-requireMatch(visualManifest, /Identity Id="NovelLibrary\.VisualStudio" Version="0\.4\.0"/, 'Visual Studio extension identity is invalid')
+requireMatch(visualManifest, /Identity Id="NovelLibrary\.VisualStudio" Version="0\.4\.1"/, 'Visual Studio extension identity is invalid')
 requireMatch(visualManifest, /Microsoft\.VisualStudio\.VsPackage/, 'Visual Studio package asset is missing')
 requireMatch(visualManifest, /Microsoft\.VisualStudio\.MefComponent/, 'Visual Studio editor component asset is missing')
 for (const key of ['N', 'VK_UP', 'VK_DOWN', 'VK_LEFT', 'VK_RIGHT']) {
@@ -111,6 +135,10 @@ requireMatch(visualSession, /Take\(5\)/, 'Visual Studio five-line reader is miss
 requireMatch(visualSession, /attempts < 30/, 'Visual Studio empty-chapter skipping is missing')
 requireMatch(visualSession, /item\.Kind == "chapter"/, 'Visual Studio non-content chapter filtering is missing')
 requireMatch(visualAdornment, /IAdornmentLayer/, 'Visual Studio inline editor adornments are missing')
+requireMatch(visualAdornment, /ReaderDisplayMode\.Paragraph/, 'Visual Studio paragraph display mode is missing')
+requireMatch(visualSession, /visual-studio-reader-visible\.txt[\s\S]*IsReaderVisible/, 'Visual Studio reader visibility preference is missing')
+requireMatch(visualAdornment, /if \(!NovelLibraryReaderSession\.IsReaderVisible\) return;/, 'Visual Studio hidden reader must remove editor adornments')
+requireMatch(visualSession, /ReaderDisplayMode\.LineEnd/, 'Visual Studio original line-end display mode is missing')
 requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /Timeout = TimeSpan\.FromSeconds\(5\)/, 'Visual Studio Bridge timeout must be five seconds')
 requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /ConnectionClose = true/, 'Visual Studio Bridge must close each local HTTP connection')
 
@@ -120,9 +148,9 @@ requireMatch(desktopIdeIntegration, /env\("ELECTRON_RUN_AS_NODE", "1"\)/, 'VS Co
 requireMatch(desktopIdeIntegration, /--list-extensions/, 'VS Code installed state must use the IDE CLI')
 requireMatch(desktopIdeIntegration, /parse_vscode_extension_state/, 'VS Code CLI installed-state parser is missing')
 const expectedArtifacts = new Map([
-  ['vscode', ['0.4.3', 'novel-library-reader-0.4.3.vsix']],
-  ['intellij', ['0.4.1', 'novel-library-intellij-0.4.1.zip']],
-  ['visual-studio', ['0.4.0', 'novel-library-visual-studio-0.4.0.vsix']]
+  ['vscode', ['0.4.4', 'novel-library-reader-0.4.4.vsix']],
+  ['intellij', ['0.4.2', 'novel-library-intellij-0.4.2.zip']],
+  ['visual-studio', ['0.4.1', 'novel-library-visual-studio-0.4.1.vsix']]
 ])
 for (const [id, [version, file]] of expectedArtifacts) {
   const plugin = desktopManifest.plugins.find(item => item.id === id)

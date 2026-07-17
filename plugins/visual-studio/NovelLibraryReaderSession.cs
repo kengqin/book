@@ -1,10 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace NovelLibrary.VisualStudio;
+
+internal enum ReaderDisplayMode
+{
+    Paragraph,
+    LineEnd
+}
 
 internal sealed class BookItem
 {
@@ -37,6 +44,14 @@ internal static class NovelLibraryReaderSession
     private static bool _loaded;
     private static List<string> _lines = new List<string>();
     private static int _lineStart;
+    private static readonly string DisplayModePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "NovelLibrary",
+        "visual-studio-display-mode.txt");
+    private static readonly string VisibilityPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "NovelLibrary",
+        "visual-studio-reader-visible.txt");
 
     public static event EventHandler Changed;
     public static IReadOnlyList<BookItem> Books { get; private set; } = Array.Empty<BookItem>();
@@ -44,9 +59,57 @@ internal static class NovelLibraryReaderSession
     public static BookItem CurrentBook { get; private set; }
     public static ChapterPayload CurrentChapter { get; private set; }
     public static IReadOnlyList<string> VisibleLines => _lines.Skip(_lineStart).Take(5).ToArray();
+    public static ReaderDisplayMode DisplayMode { get; private set; } = LoadDisplayMode();
+    public static bool IsReaderVisible { get; private set; } = LoadVisibility();
+    public static string DisplayModeLabel => DisplayMode == ReaderDisplayMode.Paragraph ? "段落模式" : "行尾模式";
+    public static string VisibilityLabel => IsReaderVisible ? "关闭阅读" : "开启阅读";
     public static string Status => CurrentChapter == null
         ? "正在连接小说书库桌面端"
-        : $"{CurrentChapter.Title} · {_lineStart + 1}-{Math.Min(_lines.Count, _lineStart + 5)} / {_lines.Count} 行";
+        : $"{CurrentChapter.Title} · {_lineStart + 1}-{Math.Min(_lines.Count, _lineStart + 5)} / {_lines.Count} 行 · {DisplayModeLabel}";
+
+    public static void ToggleDisplayMode()
+    {
+        DisplayMode = DisplayMode == ReaderDisplayMode.Paragraph
+            ? ReaderDisplayMode.LineEnd
+            : ReaderDisplayMode.Paragraph;
+        Directory.CreateDirectory(Path.GetDirectoryName(DisplayModePath));
+        File.WriteAllText(DisplayModePath, DisplayMode == ReaderDisplayMode.Paragraph ? "paragraph" : "lineEnd");
+        RaiseChanged();
+    }
+
+    public static void ToggleVisibility()
+    {
+        IsReaderVisible = !IsReaderVisible;
+        Directory.CreateDirectory(Path.GetDirectoryName(VisibilityPath));
+        File.WriteAllText(VisibilityPath, IsReaderVisible ? "visible" : "hidden");
+        RaiseChanged();
+    }
+
+    private static ReaderDisplayMode LoadDisplayMode()
+    {
+        try
+        {
+            return File.Exists(DisplayModePath) && File.ReadAllText(DisplayModePath).Trim() == "lineEnd"
+                ? ReaderDisplayMode.LineEnd
+                : ReaderDisplayMode.Paragraph;
+        }
+        catch
+        {
+            return ReaderDisplayMode.Paragraph;
+        }
+    }
+
+    private static bool LoadVisibility()
+    {
+        try
+        {
+            return !File.Exists(VisibilityPath) || File.ReadAllText(VisibilityPath).Trim() != "hidden";
+        }
+        catch
+        {
+            return true;
+        }
+    }
 
     public static async Task EnsureLoadedAsync()
     {

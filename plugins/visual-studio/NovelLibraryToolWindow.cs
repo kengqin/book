@@ -31,6 +31,8 @@ internal sealed class NovelLibraryReaderControl : UserControl
         Margin = new Thickness(10)
     };
     private readonly TextBlock _status = new TextBlock { Margin = new Thickness(8, 4, 8, 6) };
+    private readonly Button _displayMode = new Button { Margin = new Thickness(0, 0, 6, 4), Padding = new Thickness(8, 3, 8, 3) };
+    private readonly Button _readerVisibility = new Button { Margin = new Thickness(0, 0, 6, 4), Padding = new Thickness(8, 3, 8, 3) };
     private bool _refreshing;
 
     public NovelLibraryReaderControl()
@@ -43,6 +45,10 @@ internal sealed class NovelLibraryReaderControl : UserControl
         AddButton(toolbar, "下一章", () => NovelLibraryReaderSession.MoveChapterAsync(1));
         AddButton(toolbar, "上一行", () => NovelLibraryReaderSession.MoveLineAsync(-1));
         AddButton(toolbar, "下一行", () => NovelLibraryReaderSession.MoveLineAsync(1));
+        _displayMode.Click += (_, __) => NovelLibraryReaderSession.ToggleDisplayMode();
+        toolbar.Children.Add(_displayMode);
+        _readerVisibility.Click += (_, __) => NovelLibraryReaderSession.ToggleVisibility();
+        toolbar.Children.Add(_readerVisibility);
         DockPanel.SetDock(toolbar, Dock.Top);
         DockPanel.SetDock(_status, Dock.Bottom);
         root.Children.Add(toolbar);
@@ -105,6 +111,8 @@ internal sealed class NovelLibraryReaderControl : UserControl
             }
         }
         _content.Text = string.Join(Environment.NewLine, NovelLibraryReaderSession.VisibleLines);
+        _displayMode.Content = NovelLibraryReaderSession.DisplayModeLabel;
+        _readerVisibility.Content = NovelLibraryReaderSession.VisibilityLabel;
         _status.Text = NovelLibraryReaderSession.Status;
         _refreshing = false;
     }

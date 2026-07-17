@@ -69,7 +69,7 @@ function Select-InstallGroup {
 
 function Package-VSCode {
   $source = Join-Path $Root 'plugins\vscode'
-  $output = Join-Path $artifactRoot 'novel-library-reader-0.4.3.vsix'
+  $output = Join-Path $artifactRoot 'novel-library-reader-0.4.4.vsix'
   New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
   $npx = Find-Executable @('npx.cmd', 'npx')
   if (-not $npx) { throw 'npx was not found; cannot package the VS Code/Cursor extension' }
@@ -227,7 +227,7 @@ $Only = Select-InstallGroup
 
 if ($Only -in @('All', 'VSCode')) {
   try {
-    $plugin = if ($SkipBuild) { Join-Path $artifactRoot 'novel-library-reader-0.4.3.vsix' } else { Package-VSCode }
+    $plugin = if ($SkipBuild) { Join-Path $artifactRoot 'novel-library-reader-0.4.4.vsix' } else { Package-VSCode }
     if (-not (Test-Path $plugin)) { throw "VS Code VSIX does not exist: $plugin" }
     Add-Result 'VS Code / Cursor' 'installed' (Install-VSCode $plugin)
   } catch { Add-Result 'VS Code / Cursor' 'failed' $_.Exception.Message }

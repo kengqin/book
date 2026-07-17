@@ -420,12 +420,19 @@ fn detect_targets() -> Vec<IdeTarget> {
 }
 
 fn parse_vscode_extension_state(output: &str, identifier: &str) -> (bool, Option<String>) {
-    for line in output.lines().map(str::trim).filter(|line| !line.is_empty()) {
-        let (candidate, version) = line
-            .split_once('@')
-            .map_or((line, None), |(candidate, version)| {
-                (candidate, (!version.is_empty()).then(|| version.to_string()))
-            });
+    for line in output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        let (candidate, version) =
+            line.split_once('@')
+                .map_or((line, None), |(candidate, version)| {
+                    (
+                        candidate,
+                        (!version.is_empty()).then(|| version.to_string()),
+                    )
+                });
         if candidate.eq_ignore_ascii_case(identifier) {
             return (true, version);
         }
@@ -433,7 +440,10 @@ fn parse_vscode_extension_state(output: &str, identifier: &str) -> (bool, Option
     (false, None)
 }
 
-fn vscode_extension_directory_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
+fn vscode_extension_directory_state(
+    target: &IdeTarget,
+    identifier: &str,
+) -> (bool, Option<String>) {
     let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else {
         return (false, None);
     };
@@ -754,13 +764,11 @@ fn run_installer(target: &IdeTarget, plugin_path: &Path) -> Result<String, Strin
         return Err("目标 IDE 已被移动或删除，请重新检测".to_string());
     }
     let output = match target.kind.as_str() {
-        "vscode" => {
-            vscode_cli_process(target)?
-                .arg("--install-extension")
-                .arg(plugin_path)
-                .arg("--force")
-                .output()
-        }
+        "vscode" => vscode_cli_process(target)?
+            .arg("--install-extension")
+            .arg(plugin_path)
+            .arg("--force")
+            .output(),
         "jetbrains" => return install_jetbrains_plugin(target, plugin_path),
         "visual-studio" => hidden_command(&executable)
             .arg("/quiet")
@@ -837,8 +845,7 @@ pub fn uninstall(
         target: target.label,
         plugin: plugin.label,
         installed: false,
-        message: "已从 IDE 扩展清单移除；重载或重启 IDE 后，活动栏和扩展页面会同步消失"
-            .to_string(),
+        message: "已从 IDE 扩展清单移除；重载或重启 IDE 后，活动栏和扩展页面会同步消失".to_string(),
     })
 }
 
