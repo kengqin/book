@@ -39,6 +39,15 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
         with:
@@ -46,6 +55,48 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Package VS Code and Cursor plugin
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force apps/desktop/src-tauri/resources/ide-plugins | Out-Null
+          Push-Location plugins/vscode
+          npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out ../../apps/desktop/src-tauri/resources/ide-plugins/novel-library-reader-0.4.4.vsix
+          Pop-Location
+
+      - name: Build JetBrains plugin
+        run: gradle buildPlugin
+        working-directory: plugins/intellij
+
+      - name: Copy JetBrains plugin into desktop resources
+        shell: pwsh
+        run: |
+          $plugin = Get-ChildItem plugins/intellij/build/distributions/*.zip | Select-Object -First 1
+          if (-not $plugin) { throw 'JetBrains plugin ZIP not found' }
+          Copy-Item $plugin.FullName apps/desktop/src-tauri/resources/ide-plugins/novel-library-intellij-0.4.2.zip
+
+      - name: Build Visual Studio plugin
+        shell: pwsh
+        run: |
+          dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
+          dotnet build plugins/visual-studio/NovelLibrary.VisualStudio.csproj --configuration Release --no-restore
+          ./scripts/package-visual-studio-plugin.ps1 -Root $PWD
+          $plugin = 'plugins/visual-studio/bin/novel-library-visual-studio-0.4.1.vsix'
+          if (-not (Test-Path $plugin)) { throw 'Visual Studio VSIX not found' }
+          Copy-Item $plugin apps/desktop/src-tauri/resources/ide-plugins/novel-library-visual-studio-0.4.1.vsix
+
+      - name: Verify bundled IDE plugins
+        shell: pwsh
+        run: |
+          $required = @(
+            'novel-library-reader-0.4.4.vsix',
+            'novel-library-intellij-0.4.2.zip',
+            'novel-library-visual-studio-0.4.1.vsix'
+          )
+          foreach ($file in $required) {
+            $path = Join-Path apps/desktop/src-tauri/resources/ide-plugins $file
+            if (-not (Test-Path $path)) { throw "Missing bundled IDE plugin: $file" }
+          }
 
       - name: Test
         run: npm test
@@ -133,3 +184,5 @@ jobs:
           files: |
             ${{ steps.checksum.outputs.file }}
             ${{ steps.updater.outputs.file }}
+            apps/desktop/src-tauri/resources/ide-plugins/*.vsix
+            apps/desktop/src-tauri/resources/ide-plugins/*.zip

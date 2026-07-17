@@ -167,3 +167,56 @@ export interface LibraryMaintenanceService {
   clearLibrary(): Promise<void>
   getLibraryStats(): Promise<StorageStats>
 }
+
+export interface ReadingAnchor {
+  offset: number
+  paragraphIndex: number
+  lineIndex: number
+}
+
+export interface ReaderLine {
+  text: string
+  start: number
+  end: number
+}
+
+export function splitReaderLines(text: string, columns = 36): ReaderLine[] {
+  const width = Math.max(1, Math.floor(columns))
+  const normalized = text.replace(/\r\n?/gu, '\n')
+  const lines: ReaderLine[] = []
+  let lineStart = 0
+  let count = 0
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index]
+    if (character === '\n') {
+      lines.push({ text: normalized.slice(lineStart, index), start: lineStart, end: index })
+      lineStart = index + 1
+      count = 0
+      continue
+    }
+    count += /[\u0000-\u00ff]/u.test(character) ? 0.5 : 1
+    if (count >= width) {
+      lines.push({ text: normalized.slice(lineStart, index + 1), start: lineStart, end: index + 1 })
+      lineStart = index + 1
+      count = 0
+    }
+  }
+  if (lineStart < normalized.length || !lines.length) {
+    lines.push({ text: normalized.slice(lineStart), start: lineStart, end: normalized.length })
+  }
+  return lines
+}
+
+export function getCompactReaderWindow(text: string, anchorOffset: number, visibleLines = 5, columns = 36) {
+  const lines = splitReaderLines(text, columns)
+  const match = lines.findIndex(line => line.end > Math.max(0, anchorOffset))
+  const first = match === -1 ? Math.max(0, lines.length - visibleLines) : match
+  const count = Math.max(1, visibleLines)
+  return {
+    lines: lines.slice(first, first + count),
+    startLine: first,
+    endLine: Math.min(lines.length, first + count),
+    totalLines: lines.length,
+    anchor: lines[first]?.start ?? 0
+  }
+}

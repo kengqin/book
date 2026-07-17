@@ -17,6 +17,7 @@ export interface DesktopChapterSummary {
 
 export interface DesktopChapter extends DesktopChapterSummary {
   content: string
+  contentText: string
 }
 
 export interface DesktopSearchResult {
@@ -40,6 +41,47 @@ export interface DesktopBackupResult {
   books: number
   chapters: number
   notes: number
+}
+
+export interface DesktopExternalFile {
+  name: string
+  bytes: number[]
+}
+
+export type CloseBehavior = 'ask' | 'minimizeToTray' | 'quit'
+
+export interface BundledIdePlugin {
+  id: string
+  label: string
+  kind: 'vscode' | 'jetbrains' | 'visual-studio'
+  version: string
+  identifier: string
+  description: string
+  packageType: string
+  supportedIdes: string[]
+  available: boolean
+}
+
+export interface IdeTarget {
+  id: string
+  label: string
+  kind: BundledIdePlugin['kind']
+  path: string
+  installed: boolean
+  installedVersion?: string
+  canUninstall: boolean
+}
+
+export interface IdeIntegrationStatus {
+  plugins: BundledIdePlugin[]
+  targets: IdeTarget[]
+}
+
+export interface IdeInstallResult {
+  target: string
+  plugin: string
+  installed: boolean
+  message: string
 }
 
 export function listDesktopBooks() {
@@ -101,4 +143,36 @@ export function exportDesktopBackup(targetPath: string) {
 
 export function importDesktopBackup(sourcePath: string) {
   return invoke<DesktopBackupResult>('import_backup', { sourcePath })
+}
+
+export function readDesktopExternalFile(path: string) {
+  return invoke<DesktopExternalFile>('read_external_file', { path })
+}
+
+export function getCloseBehavior() {
+  return invoke<CloseBehavior>('get_close_behavior')
+}
+
+export function setCloseBehavior(behavior: CloseBehavior) {
+  return invoke<CloseBehavior>('set_close_behavior', { behavior })
+}
+
+export function resolveCloseBehavior(behavior: Exclude<CloseBehavior, 'ask'>, remember: boolean) {
+  return invoke<void>('resolve_close_behavior', { behavior, remember })
+}
+
+export function cancelCloseBehaviorPrompt() {
+  return invoke<void>('cancel_close_behavior_prompt')
+}
+
+export function getIdeIntegrationStatus() {
+  return invoke<IdeIntegrationStatus>('get_ide_integration_status')
+}
+
+export function installIdePlugin(targetId: string, pluginId: string) {
+  return invoke<IdeInstallResult>('install_ide_plugin', { input: { targetId, pluginId } })
+}
+
+export function uninstallIdePlugin(targetId: string, pluginId: string) {
+  return invoke<IdeInstallResult>('uninstall_ide_plugin', { input: { targetId, pluginId } })
 }

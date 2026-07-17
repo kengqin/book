@@ -2,6 +2,13 @@ node_modules/
 apps/*/dist/
 apps/*/src-tauri/target/
 apps/*/src-tauri/gen/
+plugins/*/.gradle/
+plugins/intellij/.intellijPlatform/
+plugins/*/build/
+plugins/*/bin/
+plugins/*/obj/
+apps/desktop/src-tauri/resources/ide-plugins/*.vsix
+apps/desktop/src-tauri/resources/ide-plugins/*.zip
 .release-local/
 *.key
 *.key.pub
