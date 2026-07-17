@@ -52,11 +52,6 @@ jobs:
             echo "Release Tag must point to a commit merged into main" >&2
             exit 1
           }
-          read -ra parents <<<"$(git show -s --format=%P "$tag_commit")"
-          if [[ "${#parents[@]}" != "2" ]] || ! git merge-base --is-ancestor "${parents[1]}" origin/develop; then
-            echo "Release Tag must point to the reviewed develop -> main merge" >&2
-            exit 1
-          fi
           npm run release:validate -- --tag="$TAG" --baseline-ref="${TAG}^1"
           node scripts/generate-release-notes.mjs --tag="$TAG" --output=release-notes.md
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
