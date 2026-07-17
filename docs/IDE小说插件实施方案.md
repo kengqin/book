@@ -38,6 +38,8 @@ Bridge 监听 `127.0.0.1` 的动态端口，并在 `%APPDATA%/NovelLibrary/bridg
 
 桌面端资源目录固定包含 `novel-library-reader-0.4.4.vsix`、`novel-library-intellij-0.4.2.zip`、`novel-library-visual-studio-0.4.1.vsix` 和清单。工具页默认展示全部支持插件并提供搜索，检测到每个 IDE 后由用户单独选择安装目标。已安装实例展示实际版本和卸载操作。
 
+桌面端侧栏主导航只保留书架、搜索和工具；设置固定在侧栏底部，不展示“本地模式”文案。版本与更新不占用独立主导航位置，设置页展示当前版本和更新状态，并提供进入完整版本历史页的入口；存在更新时提示圆点显示在设置入口。
+
 JetBrains ZIP 根据目标产品 `product-info.json` 部署到准确插件目录，不调用只支持 Marketplace ID 的 `installPlugins`。检测和安装子进程均隐藏命令行窗口。命令行入口支持交互选择，也支持 `-Only ... -AllTargets` 自动化验收。
 
 ## 验收

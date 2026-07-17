@@ -18,13 +18,13 @@ button { letter-spacing: 0; }
 .app-sidebar header strong { font-family: "Noto Serif SC", SimSun, serif; font-size: 15px; }
 .app-sidebar header small { color: #a7b4ae; font-size: 9px; }
 .app-mark { width: 34px; height: 34px; display: grid; place-items: center; color: #f3dfac; border: 1px solid #66766e; }
-.app-sidebar nav { display: grid; gap: 5px; padding: 16px 11px; }
+.app-sidebar nav { position: relative; display: grid; gap: 5px; padding: 16px 11px; }
 .app-sidebar nav a { height: 42px; display: flex; align-items: center; gap: 11px; padding: 0 12px; color: #b8c3be; text-decoration: none; border-left: 2px solid transparent; }
 .app-sidebar nav a { position: relative; }
 .update-badge { position: absolute; right: 12px; width: 7px; height: 7px; border-radius: 50%; background: #dfbf72; box-shadow: 0 0 0 2px #26322f; }
 .app-sidebar nav a:hover { color: #fff; background: #222d2a; }
 .app-sidebar nav a.router-link-active { color: #fff; border-left-color: #d0ad63; background: #2b3733; }
-.app-sidebar footer { margin-top: auto; padding: 17px 21px; color: #889690; border-top: 1px solid rgba(255,255,255,.08); font-size: 11px; }
+.app-sidebar .sidebar-secondary { margin-top: auto; padding-top: 8px; padding-bottom: 8px; border-top: 1px solid rgba(255,255,255,.08); }
 .app-workspace { min-width: 0; overflow: auto; background: #f4f5f1; }
 .workspace-view { width: min(1180px, 100%); min-height: 100%; margin: 0 auto; padding: 30px 36px 48px; }
 .workspace-header { min-height: 72px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; border-bottom: 1px solid #d7dbd4; }
@@ -74,7 +74,8 @@ button { letter-spacing: 0; }
 .settings-list section { min-height: 68px; display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: 12px; border-bottom: 1px solid #d7dbd4; }
 .settings-list section div { display: grid; gap: 4px; }
 .settings-list span { color: #738079; font-size: 11px; overflow-wrap: anywhere; }
-.settings-list .backup-setting, .settings-list .data-directory-setting, .settings-list .database-file-setting { grid-template-columns: 28px minmax(0, 1fr) auto; }
+.settings-list .backup-setting, .settings-list .data-directory-setting, .settings-list .database-file-setting, .settings-list .updates-setting { grid-template-columns: 28px minmax(0, 1fr) auto; }
+.settings-list .updates-setting > a { text-decoration: none; }
 .settings-message { margin: 18px 0 0; padding: 11px 14px; color: #245d54; border-left: 3px solid #2f7569; background: #edf7f3; overflow-wrap: anywhere; }
 
 .update-status-panel { min-height: 118px; display: grid; grid-template-columns: 180px minmax(220px, 1fr) auto; align-items: center; gap: 24px; margin-top: 22px; padding: 18px 20px; color: #eaf0ec; background: #23322e; border: 1px solid #18231f; }

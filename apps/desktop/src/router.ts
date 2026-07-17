@@ -20,7 +20,8 @@ export const router = createRouter({
     { path: '/tools', component: ToolsView },
     { path: '/tools/notes', component: NotesView },
     { path: '/tools/ide-integration', component: IdeIntegrationView },
-    { path: '/updates', component: UpdatesView },
+    { path: '/updates', redirect: '/settings/updates' },
+    { path: '/settings/updates', component: UpdatesView },
     { path: '/settings', component: SettingsView }
   ]
 })
