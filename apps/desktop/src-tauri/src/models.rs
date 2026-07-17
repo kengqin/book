@@ -146,7 +146,7 @@ pub struct ChapterRecord {
     pub content_format: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveProgressInput {
     pub book_id: String,

@@ -1,8 +1,11 @@
+mod bridge;
+mod close_behavior;
 mod database;
+mod ide_integration;
 mod models;
 mod updater;
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use database::DatabaseState;
 use models::{
@@ -219,6 +222,71 @@ fn import_backup(
     database::import_backup(&mut state.connect()?, std::path::Path::new(&source_path))
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExternalFile {
+    name: String,
+    bytes: Vec<u8>,
+}
+
+#[tauri::command]
+fn read_external_file(path: String) -> Result<ExternalFile, String> {
+    let source = PathBuf::from(&path);
+    if !source.is_absolute() || !source.is_file() {
+        return Err("文件不存在或路径不是绝对路径".to_string());
+    }
+    let metadata = fs::metadata(&source).map_err(|error| error.to_string())?;
+    if metadata.len() > 512 * 1024 * 1024 {
+        return Err("文件超过 512 MB，暂不支持导入".to_string());
+    }
+    let name = source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "无法读取文件名".to_string())?
+        .to_string();
+    let extension = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if extension != "txt" && extension != "epub" {
+        return Err("只支持导入 TXT 或 EPUB 文件".to_string());
+    }
+    Ok(ExternalFile {
+        name,
+        bytes: fs::read(source).map_err(|error| error.to_string())?,
+    })
+}
+
+#[tauri::command]
+async fn get_ide_integration_status(
+    app: tauri::AppHandle,
+) -> Result<ide_integration::IdeIntegrationStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || ide_integration::status(&app))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn install_ide_plugin(
+    app: tauri::AppHandle,
+    input: ide_integration::InstallIdePluginInput,
+) -> Result<ide_integration::IdeInstallResult, String> {
+    tauri::async_runtime::spawn_blocking(move || ide_integration::install(&app, input))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn uninstall_ide_plugin(
+    app: tauri::AppHandle,
+    input: ide_integration::UninstallIdePluginInput,
+) -> Result<ide_integration::IdeInstallResult, String> {
+    tauri::async_runtime::spawn_blocking(move || ide_integration::uninstall(&app, input))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -228,8 +296,13 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_directory = desktop_data_directory(app.handle())?;
+            app.manage(close_behavior::CloseBehaviorState::load(
+                data_directory.join("app-settings.json"),
+            ));
+            close_behavior::setup_tray(app)?;
             let database = DatabaseState::initialize(data_directory)?;
             app.manage(database);
+            bridge::start(app.handle().clone())?;
             app.manage(UpdateDownloadState::default());
             Ok(())
         })
@@ -258,12 +331,21 @@ pub fn run() {
             change_database_file,
             export_backup,
             import_backup,
+            read_external_file,
+            get_ide_integration_status,
+            install_ide_plugin,
+            uninstall_ide_plugin,
             updater::check_application_update,
             updater::download_application_update,
             updater::cancel_application_update_download,
             updater::install_downloaded_application_update,
-            updater::dismiss_application_update
+            updater::dismiss_application_update,
+            close_behavior::get_close_behavior,
+            close_behavior::set_close_behavior,
+            close_behavior::cancel_close_behavior_prompt,
+            close_behavior::resolve_close_behavior
         ])
+        .on_window_event(close_behavior::handle_window_event)
         .run(tauri::generate_context!())
         .expect("failed to run novel library desktop application");
 }

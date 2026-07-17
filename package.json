@@ -1,6 +1,6 @@
 {
   "name": "book",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "",
   "main": "index.js",
   "private": true,
@@ -18,7 +18,8 @@
     "desktop:web:build": "npm run build --workspace @novel-library/desktop",
     "desktop:build": "npm run tauri --workspace @novel-library/desktop -- build",
     "release:validate": "node scripts/validate-release.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "plugins:validate": "node scripts/validate-ide-integrations.mjs"
   },
   "repository": {
     "type": "git",
@@ -39,6 +40,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@novel-library/reader-protocol": "0.1.0",
     "@novel-library/novel-parser": "0.1.0",
     "@novel-library/reader-core": "0.1.0",
     "@novel-library/storage-web": "0.1.0",

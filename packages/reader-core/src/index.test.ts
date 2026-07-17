@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateOverallProgress, formatChapterLabel } from './index'
+import { calculateOverallProgress, formatChapterLabel, getCompactReaderWindow, splitReaderLines } from './index'
 
 describe('reader core', () => {
   it('formats numeric and Chinese chapter labels', () => {
@@ -12,5 +12,14 @@ describe('reader core', () => {
     expect(calculateOverallProgress(2, 50, 4)).toBe(37.5)
     expect(calculateOverallProgress(4, 120, 4)).toBe(100)
     expect(calculateOverallProgress(0, -10, 0)).toBe(0)
+  })
+
+  it('creates stable compact reading windows', () => {
+    const text = '第一行正文\n第二行正文\n第三行正文'
+    const lines = splitReaderLines(text, 20)
+    expect(lines).toHaveLength(3)
+    const window = getCompactReaderWindow(text, lines[1].start, 2, 20)
+    expect(window.lines.map(line => line.text)).toEqual(['第二行正文', '第三行正文'])
+    expect(window.anchor).toBe(lines[1].start)
   })
 })

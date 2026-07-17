@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { BookOpen, FilePlus2, RefreshCw, Trash2 } from 'lucide-vue-next'
 import { defaultParseOptions, defaultTheme, isNumberedChapter } from '@novel-library/reader-core'
-import { deleteDesktopBook, listDesktopBooks, listDesktopChapters, saveDesktopBook, type DesktopBook } from '../services/desktop-library'
+import { deleteDesktopBook, listDesktopBooks, listDesktopChapters, readDesktopExternalFile, saveDesktopBook, type DesktopBook } from '../services/desktop-library'
 import { parseNovelFile } from '../services/parse-novel-file'
 import { parseEpubFile } from '../services/parse-epub-file'
 
@@ -38,6 +38,14 @@ async function importFile(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  try {
+    await importBook(file)
+  } finally {
+    input.value = ''
+  }
+}
+
+async function importBook(file: File, existingId?: string) {
   importing.value = true
   importProgress.value = 0
   importMessage.value = '正在读取文件'
@@ -55,14 +63,24 @@ async function importFile(event: Event) {
         })
     const result = await parse(file)
     importMessage.value = '正在写入本地数据库'
-    const book = await saveDesktopBook({ result, options, theme: { ...defaultTheme } })
+    const book = await saveDesktopBook({ result, options, theme: { ...defaultTheme }, existingId })
     await loadBooks()
     await router.push(`/book/${book.id}`)
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     importing.value = false
-    input.value = ''
+  }
+}
+
+async function importExternalFile(event: Event) {
+  const detail = (event as CustomEvent<{ path: string; existingId?: string }>).detail
+  if (!detail?.path) return
+  try {
+    const external = await readDesktopExternalFile(detail.path)
+    await importBook(new File([new Uint8Array(external.bytes)], external.name), detail.existingId)
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : String(cause)
   }
 }
 
@@ -72,7 +90,11 @@ async function removeBook(book: DesktopBook) {
   await loadBooks()
 }
 
-onMounted(loadBooks)
+onMounted(() => {
+  void loadBooks()
+  window.addEventListener('novel-library-import', importExternalFile)
+})
+onBeforeUnmount(() => window.removeEventListener('novel-library-import', importExternalFile))
 </script>
 
 <template>
