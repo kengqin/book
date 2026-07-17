@@ -26,7 +26,7 @@ export interface ReleaseEntry {
   databaseSchema: number
   published: boolean
   minimumSupportedVersion?: string
-  requiresBackup: boolean
+  requiresBackup?: boolean
   releaseUrl: string
   installerUrl: string
   sha256: string
@@ -237,7 +237,9 @@ export function isReleaseManifest(value: unknown): value is ReleaseManifest {
     } catch {
       return false
     }
-    if (versions.has(release.version) || typeof release.published !== 'boolean' || typeof release.requiresBackup !== 'boolean') return false
+    if (versions.has(release.version) || typeof release.published !== 'boolean') return false
+    if (release.requiresBackup !== undefined && typeof release.requiresBackup !== 'boolean') return false
+    if (release.version === manifest.latest && typeof release.requiresBackup !== 'boolean') return false
     if (!Array.isArray(release.sections) || !release.releaseUrl || !release.installerUrl) return false
     versions.add(release.version)
   }
