@@ -52,11 +52,16 @@ function validateReleaseEntry(release, manifest) {
 }
 
 function validateHistory(current, baseline) {
+  const comparableRelease = release => {
+    const copy = { ...release }
+    for (const key of ['minimumSupportedVersion', 'requiresBackup', 'upgradeNotes']) delete copy[key]
+    return copy
+  }
   const currentByVersion = new Map(current.releases.map((release) => [release.version, release]))
   for (const previous of baseline.releases) {
     const retained = currentByVersion.get(previous.version)
     if (!retained) throw new Error(`历史版本 v${previous.version} 被删除，版本记录只能新增`)
-    if (JSON.stringify(retained) !== JSON.stringify(previous)) {
+    if (JSON.stringify(comparableRelease(retained)) !== JSON.stringify(comparableRelease(previous))) {
       throw new Error(`历史版本 v${previous.version} 被修改，已发布记录不可覆盖`)
     }
   }
