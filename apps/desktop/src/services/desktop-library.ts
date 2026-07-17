@@ -81,6 +81,8 @@ export interface IdeInstallResult {
   target: string
   plugin: string
   installed: boolean
+  verified: boolean
+  installedVersion?: string
   message: string
 }
 

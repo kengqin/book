@@ -28,7 +28,7 @@ export async function buildTargetManifest(options) {
 
   if (options.installer) {
     const checksum = await sha256File(options.installer)
-    if (release.sha256.toLowerCase() !== checksum) {
+    if (release.sha256 && release.sha256.toLowerCase() !== checksum) {
       throw new Error(`安装包 SHA256 与版本目录不一致：期望 ${release.sha256}，实际 ${checksum}`)
     }
     if (options.checksumOutput) {

@@ -167,23 +167,90 @@ fn repair_epub_chapter_structure(connection: &Connection, legacy: bool) -> Resul
 pub struct DatabaseState {
     default_data_directory: PathBuf,
     config_path: PathBuf,
+    legacy_config_path: Option<PathBuf>,
     active: RwLock<ActiveDatabase>,
 }
 
 impl DatabaseState {
+    #[allow(dead_code)]
     pub fn initialize(default_data_directory: PathBuf) -> Result<Self, String> {
-        fs::create_dir_all(&default_data_directory).map_err(|error| error.to_string())?;
         let config_path = default_data_directory.join("config.json");
-        let active = load_configured_database(&config_path).unwrap_or_else(|| ActiveDatabase {
-            data_directory: default_data_directory.clone(),
-            database_path: default_data_directory.join("library.db"),
-        });
+        Self::initialize_with_config(default_data_directory, config_path, None)
+    }
+
+    pub fn initialize_with_config(
+        default_data_directory: PathBuf,
+        config_path: PathBuf,
+        legacy_config_path: Option<PathBuf>,
+    ) -> Result<Self, String> {
+        fs::create_dir_all(&default_data_directory).map_err(|error| error.to_string())?;
+        let active = load_configured_database(&config_path)
+            .or_else(|| {
+                legacy_config_path
+                    .as_deref()
+                    .and_then(load_configured_database)
+            })
+            .unwrap_or_else(|| ActiveDatabase {
+                data_directory: default_data_directory.clone(),
+                database_path: default_data_directory.join("library.db"),
+            });
         fs::create_dir_all(&active.data_directory).map_err(|error| error.to_string())?;
         let state = Self {
             default_data_directory,
             config_path,
+            legacy_config_path,
             active: RwLock::new(active),
         };
+        state.persist_config()?;
+        let connection = state.connect()?;
+        migrate(&connection)?;
+        Ok(state)
+    }
+
+    pub fn initialize_for_installation(
+        default_data_directory: PathBuf,
+        config_path: PathBuf,
+        legacy_data_directory: PathBuf,
+    ) -> Result<Self, String> {
+        if config_path.is_file() {
+            return Self::initialize_with_config(default_data_directory, config_path, None);
+        }
+
+        let legacy_config_path = legacy_data_directory.join("config.json");
+        let legacy =
+            load_configured_database(&legacy_config_path).unwrap_or_else(|| ActiveDatabase {
+                data_directory: legacy_data_directory.clone(),
+                database_path: legacy_data_directory.join("library.db"),
+            });
+        fs::create_dir_all(&default_data_directory).map_err(|error| error.to_string())?;
+        let target_database = default_data_directory.join("library.db");
+        if legacy.database_path.is_file() && legacy.database_path != target_database {
+            let source =
+                Connection::open(&legacy.database_path).map_err(|error| error.to_string())?;
+            source
+                .backup(MAIN_DB, &target_database, None)
+                .map_err(|error| format!("迁移旧版书库失败：{error}"))?;
+            drop(source);
+            let target = Connection::open(&target_database).map_err(|error| error.to_string())?;
+            migrate(&target)?;
+            drop(target);
+            remove_managed_database(&legacy.database_path);
+        }
+
+        let state = Self {
+            default_data_directory: default_data_directory.clone(),
+            config_path,
+            legacy_config_path: None,
+            active: RwLock::new(ActiveDatabase {
+                data_directory: default_data_directory,
+                database_path: target_database,
+            }),
+        };
+        state.persist_config()?;
+        for name in ["config.json", "bridge.json", "bridge-location.json"] {
+            let _ = fs::remove_file(legacy_data_directory.join(name));
+        }
+        let _ = fs::remove_dir(&legacy_data_directory);
         let connection = state.connect()?;
         migrate(&connection)?;
         Ok(state)
@@ -213,6 +280,10 @@ impl DatabaseState {
         Ok((active.data_directory.clone(), active.database_path.clone()))
     }
 
+    pub fn default_data_directory(&self) -> PathBuf {
+        self.default_data_directory.clone()
+    }
+
     pub fn change_data_directory(&self, data_directory: PathBuf) -> Result<(), String> {
         if !data_directory.is_absolute() {
             return Err("数据目录必须是绝对路径".to_string());
@@ -228,10 +299,7 @@ impl DatabaseState {
         }
 
         let target_database = data_directory.join("library.db");
-        if target_database.exists() {
-            let target = Connection::open(&target_database).map_err(|error| error.to_string())?;
-            migrate(&target)?;
-        } else {
+        if current.database_path != target_database {
             let source = self.connect()?;
             source
                 .backup(MAIN_DB, &target_database, None)
@@ -244,11 +312,7 @@ impl DatabaseState {
             data_directory: data_directory.display().to_string(),
             database_path: Some(target_database.display().to_string()),
         };
-        fs::write(
-            &self.config_path,
-            serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?,
-        )
-        .map_err(|error| error.to_string())?;
+        self.persist_config_value(&config)?;
         let mut active = self
             .active
             .write()
@@ -257,6 +321,8 @@ impl DatabaseState {
             data_directory,
             database_path: target_database,
         };
+        drop(active);
+        remove_managed_database(&current.database_path);
         Ok(())
     }
 
@@ -282,11 +348,7 @@ impl DatabaseState {
             data_directory: self.default_data_directory.display().to_string(),
             database_path: Some(target_database.display().to_string()),
         };
-        fs::write(
-            &self.config_path,
-            serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?,
-        )
-        .map_err(|error| error.to_string())?;
+        self.persist_config_value(&config)?;
         let mut active = self
             .active
             .write()
@@ -295,6 +357,8 @@ impl DatabaseState {
             data_directory: self.default_data_directory.clone(),
             database_path: target_database,
         };
+        drop(active);
+        remove_managed_database(&current.database_path);
         Ok(())
     }
 
@@ -316,10 +380,7 @@ impl DatabaseState {
             return Ok(());
         }
 
-        if database_path.exists() {
-            let target = Connection::open(&database_path).map_err(|error| error.to_string())?;
-            migrate(&target)?;
-        } else {
+        if current.database_path != database_path {
             let source = self.connect()?;
             source
                 .backup(MAIN_DB, &database_path, None)
@@ -332,11 +393,7 @@ impl DatabaseState {
             data_directory: data_directory.display().to_string(),
             database_path: Some(database_path.display().to_string()),
         };
-        fs::write(
-            &self.config_path,
-            serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?,
-        )
-        .map_err(|error| error.to_string())?;
+        self.persist_config_value(&config)?;
         let mut active = self
             .active
             .write()
@@ -345,7 +402,60 @@ impl DatabaseState {
             data_directory,
             database_path,
         };
+        drop(active);
+        remove_managed_database(&current.database_path);
         Ok(())
+    }
+
+    fn persist_config(&self) -> Result<(), String> {
+        let active = self
+            .active
+            .read()
+            .map_err(|_| "无法读取当前数据库配置".to_string())?;
+        let config = DataDirectoryConfig {
+            data_directory: active.data_directory.display().to_string(),
+            database_path: Some(active.database_path.display().to_string()),
+        };
+        drop(active);
+        self.persist_config_value(&config)
+    }
+
+    fn persist_config_value(&self, config: &DataDirectoryConfig) -> Result<(), String> {
+        let payload = serde_json::to_vec_pretty(config).map_err(|error| error.to_string())?;
+        let mut paths = vec![self.config_path.clone()];
+        if let Some(path) = &self.legacy_config_path {
+            if !paths.iter().any(|candidate| candidate == path) {
+                paths.push(path.clone());
+            }
+        }
+        let mut written = false;
+        let mut errors = Vec::new();
+        for path in paths {
+            if let Some(parent) = path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            match fs::write(&path, &payload) {
+                Ok(()) => written = true,
+                Err(error) => errors.push(format!("{}：{}", path.display(), error)),
+            }
+        }
+        if written {
+            Ok(())
+        } else {
+            Err(format!("无法保存数据位置配置：{}", errors.join("；")))
+        }
+    }
+}
+
+fn remove_managed_database(database_path: &Path) {
+    if !database_path.is_file() {
+        return;
+    }
+    let _ = fs::remove_file(database_path);
+    if let Some(name) = database_path.file_name().and_then(|value| value.to_str()) {
+        for suffix in ["-wal", "-shm"] {
+            let _ = fs::remove_file(database_path.with_file_name(format!("{name}{suffix}")));
+        }
     }
 }
 
@@ -1663,5 +1773,43 @@ mod tests {
         drop(reloaded);
         drop(state);
         fs::remove_dir_all(root).expect("remove directory fixture");
+    }
+
+    #[test]
+    fn migrates_legacy_appdata_database_to_installation_data_and_cleans_legacy_files() {
+        let root = std::env::temp_dir().join(format!(
+            "novel-library-installation-migration-test-{}",
+            Uuid::new_v4()
+        ));
+        let legacy_directory = root.join("AppData").join("NovelLibrary");
+        let install_directory = root.join("NovelLibrary");
+        let install_data = install_directory.join("NovelLibraryData");
+        let legacy_state =
+            DatabaseState::initialize(legacy_directory.clone()).expect("initialize legacy state");
+        save_imported_book(
+            &mut legacy_state.connect().expect("connect legacy"),
+            sample_import(),
+        )
+        .expect("save legacy book");
+        drop(legacy_state);
+
+        let migrated = DatabaseState::initialize_for_installation(
+            install_data.clone(),
+            install_directory.join("NovelLibrary.storage.json"),
+            legacy_directory.clone(),
+        )
+        .expect("migrate installation state");
+        assert_eq!(
+            list_books(&migrated.connect().expect("connect migrated"))
+                .expect("list migrated books")
+                .len(),
+            1
+        );
+        assert!(install_data.join("library.db").is_file());
+        assert!(!legacy_directory.join("library.db").exists());
+        assert!(!legacy_directory.join("config.json").exists());
+
+        drop(migrated);
+        fs::remove_dir_all(root).expect("remove migration fixture");
     }
 }

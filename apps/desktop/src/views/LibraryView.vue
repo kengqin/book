@@ -121,7 +121,7 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
     </div>
     <div v-else class="book-list">
       <article v-for="book in books" :key="book.id">
-        <button type="button" class="book-seal" @click="router.push(`/book/${book.id}`)"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></button>
+        <button type="button" class="book-seal" :class="{ 'book-seal--image': book.coverDataUrl }" @click="router.push(`/book/${book.id}`)"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></button>
         <button type="button" class="book-copy" @click="router.push(`/book/${book.id}`)"><strong>{{ book.title }}</strong><span>{{ book.author || '佚名' }}</span></button>
         <span><b class="format-badge">{{ book.sourceFormat.toUpperCase() }}</b> {{ chapterCounts[book.id] ?? book.chapterCount }} 章</span>
         <span>{{ book.totalWords.toLocaleString() }} 字</span>

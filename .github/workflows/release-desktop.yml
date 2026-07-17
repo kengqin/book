@@ -140,9 +140,11 @@ jobs:
       - name: Package VS Code and Cursor plugin
         shell: pwsh
         run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $vscodeFile = ($manifest.plugins | Where-Object id -eq 'vscode').file
           New-Item -ItemType Directory -Force apps/desktop/src-tauri/resources/ide-plugins | Out-Null
           Push-Location plugins/vscode
-          npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out ../../apps/desktop/src-tauri/resources/ide-plugins/novel-library-reader-0.4.4.vsix
+          npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out "../../apps/desktop/src-tauri/resources/ide-plugins/$vscodeFile"
           Pop-Location
 
       - name: Build JetBrains plugin
@@ -152,24 +154,29 @@ jobs:
       - name: Copy JetBrains plugin into desktop resources
         shell: pwsh
         run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $intellijFile = ($manifest.plugins | Where-Object id -eq 'intellij').file
           $plugin = Get-ChildItem plugins/intellij/build/distributions/*.zip | Select-Object -First 1
           if (-not $plugin) { throw 'JetBrains plugin ZIP not found' }
-          Copy-Item $plugin.FullName apps/desktop/src-tauri/resources/ide-plugins/novel-library-intellij-0.4.2.zip
+          Copy-Item $plugin.FullName (Join-Path apps/desktop/src-tauri/resources/ide-plugins $intellijFile)
 
       - name: Build Visual Studio plugin
         shell: pwsh
         run: |
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $visualStudioFile = ($manifest.plugins | Where-Object id -eq 'visual-studio').file
           dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
           dotnet build plugins/visual-studio/NovelLibrary.VisualStudio.csproj --configuration Release --no-restore
           ./scripts/package-visual-studio-plugin.ps1 -Root $PWD
-          $plugin = 'plugins/visual-studio/bin/novel-library-visual-studio-0.4.1.vsix'
+          $plugin = Join-Path 'plugins/visual-studio/bin' $visualStudioFile
           if (-not (Test-Path $plugin)) { throw 'Visual Studio VSIX not found' }
-          Copy-Item $plugin apps/desktop/src-tauri/resources/ide-plugins/novel-library-visual-studio-0.4.1.vsix
+          Copy-Item $plugin (Join-Path apps/desktop/src-tauri/resources/ide-plugins $visualStudioFile)
 
       - name: Verify bundled IDE plugins
         shell: pwsh
         run: |
-          $required = @('novel-library-reader-0.4.4.vsix', 'novel-library-intellij-0.4.2.zip', 'novel-library-visual-studio-0.4.1.vsix')
+          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
+          $required = @($manifest.plugins | ForEach-Object file)
           foreach ($file in $required) {
             if (-not (Test-Path "apps/desktop/src-tauri/resources/ide-plugins/$file")) { throw "Missing bundled IDE plugin: $file" }
           }

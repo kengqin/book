@@ -1,10 +1,33 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { execFileSync } = require('child_process')
+let cachedInstalledBridge = null
 
-function bridgeFile() {
+function legacyBridgeFile() {
   const root = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
   return path.join(root, 'NovelLibrary', 'bridge.json')
+}
+
+function installedBridgeFile() {
+  if (process.platform !== 'win32') return null
+  if (cachedInstalledBridge && fs.existsSync(cachedInstalledBridge)) return cachedInstalledBridge
+  try {
+    const executable = execFileSync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      "$names = @('novel-library-desktop', 'NovelLibrary'); $p = Get-Process | Where-Object { $names -contains $_.ProcessName } | Select-Object -First 1; if ($p) { $p.Path }"
+    ], { encoding: 'utf8', timeout: 2000 }).trim()
+    if (!executable) return null
+    const candidate = path.join(path.dirname(executable), 'bridge.json')
+    cachedInstalledBridge = fs.existsSync(candidate) ? candidate : null
+    return cachedInstalledBridge
+  } catch {
+    return null
+  }
+}
+
+function bridgeFile() {
+  return installedBridgeFile() || legacyBridgeFile()
 }
 
 function readBridge() {

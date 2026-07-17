@@ -117,10 +117,27 @@ fun displayLines(text: String): List<String> {
 
 object BridgeClient {
     private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build()
+    private var cachedInstalledBridge: java.nio.file.Path? = null
+
+    private fun installedBridge(): java.nio.file.Path? {
+        cachedInstalledBridge?.takeIf(java.nio.file.Files::isRegularFile)?.let { return it }
+        cachedInstalledBridge = ProcessHandle.allProcesses().iterator().asSequence()
+            .mapNotNull { it.info().command().orElse(null) }
+            .firstOrNull { command ->
+                val name = java.nio.file.Path.of(command).fileName.toString().lowercase()
+                name == "novel-library-desktop.exe" || name == "novellibrary.exe"
+            }
+            ?.let { command -> java.nio.file.Path.of(command).resolveSibling("bridge.json") }
+            ?.takeIf(java.nio.file.Files::isRegularFile)
+        return cachedInstalledBridge
+    }
 
     private fun config(): BridgeConfig {
         val root = System.getenv("APPDATA") ?: error("APPDATA is not available")
-        val text = java.nio.file.Files.readString(java.nio.file.Path.of(root, "NovelLibrary", "bridge.json"))
+        val legacyDirectory = java.nio.file.Path.of(root, "NovelLibrary")
+        val legacyBridge = legacyDirectory.resolve("bridge.json")
+        val bridgePath = installedBridge() ?: legacyBridge
+        val text = java.nio.file.Files.readString(bridgePath)
         val port = Regex(""""port"\s*:\s*(\d+)""").find(text)?.groupValues?.get(1)?.toInt()
             ?: error("Bridge port missing")
         val token = Regex(""""token"\s*:\s*"([^"]+)"""").find(text)?.groupValues?.get(1)

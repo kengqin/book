@@ -59,7 +59,7 @@ onMounted(load)
     <div v-else-if="error" class="inline-error">{{ error }}</div>
     <template v-else-if="book">
       <header class="book-detail-header" :style="{ '--book-accent': book.theme.accent, '--book-bg': book.theme.background, '--book-text': book.theme.text }">
-        <div class="book-detail-seal"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></div>
+        <div class="book-detail-seal" :class="{ 'book-detail-seal--image': book.coverDataUrl }"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></div>
         <div><p>{{ book.sourceFormat.toUpperCase() }} · {{ numberedChapterCount }} CHAPTERS · {{ book.totalWords.toLocaleString() }} WORDS</p><h1>{{ book.title }}</h1><span>{{ book.author || '佚名' }}</span><blockquote>{{ book.description || '暂无简介' }}</blockquote><div class="header-actions"><button type="button" class="primary-command" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" />{{ book.progress ? '继续阅读' : '开始阅读' }}</button><button type="button" class="secondary-command danger-command" @click="removeBook"><Trash2 :size="16" />删除</button></div></div>
       </header>
 
