@@ -107,6 +107,7 @@ export const {
 let targetRelease: ReleaseEntry | null = null
 let updateEventListener: Promise<UnlistenFn> | undefined
 let backgroundCheckTimer: number | undefined
+let downloadStarting = false
 
 function errorDetail(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause)
@@ -355,21 +356,26 @@ export async function checkForUpdates(silent = false) {
 
 export async function downloadAvailableUpdate(automatic = false) {
   const blocked = ['downloading', 'cancelling', 'downloaded', 'installing'].includes(updateTask.stage)
-  if (!availableUpdate.value || blocked) return
-  if (targetRelease?.requiresBackup) {
-    if (automatic || !window.confirm('该版本要求升级前导出完整备份。确认已完成备份并继续下载吗？')) return
-  }
-  await initializeUpdateEvents()
-  updateTask.stage = 'downloading'
-  updateTask.progress = 0
-  updateTask.downloadedBytes = 0
-  updateTask.totalBytes = 0
-  updateTask.error = ''
-  updateTask.message = `正在下载 v${availableUpdate.value.version}`
+  if (!availableUpdate.value || blocked || downloadStarting) return
+  downloadStarting = true
   try {
-    await invoke<boolean>('download_application_update')
-  } catch (cause) {
-    setFailure(classifyFailure(cause, 'download-error'))
+    if (targetRelease?.requiresBackup) {
+      if (automatic || !window.confirm('该版本要求升级前导出完整备份。确认已完成备份并继续下载吗？')) return
+    }
+    await initializeUpdateEvents()
+    updateTask.stage = 'downloading'
+    updateTask.progress = 0
+    updateTask.downloadedBytes = 0
+    updateTask.totalBytes = 0
+    updateTask.error = ''
+    updateTask.message = `正在下载 v${availableUpdate.value.version}`
+    try {
+      await invoke<boolean>('download_application_update')
+    } catch (cause) {
+      setFailure(classifyFailure(cause, 'download-error'))
+    }
+  } finally {
+    downloadStarting = false
   }
 }
 

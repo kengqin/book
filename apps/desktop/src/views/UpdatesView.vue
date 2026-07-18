@@ -34,6 +34,8 @@ const autoCheck = ref(isAutoCheckEnabled())
 const backgroundCheck = ref(isBackgroundCheckEnabled())
 const autoDownload = ref(isAutoDownloadEnabled())
 const loadingHistory = ref(true)
+const checkingFromView = ref(false)
+const historicalInstallVersion = ref<string | null>(null)
 
 const currentRelease = computed(() => releases.value.find((release) => release.version === currentVersion.value))
 
@@ -50,13 +52,17 @@ function updateAutoDownload() {
 }
 
 async function installHistoricalVersion(release: ReleaseEntry) {
+  if (historicalInstallVersion.value) return
   const isDowngrade = compareVersions(release.version, currentVersion.value) < 0
   if (isDowngrade && !window.confirm(`将从 ${currentVersion.value} 降级到 ${release.version}。旧版本可能无法读取新版数据库，请先在设置中导出备份。仍要继续吗？`)) return
+  historicalInstallVersion.value = release.version
   updateError.value = ''
   try {
     await openUrl(release.installerUrl)
   } catch {
     updateError.value = `无法打开 v${release.version} 安装包，请稍后重试`
+  } finally {
+    historicalInstallVersion.value = null
   }
 }
 
@@ -76,8 +82,14 @@ async function refreshReleaseHistory() {
 }
 
 async function checkForUpdatesFromView() {
-  await checkForUpdates(false)
-  await refreshReleaseHistory()
+  if (checkingFromView.value) return
+  checkingFromView.value = true
+  try {
+    await checkForUpdates(false)
+    await refreshReleaseHistory()
+  } finally {
+    checkingFromView.value = false
+  }
 }
 
 onMounted(async () => {
@@ -108,7 +120,7 @@ onMounted(async () => {
         <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
       </div>
       <div class="header-actions">
-        <button type="button" class="secondary-command" :disabled="updateChecking || ['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateStage)" @click="checkForUpdatesFromView"><RefreshCw :size="16" :class="{ spinning: updateChecking }" />检查</button>
+        <button type="button" class="secondary-command" :disabled="checkingFromView || updateChecking || ['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateStage)" @click="checkForUpdatesFromView"><RefreshCw :size="16" :class="{ spinning: updateChecking || checkingFromView }" />检查</button>
         <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'download-error')" type="button" class="primary-command" @click="downloadAvailableUpdate()"><Download :size="16" />下载更新</button>
         <button v-else-if="updateStage === 'downloading'" type="button" class="secondary-command" @click="cancelUpdateDownload">取消下载</button>
         <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate"><RefreshCw :size="16" />安装并重启</button>
@@ -145,7 +157,7 @@ onMounted(async () => {
           </section>
           <div v-if="release.published" class="release-actions">
             <button type="button" class="text-command" @click="openRelease(release)"><ArrowUpRight :size="15" />Release</button>
-            <button v-if="release.version !== currentVersion" type="button" class="secondary-command" @click="installHistoricalVersion(release)"><Download :size="15" />安装此版本</button>
+            <button v-if="release.version !== currentVersion" type="button" class="secondary-command" :disabled="historicalInstallVersion !== null" @click="installHistoricalVersion(release)"><Download :size="15" />{{ historicalInstallVersion === release.version ? '打开中' : '安装此版本' }}</button>
             <code v-if="release.sha256" :title="release.sha256">SHA256 {{ release.sha256.slice(0, 12) }}...</code>
           </div>
           <div v-else-if="release.version !== currentVersion" class="release-pending"><ShieldAlert :size="15" />版本记录已同步，安装包尚未准备完成</div>

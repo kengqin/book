@@ -1,27 +1,18 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import LibraryView from './views/LibraryView.vue'
-import BookView from './views/BookView.vue'
-import ReaderView from './views/ReaderView.vue'
-import SearchView from './views/SearchView.vue'
-import SettingsView from './views/SettingsView.vue'
-import UpdatesView from './views/UpdatesView.vue'
-import ToolsView from './views/ToolsView.vue'
-import NotesView from './views/NotesView.vue'
-import IdeIntegrationView from './views/IdeIntegrationView.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', redirect: '/library' },
-    { path: '/library', component: LibraryView },
-    { path: '/book/:bookId', component: BookView },
-    { path: '/read/:bookId/:chapterNumber', component: ReaderView },
-    { path: '/search', component: SearchView },
-    { path: '/tools', component: ToolsView },
-    { path: '/tools/notes', component: NotesView },
-    { path: '/tools/ide-integration', component: IdeIntegrationView },
+    { path: '/library', component: () => import('./views/LibraryView.vue') },
+    { path: '/book/:bookId', component: () => import('./views/BookView.vue') },
+    { path: '/read/:bookId/:chapterNumber', component: () => import('./views/ReaderView.vue') },
+    { path: '/search', component: () => import('./views/SearchView.vue') },
+    { path: '/tools', component: () => import('./views/ToolsView.vue') },
+    { path: '/tools/notes', component: () => import('./views/NotesView.vue') },
+    { path: '/tools/ide-integration', component: () => import('./views/IdeIntegrationView.vue') },
     { path: '/updates', redirect: '/settings/updates' },
-    { path: '/settings/updates', component: UpdatesView },
-    { path: '/settings', component: SettingsView }
+    { path: '/settings/updates', component: () => import('./views/UpdatesView.vue') },
+    { path: '/settings', component: () => import('./views/SettingsView.vue') }
   ]
 })
