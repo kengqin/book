@@ -637,7 +637,18 @@ fn migrate(connection: &Connection) -> Result<(), String> {
         )
         .map_err(|error| error.to_string())?;
     if previous_version < 5 {
-        repair_epub_chapter_structure(connection, true)?;
+        connection
+            .execute_batch("BEGIN IMMEDIATE")
+            .map_err(|error| error.to_string())?;
+        match repair_epub_chapter_structure(connection, true) {
+            Ok(()) => connection
+                .execute_batch("COMMIT")
+                .map_err(|error| error.to_string())?,
+            Err(error) => {
+                let _ = connection.execute_batch("ROLLBACK");
+                return Err(error);
+            }
+        }
     }
     connection
         .execute_batch("PRAGMA user_version = 5")
