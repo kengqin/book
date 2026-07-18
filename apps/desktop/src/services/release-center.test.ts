@@ -5,11 +5,17 @@ const { getVersionMock, invokeMock, relaunchMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
   relaunchMock: vi.fn()
 }))
+const localStorageStore = new Map<string, string>()
 
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: getVersionMock }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: relaunchMock }))
+vi.stubGlobal('localStorage', {
+  getItem: (key: string) => localStorageStore.get(key) || null,
+  setItem: (key: string, value: string) => localStorageStore.set(key, value),
+  removeItem: (key: string) => localStorageStore.delete(key)
+})
 
 import {
   availableUpdate,
@@ -18,6 +24,7 @@ import {
   installDownloadedUpdate,
   isReleaseManifest,
   latestReadyVersion,
+  loadReleaseManifest,
   publishedUpdateVersion,
   updateError,
   updateMessage,
@@ -65,6 +72,7 @@ describe('release center update consistency', () => {
     getVersionMock.mockReset()
     invokeMock.mockReset()
     relaunchMock.mockReset()
+    localStorageStore.clear()
     availableUpdate.value = null
     publishedUpdateVersion.value = null
     latestReadyVersion.value = null
@@ -86,6 +94,21 @@ describe('release center update consistency', () => {
     expect(latestReadyVersion.value).toBe('0.3.0')
     expect(updateStage.value).toBe('idle')
     expect(updateMessage.value).toContain('已是最新')
+  })
+
+  it('reuses a recently fetched release manifest from local cache', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => remoteManifest() })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const first = await loadReleaseManifest({ forceRefresh: true })
+    expect(first.source).toBe('remote')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    fetchMock.mockClear()
+    const second = await loadReleaseManifest()
+    expect(second.source).toBe('cached')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(second.manifest.latest).toBe(first.manifest.latest)
   })
 
   it('uses the formal Latest Release instead of a newer catalog entry', async () => {

@@ -11,6 +11,10 @@ on:
       - 'packages/reader-protocol/**'
       - 'scripts/validate-ide-integrations.mjs'
 
+concurrency:
+  group: ide-plugins-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-vscode:
     runs-on: windows-latest
@@ -19,6 +23,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: npm
       - run: npm ci
       - run: npm run plugins:validate
       - run: node --check plugins/vscode/extension.js

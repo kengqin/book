@@ -111,6 +111,27 @@ pub struct BookRecord {
     pub last_read_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookListRecord {
+    pub id: String,
+    pub title: String,
+    pub author: String,
+    pub source_format: String,
+    pub cover_data_url: Option<String>,
+    pub chapter_count: i64,
+    pub total_words: i64,
+    pub current_chapter: i64,
+    pub progress: f64,
+    pub chapter_progress: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedBookResult {
+    pub id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChapterSummary {

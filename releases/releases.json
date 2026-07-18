@@ -1,8 +1,42 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.5.5",
+  "latest": "0.5.6",
   "releases": [
+    {
+      "version": "0.5.6",
+      "date": "2026-07-19",
+      "title": "更新获取、书架加载与启动体验优化",
+      "channel": "stable",
+      "databaseSchema": 5,
+      "published": true,
+      "minimumSupportedVersion": "0.5.5",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.6",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.6/NovelLibrary_0.5.6_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "优化",
+          "items": [
+            "版本历史优先使用本地缓存，后台按需同步远端清单，减少更新页面等待",
+            "后台定时更新检查间隔由 6 小时缩短为 1 小时，默认仍关闭",
+            "启动加载页重新整理品牌、状态提示和响应式间距，改善小窗口显示",
+            "书架改为单次轻量摘要查询，移除逐本读取章节的 N+1 请求，并在刷新时保留已有内容",
+            "GitHub Actions 增加 PR/主干质量门禁、并发取消和构建缓存"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "导入完成后的 IPC 返回改为仅传递书籍 ID，避免重复传输完整书籍数据"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "本版本数据库 Schema 保持为 5，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.5.5",
       "date": "2026-07-18",
