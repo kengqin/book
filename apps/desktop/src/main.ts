@@ -19,7 +19,15 @@ function dismissStartupSplash() {
 async function waitForStartup() {
   if (!isTauri()) return
   try {
-    await invoke('wait_for_startup')
+    let timedOut = false
+    const timeout = new Promise<void>(resolve => {
+      window.setTimeout(() => {
+        timedOut = true
+        resolve()
+      }, 20_000)
+    })
+    await Promise.race([invoke('wait_for_startup'), timeout])
+    if (timedOut) console.warn('application-startup-timeout')
   } catch (error) {
     console.error('application-startup-error', error)
   }
