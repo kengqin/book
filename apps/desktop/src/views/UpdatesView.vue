@@ -138,7 +138,7 @@ onMounted(async () => {
     </label>
     <label class="auto-update-setting">
       <input v-model="backgroundCheck" type="checkbox" @change="updateBackgroundCheck">
-      <span><strong>后台定时检查</strong><small>每 6 小时静默检查一次，默认关闭</small></span>
+      <span><strong>后台定时检查</strong><small>每 1 小时静默检查一次，默认关闭</small></span>
     </label>
     <label class="auto-update-setting">
       <input v-model="autoDownload" type="checkbox" @change="updateAutoDownload">

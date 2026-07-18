@@ -11,7 +11,7 @@ const LATEST_RELEASE_URL = `https://api.github.com/repos/${OFFICIAL_REPOSITORY}/
 const AUTO_CHECK_KEY = 'novel-library:auto-check-updates'
 const BACKGROUND_CHECK_KEY = 'novel-library:background-check-updates'
 const AUTO_DOWNLOAD_KEY = 'novel-library:auto-download-updates'
-const BACKGROUND_CHECK_INTERVAL = 6 * 60 * 60 * 1000
+const BACKGROUND_CHECK_INTERVAL = 60 * 60 * 1000
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 
 export interface ReleaseSection {
