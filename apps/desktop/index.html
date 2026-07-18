@@ -7,19 +7,21 @@
     <title>小说书库</title>
     <style>
       html, body { margin: 0; width: 100%; height: 100%; background: #0e1715; }
-      #startup-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; overflow: hidden; color: #f2f0e7; background: radial-gradient(circle at 50% 35%, #26453d 0, #172722 37%, #0e1715 100%); font-family: "Microsoft YaHei", sans-serif; transition: opacity .38s ease, visibility .38s ease; }
+      #startup-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; overflow: hidden; color: #f2f0e7; background: radial-gradient(circle at 50% 35%, #294c43 0, #172722 38%, #0e1715 100%); font-family: "Microsoft YaHei", sans-serif; transition: opacity .38s ease, visibility .38s ease; }
       #startup-splash::before, #startup-splash::after { content: ""; position: absolute; width: 42vmin; height: 42vmin; border: 1px solid rgba(223, 191, 114, .23); border-radius: 50%; animation: startup-orbit 9s linear infinite; }
       #startup-splash::after { width: 68vmin; height: 68vmin; border-color: rgba(137, 192, 176, .13); animation-duration: 14s; animation-direction: reverse; }
-      .startup-splash__content { position: relative; z-index: 1; display: grid; justify-items: center; gap: 18px; }
-      .startup-splash__mark { position: relative; width: 72px; height: 72px; display: grid; place-items: center; color: #f3dfac; border: 1px solid rgba(243, 223, 172, .7); box-shadow: 0 0 0 8px rgba(243, 223, 172, .06), 0 0 42px rgba(223, 191, 114, .16); animation: startup-breathe 2.6s ease-in-out infinite; }
+      .startup-splash__content { position: relative; z-index: 1; display: grid; justify-items: center; gap: 20px; padding: 30px 34px; text-align: center; }
+      .startup-splash__content::before { content: ""; position: absolute; inset: 12px -22px; z-index: -1; border: 1px solid rgba(137, 192, 176, .1); background: radial-gradient(ellipse at center, rgba(52, 93, 80, .18), transparent 68%); box-shadow: 0 22px 80px rgba(4, 13, 11, .2); }
+      .startup-splash__mark { position: relative; width: 82px; height: 82px; display: grid; place-items: center; color: #f3dfac; border: 1px solid rgba(243, 223, 172, .7); box-shadow: 0 0 0 8px rgba(243, 223, 172, .06), 0 0 42px rgba(223, 191, 114, .16); animation: startup-breathe 2.6s ease-in-out infinite; }
       .startup-splash__mark::before, .startup-splash__mark::after { content: ""; position: absolute; width: 7px; height: 7px; border: 1px solid #dfbf72; transform: rotate(45deg); }
       .startup-splash__mark::before { top: -5px; left: -5px; }
       .startup-splash__mark::after { right: -5px; bottom: -5px; }
       .startup-splash__book { width: 27px; height: 31px; position: relative; border: 2px solid currentColor; border-radius: 2px 4px 4px 2px; }
       .startup-splash__book::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; border-left: 1px solid currentColor; }
-      .startup-splash__title { margin: 0; font-family: "Noto Serif SC", SimSun, serif; font-size: 27px; letter-spacing: .18em; text-indent: .18em; }
-      .startup-splash__subtitle { margin: -10px 0 0; color: #aebfb7; font-size: 10px; letter-spacing: .32em; text-indent: .32em; }
-      .startup-splash__loading { display: flex; align-items: center; gap: 8px; margin-top: 9px; color: #d9c58d; font-size: 11px; letter-spacing: .12em; }
+      .startup-splash__brand { display: grid; justify-items: center; gap: 8px; }
+      .startup-splash__title { margin: 0; font-family: "Noto Serif SC", SimSun, serif; font-size: 29px; line-height: 1.15; letter-spacing: .18em; text-indent: .18em; }
+      .startup-splash__subtitle { margin: 0; color: #aebfb7; font-size: 10px; line-height: 1; letter-spacing: .32em; text-indent: .32em; }
+      .startup-splash__loading { min-width: 166px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 2px; padding: 9px 14px; color: #d9c58d; border: 1px solid rgba(223, 191, 114, .2); background: rgba(8, 20, 17, .2); font-size: 11px; line-height: 1.2; letter-spacing: .12em; }
       .startup-splash__dots { display: inline-flex; gap: 4px; }
       .startup-splash__dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: startup-dot 1.2s ease-in-out infinite; }
       .startup-splash__dots i:nth-child(2) { animation-delay: .16s; }
@@ -28,6 +30,8 @@
       @keyframes startup-orbit { to { transform: rotate(360deg); } }
       @keyframes startup-breathe { 50% { transform: translateY(-4px) scale(1.03); box-shadow: 0 0 0 12px rgba(243, 223, 172, .04), 0 0 56px rgba(223, 191, 114, .24); } }
       @keyframes startup-dot { 0%, 60%, 100% { opacity: .28; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+      @media (max-height: 620px) { .startup-splash__content { gap: 13px; padding: 20px 26px; transform: scale(.88); } }
+      @media (max-width: 520px) { .startup-splash__content { padding-inline: 22px; } .startup-splash__title { font-size: 25px; } }
       @media (prefers-reduced-motion: reduce) { #startup-splash::before, #startup-splash::after, .startup-splash__mark, .startup-splash__dots i { animation: none; } }
     </style>
   </head>
@@ -35,7 +39,7 @@
     <div id="startup-splash" role="status" aria-live="polite" aria-label="正在启动小说书库">
       <div class="startup-splash__content">
         <div class="startup-splash__mark" aria-hidden="true"><span class="startup-splash__book"></span></div>
-        <div>
+        <div class="startup-splash__brand">
           <p class="startup-splash__title">小说书库</p>
           <p class="startup-splash__subtitle">NOVEL LIBRARY</p>
         </div>
