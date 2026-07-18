@@ -68,7 +68,28 @@ describe('desktop release scripts', () => {
     expect(await readFile(checksumFile, 'utf8')).toContain(hash)
   })
 
-  it('fails before publishing when the built installer checksum differs from the catalog', async () => {
+  it('allows CI to fill a release checksum when the catalog has not been built yet', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'novel-release-'))
+    const installer = join(directory, installerName)
+    const signatureFile = `${installer}.sig`
+    const manifestFile = join(directory, 'releases.json')
+    await Promise.all([
+      writeFile(installer, 'unexpected bytes'),
+      writeFile(signatureFile, signature),
+      writeFile(manifestFile, JSON.stringify(releaseCatalog('')))
+    ])
+
+    const result = await buildTargetManifest({
+      version,
+      manifest: manifestFile,
+      installer,
+      signature: signatureFile,
+      output: join(directory, 'target.json')
+    })
+    expect(result.target.version).toBe(version)
+  })
+
+  it('still rejects a non-empty checksum that disagrees with the built installer', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'novel-release-'))
     const installer = join(directory, installerName)
     const signatureFile = `${installer}.sig`

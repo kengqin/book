@@ -356,3 +356,29 @@ jobs:
             sleep 10
           done
           trap - ERR
+
+      - name: Record published installer checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          workdir=$(mktemp -d)
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$workdir" --pattern '*-setup.exe'
+          installer=$(find "$workdir" -maxdepth 1 -name '*-setup.exe' -print -quit)
+          test -n "$installer"
+          checksum=$(sha256sum "$installer" | awk '{print $1}')
+          current=$(mktemp)
+          updated=$(mktemp)
+          gh api "repos/$GITHUB_REPOSITORY/contents/releases/releases.json?ref=main" > "$current"
+          jq -r '.content' "$current" | base64 --decode > "$updated"
+          jq --arg version "$VERSION" --arg checksum "$checksum" '(.releases[] | select(.version == $version)).sha256 = $checksum' "$updated" > "$updated.next"
+          mv "$updated.next" "$updated"
+          encoded=$(base64 --wrap=0 "$updated")
+          file_sha=$(jq -r '.sha' "$current")
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/releases/releases.json" \
+            -f message="chore(release): record v$VERSION installer checksum" \
+            -f content="$encoded" \
+            -f sha="$file_sha" \
+            -f branch=main > /dev/null

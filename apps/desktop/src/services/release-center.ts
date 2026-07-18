@@ -7,6 +7,7 @@ import localManifest from '../../../../releases/releases.json'
 
 const REMOTE_MANIFEST_URL = 'https://raw.githubusercontent.com/kengqin/book/main/releases/releases.json'
 const OFFICIAL_REPOSITORY = 'kengqin/book'
+const LATEST_RELEASE_URL = `https://api.github.com/repos/${OFFICIAL_REPOSITORY}/releases/latest`
 const AUTO_CHECK_KEY = 'novel-library:auto-check-updates'
 const BACKGROUND_CHECK_KEY = 'novel-library:background-check-updates'
 const AUTO_DOWNLOAD_KEY = 'novel-library:auto-download-updates'
@@ -84,6 +85,7 @@ interface UpdateTaskState {
 export const availableUpdate = ref<AvailableUpdate | null>(null)
 export const updateChecking = ref(false)
 export const publishedUpdateVersion = ref<string | null>(null)
+export const latestReadyVersion = ref<string | null>(null)
 export const updateCompatibilityNote = ref('')
 export const updateTask = reactive<UpdateTaskState>({
   stage: 'idle',
@@ -147,9 +149,6 @@ function classifyFailure(cause: unknown, fallback: UpdateStage): UpdateStage {
   const detail = errorDetail(cause)
   if (/VERSION_MISMATCH/i.test(detail)) return 'version-mismatch'
   if (/SIGNATURE_ERROR|DOWNLOAD_URL_NOT_ALLOWED|signature|minisign/i.test(detail)) return 'signature-error'
-  if (/MANIFEST_NOT_READY|valid release JSON|404|failed to fetch|network|connection/i.test(detail)) {
-    return 'published-but-not-ready'
-  }
   return fallback
 }
 
@@ -259,6 +258,26 @@ export async function loadReleaseManifest(): Promise<{ manifest: ReleaseManifest
   }
 }
 
+export async function loadLatestPublishedVersion() {
+  const response = await fetch(LATEST_RELEASE_URL, {
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    }
+  })
+  if (!response.ok) throw new Error(`正式版本服务不可用：HTTP ${response.status}`)
+  const release: unknown = await response.json()
+  if (!release || typeof release !== 'object') throw new Error('正式版本信息格式无效')
+  const candidate = release as { tag_name?: unknown; draft?: unknown; prerelease?: unknown }
+  if (candidate.draft !== false || candidate.prerelease !== false || typeof candidate.tag_name !== 'string' || !candidate.tag_name.startsWith('v')) {
+    throw new Error('正式版本信息格式无效')
+  }
+  const version = candidate.tag_name.slice(1)
+  parseSemver(version)
+  return version
+}
+
 export async function getCurrentVersion() {
   return getVersion()
 }
@@ -304,50 +323,55 @@ export async function checkForUpdates(silent = false) {
   let expectedVersion: string | null = null
   try {
     const currentVersion = await getCurrentVersion()
-    const { manifest, remote } = await loadReleaseManifest()
-    expectedVersion = compareVersions(manifest.latest, currentVersion) > 0 ? manifest.latest : null
-    targetRelease = expectedVersion ? manifest.releases.find((release) => release.version === expectedVersion) || null : null
+    expectedVersion = await loadLatestPublishedVersion()
+    const hasNewerVersion = compareVersions(expectedVersion, currentVersion) > 0
+    updateTask.version = hasNewerVersion ? expectedVersion : ''
+
+    const update = await invoke<AvailableUpdate | null>('check_application_update', { expectedVersion })
+    if (update && compareVersions(update.version, expectedVersion) !== 0) {
+      throw new Error(`VERSION_MISMATCH: expected ${expectedVersion}, received ${update.version}`)
+    }
+    if (hasNewerVersion && !update) {
+      throw new Error(`MANIFEST_NOT_READY: v${expectedVersion} 的更新 Manifest 尚不可用`)
+    }
+    if (!hasNewerVersion && update) {
+      throw new Error(`VERSION_MISMATCH: v${expectedVersion} 不应高于当前版本 v${currentVersion}`)
+    }
+
+    latestReadyVersion.value = expectedVersion
+    publishedUpdateVersion.value = null
+    const { manifest } = await loadReleaseManifest()
+    targetRelease = hasNewerVersion ? manifest.releases.find((release) => release.version === expectedVersion) || null : null
     updateCompatibilityNote.value = targetRelease?.minimumSupportedVersion && compareVersions(currentVersion, targetRelease.minimumSupportedVersion) < 0
       ? `当前版本低于直接升级基线 v${targetRelease.minimumSupportedVersion}，建议先导出完整备份。`
       : targetRelease?.requiresBackup
         ? '此版本升级前需要先导出完整备份。'
         : ''
 
-    if (!expectedVersion) {
+    if (!hasNewerVersion) {
       availableUpdate.value = null
-      publishedUpdateVersion.value = null
-      updateTask.version = ''
-      if (remote) {
-        updateTask.stage = 'idle'
-        updateTask.message = '当前已是最新版本'
-      } else {
-        setFailure('manifest-error')
-      }
+      updateTask.stage = 'idle'
+      updateTask.message = compareVersions(currentVersion, expectedVersion) > 0
+        ? `当前版本高于正式发布版本 v${expectedVersion}`
+        : '当前已是最新版本'
       return null
     }
-
-    updateTask.version = expectedVersion
-    const update = await invoke<AvailableUpdate | null>('check_application_update', { expectedVersion })
-    if (update && compareVersions(update.version, expectedVersion) !== 0) {
-      throw new Error(`VERSION_MISMATCH: expected ${expectedVersion}, received ${update.version}`)
+    const readyUpdate = update as AvailableUpdate
+    availableUpdate.value = readyUpdate
+    updateTask.stage = 'available'
+    updateTask.message = `发现新版本 ${readyUpdate.version}`
+    updateTask.error = ''
+    if (silent && isAutoDownloadEnabled() && !targetRelease?.requiresBackup && !updateCompatibilityNote.value) {
+      void downloadAvailableUpdate(true)
     }
-    availableUpdate.value = update
-    publishedUpdateVersion.value = update ? null : expectedVersion
-    if (update) {
-      updateTask.stage = 'available'
-      updateTask.message = `发现新版本 ${update.version}`
-      updateTask.error = ''
-      if (silent && isAutoDownloadEnabled() && !targetRelease?.requiresBackup && !updateCompatibilityNote.value) {
-        void downloadAvailableUpdate(true)
-      }
-    } else {
-      setFailure('published-but-not-ready')
-    }
-    return update
+    return readyUpdate
   } catch (cause) {
     availableUpdate.value = null
-    publishedUpdateVersion.value = expectedVersion
-    setFailure(classifyFailure(cause, expectedVersion ? 'published-but-not-ready' : 'manifest-error'))
+    publishedUpdateVersion.value = null
+    targetRelease = null
+    updateCompatibilityNote.value = ''
+    updateTask.version = expectedVersion || ''
+    setFailure(classifyFailure(cause, 'manifest-error'))
     return null
   } finally {
     updateChecking.value = false

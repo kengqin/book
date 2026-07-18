@@ -47,7 +47,9 @@ function validateReleaseEntry(release, manifest) {
     if (!release.installerUrl.startsWith(expectedInstallerPrefix) || !installerName.endsWith('-setup.exe')) {
       throw new Error(`${prefix} 安装包必须使用固定 Tag 下的 NSIS setup.exe`)
     }
-    if (!/^[a-f0-9]{64}$/i.test(release.sha256 || '')) throw new Error(`${prefix} 缺少有效 SHA256`)
+    if (release.sha256 !== undefined && release.sha256 !== '' && !/^[a-f0-9]{64}$/i.test(release.sha256)) {
+      throw new Error(`${prefix} SHA256 格式无效`)
+    }
   }
 }
 
@@ -61,7 +63,11 @@ function validateHistory(current, baseline) {
   for (const previous of baseline.releases) {
     const retained = currentByVersion.get(previous.version)
     if (!retained) throw new Error(`历史版本 v${previous.version} 被删除，版本记录只能新增`)
-    if (JSON.stringify(comparableRelease(retained)) !== JSON.stringify(comparableRelease(previous))) {
+    const previousComparable = comparableRelease(previous)
+    const retainedComparable = comparableRelease(retained)
+    const canRetireFailedLatest = previous.version === baseline.releases[0]?.version && previous.published && !retained.published
+    if (canRetireFailedLatest) previousComparable.published = false
+    if (JSON.stringify(retainedComparable) !== JSON.stringify(previousComparable)) {
       throw new Error(`历史版本 v${previous.version} 被修改，已发布记录不可覆盖`)
     }
   }
