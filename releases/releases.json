@@ -1,8 +1,41 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.5.2",
+  "latest": "0.5.3",
   "releases": [
+    {
+      "version": "0.5.3",
+      "date": "2026-07-18",
+      "title": "启动体验与内容显示优化",
+      "channel": "stable",
+      "databaseSchema": 5,
+      "published": true,
+      "minimumSupportedVersion": "0.5.2",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.3",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.3/NovelLibrary_0.5.3_x64-setup.exe",
+      "sha256": "262c8ad99e91a643e13b12d1720f24481912c5e01e94cf4659ee70eca4f5daea",
+      "sections": [
+        {
+          "title": "优化",
+          "items": [
+            "桌面端启动改为按需加载页面并增加启动过渡动画",
+            "旧数据库 EPUB 结构修复改为事务提交，缩短大书库首次升级时间"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "更新操作增加防重复触发，避免快速点击重复打开安装程序或启动多个下载任务",
+            "书籍简介兼容安全 HTML 和有限样式，移除脚本、危险链接和破坏布局的 CSS",
+            "书籍详情页的章节和字数单位统一显示为中文"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "本版本数据库 Schema 保持为 5，现有书库、阅读进度、笔记和自定义数据目录保持不变。"
+      ]
+    },
     {
       "version": "0.5.2",
       "date": "2026-07-17",
