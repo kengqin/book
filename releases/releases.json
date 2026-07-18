@@ -14,7 +14,7 @@
       "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.5",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.5/NovelLibrary_0.5.5_x64-setup.exe",
-      "sha256": "",
+      "sha256": "d110d0e7a679e7880c4856aa2ff5f06cbb2d4f89ace6bb98e5681f7daa3e1d6c",
       "sections": [
         {
           "title": "优化",
