@@ -9,6 +9,7 @@ import {
   compareVersions,
   downloadAvailableUpdate,
   getCurrentVersion,
+  getCachedReleaseManifest,
   installDownloadedUpdate,
   isAutoCheckEnabled,
   isAutoDownloadEnabled,
@@ -25,22 +26,26 @@ import {
   updateMessage,
   updateProgress,
   updateStage,
-  type ReleaseEntry
+  type ReleaseEntry,
+  type ReleaseManifestSource
 } from '../services/release-center'
 
+const initialManifest = getCachedReleaseManifest()
 const currentVersion = ref('0.0.0')
-const releases = ref<ReleaseEntry[]>([])
-const manifestSource = ref<'remote' | 'local'>('local')
+const releases = ref<ReleaseEntry[]>(initialManifest.manifest.releases)
+const manifestSource = ref<ReleaseManifestSource>(initialManifest.source)
 const autoCheck = ref(isAutoCheckEnabled())
 const backgroundCheck = ref(isBackgroundCheckEnabled())
 const autoDownload = ref(isAutoDownloadEnabled())
-const loadingHistory = ref(true)
+const historyRefreshing = ref(false)
 const checkingFromView = ref(false)
 const historicalInstallVersion = ref<string | null>(null)
 
 const currentRelease = computed(() => releases.value.find((release) => release.version === currentVersion.value))
 const visibleReleases = computed(() => {
-  const ceiling = latestReadyVersion.value || currentVersion.value
+  const ceiling = latestReadyVersion.value || (currentVersion.value === '0.0.0'
+    ? releases.value.find((release) => release.published)?.version || currentVersion.value
+    : currentVersion.value)
   return releases.value.filter((release) => release.published && compareVersions(release.version, ceiling) <= 0)
 })
 
@@ -81,9 +86,14 @@ async function openRelease(release: ReleaseEntry) {
 }
 
 async function refreshReleaseHistory() {
-  const result = await loadReleaseManifest()
-  releases.value = result.manifest.releases
-  manifestSource.value = result.remote ? 'remote' : 'local'
+  historyRefreshing.value = true
+  try {
+    const result = await loadReleaseManifest()
+    releases.value = result.manifest.releases
+    manifestSource.value = result.source
+  } finally {
+    historyRefreshing.value = false
+  }
 }
 
 async function checkForUpdatesFromView() {
@@ -99,8 +109,11 @@ async function checkForUpdatesFromView() {
 
 onMounted(async () => {
   currentVersion.value = await getCurrentVersion()
-  await Promise.all([refreshReleaseHistory(), checkForUpdates(true)])
-  loadingHistory.value = false
+  const initialHistoryRefresh = refreshReleaseHistory()
+  await checkForUpdates(true)
+  await initialHistoryRefresh
+  // The update check may have refreshed a stale cache with a newly published release.
+  await refreshReleaseHistory()
 })
 </script>
 
@@ -146,9 +159,8 @@ onMounted(async () => {
     </label>
 
     <section class="release-history">
-      <header><div><History :size="18" /><strong>历史更新</strong></div><small>{{ manifestSource === 'remote' ? '在线记录' : '离线记录' }}</small></header>
-      <div v-if="loadingHistory" class="view-status"><span>正在读取版本记录...</span></div>
-      <article v-for="release in visibleReleases" v-else :key="release.version" class="release-entry">
+      <header><div><History :size="18" /><strong>历史更新</strong></div><small class="manifest-status"><RefreshCw v-if="historyRefreshing" :size="11" class="spinning" />{{ historyRefreshing ? '正在同步...' : manifestSource === 'remote' ? '在线记录' : manifestSource === 'cached' ? '本地缓存' : '内置记录' }}</small></header>
+      <article v-for="release in visibleReleases" :key="release.version" class="release-entry">
         <div class="release-rail"><span /><i /></div>
         <div class="release-content">
           <header>

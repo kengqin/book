@@ -11,6 +11,8 @@ const LATEST_RELEASE_URL = `https://api.github.com/repos/${OFFICIAL_REPOSITORY}/
 const AUTO_CHECK_KEY = 'novel-library:auto-check-updates'
 const BACKGROUND_CHECK_KEY = 'novel-library:background-check-updates'
 const AUTO_DOWNLOAD_KEY = 'novel-library:auto-download-updates'
+const RELEASE_MANIFEST_CACHE_KEY = 'novel-library:release-manifest-cache'
+const RELEASE_MANIFEST_CACHE_MAX_AGE = 60 * 60 * 1000
 const BACKGROUND_CHECK_INTERVAL = 60 * 60 * 1000
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 
@@ -40,6 +42,19 @@ export interface ReleaseManifest {
   repository: string
   latest: string
   releases: ReleaseEntry[]
+}
+
+export type ReleaseManifestSource = 'remote' | 'cached' | 'local'
+
+export interface ReleaseManifestResult {
+  manifest: ReleaseManifest
+  remote: boolean
+  source: ReleaseManifestSource
+}
+
+interface ReleaseManifestCache {
+  fetchedAt: number
+  manifest: ReleaseManifest
 }
 
 export interface AvailableUpdate {
@@ -110,6 +125,7 @@ let targetRelease: ReleaseEntry | null = null
 let updateEventListener: Promise<UnlistenFn> | undefined
 let backgroundCheckTimer: number | undefined
 let downloadStarting = false
+let manifestRequest: Promise<ReleaseManifestResult> | undefined
 
 function errorDetail(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause)
@@ -246,15 +262,59 @@ export function isReleaseManifest(value: unknown): value is ReleaseManifest {
   return manifest.releases[0]?.version === manifest.latest && manifest.releases[0]?.published === true
 }
 
-export async function loadReleaseManifest(): Promise<{ manifest: ReleaseManifest; remote: boolean }> {
+function readManifestCache() {
   try {
-    const response = await fetch(`${REMOTE_MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const manifest: unknown = await response.json()
-    if (!isReleaseManifest(manifest)) throw new Error('版本清单格式无效')
-    return { manifest, remote: true }
+    const raw = localStorage.getItem(RELEASE_MANIFEST_CACHE_KEY)
+    if (!raw) return null
+    const cached = JSON.parse(raw) as Partial<ReleaseManifestCache>
+    if (!Number.isFinite(cached.fetchedAt) || !isReleaseManifest(cached.manifest)) return null
+    return cached as ReleaseManifestCache
   } catch {
-    return { manifest: localManifest as ReleaseManifest, remote: false }
+    return null
+  }
+}
+
+function writeManifestCache(manifest: ReleaseManifest) {
+  try {
+    localStorage.setItem(RELEASE_MANIFEST_CACHE_KEY, JSON.stringify({ fetchedAt: Date.now(), manifest }))
+  } catch {
+    // A full or unavailable localStorage should not prevent update checks.
+  }
+}
+
+export function getCachedReleaseManifest(): { manifest: ReleaseManifest; source: Exclude<ReleaseManifestSource, 'remote'> } {
+  const cached = readManifestCache()
+  return cached
+    ? { manifest: cached.manifest, source: 'cached' }
+    : { manifest: localManifest as ReleaseManifest, source: 'local' }
+}
+
+async function fetchRemoteReleaseManifest(): Promise<ReleaseManifestResult> {
+  const response = await fetch(REMOTE_MANIFEST_URL, { cache: 'no-cache' })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const manifest: unknown = await response.json()
+  if (!isReleaseManifest(manifest)) throw new Error('版本清单格式无效')
+  writeManifestCache(manifest)
+  return { manifest, remote: true, source: 'remote' }
+}
+
+export async function loadReleaseManifest(options: { forceRefresh?: boolean; requiredVersion?: string } = {}): Promise<ReleaseManifestResult> {
+  const cached = readManifestCache()
+  const cacheAge = cached ? Date.now() - cached.fetchedAt : Number.POSITIVE_INFINITY
+  const cacheHasRequiredVersion = !options.requiredVersion || cached?.manifest.releases.some((release) => release.version === options.requiredVersion)
+  if (!options.forceRefresh && cached && cacheAge < RELEASE_MANIFEST_CACHE_MAX_AGE && cacheHasRequiredVersion) {
+    return { manifest: cached.manifest, remote: false, source: 'cached' }
+  }
+
+  if (!manifestRequest) manifestRequest = fetchRemoteReleaseManifest()
+  try {
+    return await manifestRequest
+  } catch {
+    return cached
+      ? { manifest: cached.manifest, remote: false, source: 'cached' }
+      : { manifest: localManifest as ReleaseManifest, remote: false, source: 'local' }
+  } finally {
+    manifestRequest = undefined
   }
 }
 
@@ -340,7 +400,7 @@ export async function checkForUpdates(silent = false) {
 
     latestReadyVersion.value = expectedVersion
     publishedUpdateVersion.value = null
-    const { manifest } = await loadReleaseManifest()
+    const { manifest } = await loadReleaseManifest({ forceRefresh: !silent, requiredVersion: expectedVersion })
     targetRelease = hasNewerVersion ? manifest.releases.find((release) => release.version === expectedVersion) || null : null
     updateCompatibilityNote.value = targetRelease?.minimumSupportedVersion && compareVersions(currentVersion, targetRelease.minimumSupportedVersion) < 0
       ? `当前版本低于直接升级基线 v${targetRelease.minimumSupportedVersion}，建议先导出完整备份。`

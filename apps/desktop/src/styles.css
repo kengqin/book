@@ -100,6 +100,7 @@ button { letter-spacing: 0; }
 .release-history > header { min-height: 44px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #cbd1ca; }
 .release-history > header div { display: flex; align-items: center; gap: 9px; }
 .release-history > header small { color: #75817b; font-size: 10px; }
+.manifest-status { display: inline-flex; align-items: center; gap: 4px; }
 .release-entry { display: grid; grid-template-columns: 34px minmax(0, 1fr); }
 .release-rail { position: relative; display: flex; justify-content: center; }
 .release-rail i { position: absolute; top: 0; bottom: 0; width: 1px; background: #ccd2cb; }
