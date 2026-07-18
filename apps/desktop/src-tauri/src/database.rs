@@ -2,7 +2,7 @@ use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
-    sync::{LazyLock, RwLock},
+    sync::{Arc, Condvar, LazyLock, Mutex, RwLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -169,6 +169,27 @@ pub struct DatabaseState {
     config_path: PathBuf,
     legacy_config_path: Option<PathBuf>,
     active: RwLock<ActiveDatabase>,
+    initialization: Arc<DatabaseInitialization>,
+}
+
+enum DatabaseInitializationStatus {
+    Pending,
+    Ready,
+    Failed(String),
+}
+
+struct DatabaseInitialization {
+    status: Mutex<DatabaseInitializationStatus>,
+    wake: Condvar,
+}
+
+impl Default for DatabaseInitialization {
+    fn default() -> Self {
+        Self {
+            status: Mutex::new(DatabaseInitializationStatus::Pending),
+            wake: Condvar::new(),
+        }
+    }
 }
 
 impl DatabaseState {
@@ -200,63 +221,107 @@ impl DatabaseState {
             config_path,
             legacy_config_path,
             active: RwLock::new(active),
+            initialization: Arc::new(DatabaseInitialization::default()),
         };
         state.persist_config()?;
-        let connection = state.connect()?;
+        let connection = state.connect_unchecked()?;
         migrate(&connection)?;
+        state.mark_ready();
         Ok(state)
     }
 
+    #[allow(dead_code)]
     pub fn initialize_for_installation(
         default_data_directory: PathBuf,
         config_path: PathBuf,
         legacy_data_directory: PathBuf,
     ) -> Result<Self, String> {
-        if config_path.is_file() {
-            return Self::initialize_with_config(default_data_directory, config_path, None);
-        }
-
-        let legacy_config_path = legacy_data_directory.join("config.json");
-        let legacy =
-            load_configured_database(&legacy_config_path).unwrap_or_else(|| ActiveDatabase {
-                data_directory: legacy_data_directory.clone(),
-                database_path: legacy_data_directory.join("library.db"),
-            });
-        fs::create_dir_all(&default_data_directory).map_err(|error| error.to_string())?;
-        let target_database = default_data_directory.join("library.db");
-        if legacy.database_path.is_file() && legacy.database_path != target_database {
-            let source =
-                Connection::open(&legacy.database_path).map_err(|error| error.to_string())?;
-            source
-                .backup(MAIN_DB, &target_database, None)
-                .map_err(|error| format!("迁移旧版书库失败：{error}"))?;
-            drop(source);
-            let target = Connection::open(&target_database).map_err(|error| error.to_string())?;
-            migrate(&target)?;
-            drop(target);
-            remove_managed_database(&legacy.database_path);
-        }
-
-        let state = Self {
-            default_data_directory: default_data_directory.clone(),
+        let state = Self::prepare_for_installation(
+            default_data_directory,
             config_path,
-            legacy_config_path: None,
-            active: RwLock::new(ActiveDatabase {
-                data_directory: default_data_directory,
-                database_path: target_database,
-            }),
-        };
-        state.persist_config()?;
-        for name in ["config.json", "bridge.json", "bridge-location.json"] {
-            let _ = fs::remove_file(legacy_data_directory.join(name));
-        }
-        let _ = fs::remove_dir(&legacy_data_directory);
-        let connection = state.connect()?;
-        migrate(&connection)?;
+            &legacy_data_directory,
+        )?;
+        state.initialize_for_installation_background(&legacy_data_directory)?;
         Ok(state)
     }
 
+    pub fn prepare_for_installation(
+        default_data_directory: PathBuf,
+        config_path: PathBuf,
+        legacy_data_directory: &Path,
+    ) -> Result<Self, String> {
+        fs::create_dir_all(&default_data_directory).map_err(|error| error.to_string())?;
+        let active = load_configured_database(&config_path)
+            .or_else(|| load_configured_database(&legacy_data_directory.join("config.json")))
+            .unwrap_or_else(|| ActiveDatabase {
+                data_directory: default_data_directory.clone(),
+                database_path: default_data_directory.join("library.db"),
+            });
+        Ok(Self {
+            default_data_directory,
+            config_path,
+            legacy_config_path: None,
+            active: RwLock::new(active),
+            initialization: Arc::new(DatabaseInitialization::default()),
+        })
+    }
+
+    pub fn initialize_for_installation_background(
+        &self,
+        legacy_data_directory: &Path,
+    ) -> Result<(), String> {
+        let result = self.initialize_installation_storage(legacy_data_directory);
+        match &result {
+            Ok(()) => self.mark_ready(),
+            Err(error) => self.mark_failed(error.clone()),
+        }
+        result
+    }
+
+    fn initialize_installation_storage(&self, legacy_data_directory: &Path) -> Result<(), String> {
+        if !self.config_path.is_file() {
+            let legacy_config_path = legacy_data_directory.join("config.json");
+            let legacy =
+                load_configured_database(&legacy_config_path).unwrap_or_else(|| ActiveDatabase {
+                    data_directory: legacy_data_directory.to_path_buf(),
+                    database_path: legacy_data_directory.join("library.db"),
+                });
+            let target_database = self.default_data_directory.join("library.db");
+            if legacy.database_path.is_file() && legacy.database_path != target_database {
+                let source =
+                    Connection::open(&legacy.database_path).map_err(|error| error.to_string())?;
+                source
+                    .backup(MAIN_DB, &target_database, None)
+                    .map_err(|error| format!("迁移旧版书库失败：{error}"))?;
+                drop(source);
+                remove_managed_database(&legacy.database_path);
+            }
+            {
+                let mut active = self
+                    .active
+                    .write()
+                    .map_err(|_| "无法更新当前数据目录".to_string())?;
+                *active = ActiveDatabase {
+                    data_directory: self.default_data_directory.clone(),
+                    database_path: target_database,
+                };
+            }
+            self.persist_config()?;
+            for name in ["config.json", "bridge.json", "bridge-location.json"] {
+                let _ = fs::remove_file(legacy_data_directory.join(name));
+            }
+            let _ = fs::remove_dir(legacy_data_directory);
+        }
+        let connection = self.connect_unchecked()?;
+        migrate(&connection)
+    }
+
     pub fn connect(&self) -> Result<Connection, String> {
+        self.wait_until_ready()?;
+        self.connect_unchecked()
+    }
+
+    fn connect_unchecked(&self) -> Result<Connection, String> {
         let database_path = self
             .active
             .read()
@@ -270,6 +335,41 @@ impl DatabaseState {
             )
             .map_err(|error| error.to_string())?;
         Ok(connection)
+    }
+
+    pub fn wait_until_ready(&self) -> Result<(), String> {
+        let mut status = self
+            .initialization
+            .status
+            .lock()
+            .map_err(|_| "数据库启动状态不可用".to_string())?;
+        loop {
+            match &*status {
+                DatabaseInitializationStatus::Pending => {
+                    status = self
+                        .initialization
+                        .wake
+                        .wait(status)
+                        .map_err(|_| "数据库启动状态不可用".to_string())?;
+                }
+                DatabaseInitializationStatus::Ready => return Ok(()),
+                DatabaseInitializationStatus::Failed(error) => return Err(error.clone()),
+            }
+        }
+    }
+
+    fn mark_ready(&self) {
+        if let Ok(mut status) = self.initialization.status.lock() {
+            *status = DatabaseInitializationStatus::Ready;
+            self.initialization.wake.notify_all();
+        }
+    }
+
+    fn mark_failed(&self, error: String) {
+        if let Ok(mut status) = self.initialization.status.lock() {
+            *status = DatabaseInitializationStatus::Failed(error);
+            self.initialization.wake.notify_all();
+        }
     }
 
     pub fn storage_paths(&self) -> Result<(PathBuf, PathBuf), String> {

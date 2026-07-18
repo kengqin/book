@@ -45,6 +45,11 @@ fn list_books(state: State<'_, DatabaseState>) -> Result<Vec<BookRecord>, String
 }
 
 #[tauri::command]
+async fn wait_for_startup(state: State<'_, DatabaseState>) -> Result<(), String> {
+    state.wait_until_ready()
+}
+
+#[tauri::command]
 fn get_book(
     state: State<'_, DatabaseState>,
     book_id: String,
@@ -329,14 +334,25 @@ pub fn run() {
                 data_directory.join("app-settings.json"),
             ));
             close_behavior::setup_tray(app)?;
-            let database = DatabaseState::initialize_for_installation(
+            let database = DatabaseState::prepare_for_installation(
                 data_directory.clone(),
                 install_directory.join("NovelLibrary.storage.json"),
-                legacy_directory,
+                &legacy_directory,
             )?;
             app.manage(database);
-            bridge::start(app.handle().clone())?;
             app.manage(UpdateDownloadState::default());
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let state = app_handle.state::<DatabaseState>();
+                if let Err(error) = state.initialize_for_installation_background(&legacy_directory)
+                {
+                    eprintln!("database-startup-error: {error}");
+                    return;
+                }
+                if let Err(error) = bridge::start(app_handle.clone()) {
+                    eprintln!("bridge-start-error: {error}");
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -376,7 +392,8 @@ pub fn run() {
             close_behavior::get_close_behavior,
             close_behavior::set_close_behavior,
             close_behavior::cancel_close_behavior_prompt,
-            close_behavior::resolve_close_behavior
+            close_behavior::resolve_close_behavior,
+            wait_for_startup
         ])
         .on_window_event(close_behavior::handle_window_event)
         .run(tauri::generate_context!())
