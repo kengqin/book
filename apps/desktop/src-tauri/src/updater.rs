@@ -115,6 +115,7 @@ pub async fn check_application_update(
         .map_err(|_| "MANIFEST_NOT_READY: 无法读取目标更新 Manifest".to_string())?;
 
     if let Some(update) = update.as_ref() {
+        let download_version = expected_version.as_deref().unwrap_or(&update.version);
         if let Some(expected) = expected_version.as_deref() {
             let expected = expected.strip_prefix('v').unwrap_or(expected);
             if update.version != expected {
@@ -123,11 +124,9 @@ pub async fn check_application_update(
                     update.version
                 ));
             }
-            if !allowed_download_url(&update.download_url, expected) {
-                return Err(
-                    "DOWNLOAD_URL_NOT_ALLOWED: 更新安装包地址不在官方固定版本目录".to_string(),
-                );
-            }
+        }
+        if !allowed_download_url(&update.download_url, download_version) {
+            return Err("DOWNLOAD_URL_NOT_ALLOWED: 更新安装包地址不在官方固定版本目录".to_string());
         }
     }
 

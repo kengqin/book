@@ -13,6 +13,7 @@ import {
   isAutoCheckEnabled,
   isAutoDownloadEnabled,
   isBackgroundCheckEnabled,
+  latestReadyVersion,
   loadReleaseManifest,
   publishedUpdateVersion,
   setAutoCheckEnabled,
@@ -38,6 +39,10 @@ const checkingFromView = ref(false)
 const historicalInstallVersion = ref<string | null>(null)
 
 const currentRelease = computed(() => releases.value.find((release) => release.version === currentVersion.value))
+const visibleReleases = computed(() => {
+  const ceiling = latestReadyVersion.value || currentVersion.value
+  return releases.value.filter((release) => release.published && compareVersions(release.version, ceiling) <= 0)
+})
 
 function updateAutoCheck() {
   setAutoCheckEnabled(autoCheck.value)
@@ -94,7 +99,7 @@ async function checkForUpdatesFromView() {
 
 onMounted(async () => {
   currentVersion.value = await getCurrentVersion()
-  await refreshReleaseHistory()
+  await Promise.all([refreshReleaseHistory(), checkForUpdates(true)])
   loadingHistory.value = false
 })
 </script>
@@ -143,7 +148,7 @@ onMounted(async () => {
     <section class="release-history">
       <header><div><History :size="18" /><strong>历史更新</strong></div><small>{{ manifestSource === 'remote' ? '在线记录' : '离线记录' }}</small></header>
       <div v-if="loadingHistory" class="view-status"><span>正在读取版本记录...</span></div>
-      <article v-for="release in releases" v-else :key="release.version" class="release-entry">
+      <article v-for="release in visibleReleases" v-else :key="release.version" class="release-entry">
         <div class="release-rail"><span /><i /></div>
         <div class="release-content">
           <header>

@@ -17,6 +17,7 @@ import {
   compareVersions,
   installDownloadedUpdate,
   isReleaseManifest,
+  latestReadyVersion,
   publishedUpdateVersion,
   updateError,
   updateMessage,
@@ -47,10 +48,15 @@ function remoteManifest(latest = '0.3.1') {
   }
 }
 
-function mockRemote(latest = '0.3.1') {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => remoteManifest(latest)
+function mockRemote(catalogLatest = '0.3.1', publishedLatest = catalogLatest) {
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | URL | Request) => {
+    const url = String(input)
+    return {
+      ok: true,
+      json: async () => url.includes('api.github.com')
+        ? { tag_name: `v${publishedLatest}`, draft: false, prerelease: false }
+        : remoteManifest(catalogLatest)
+    }
   }))
 }
 
@@ -61,30 +67,57 @@ describe('release center update consistency', () => {
     relaunchMock.mockReset()
     availableUpdate.value = null
     publishedUpdateVersion.value = null
+    latestReadyVersion.value = null
     Object.assign(updateTask, {
       stage: 'idle', version: '', progress: 0, message: '', error: '', downloadedBytes: 0, totalBytes: 0, retryCount: 0
     })
   })
 
-  it('does not report latest when the release catalog has a newer version but its target manifest is not ready', async () => {
+  it('does not expose a catalog version before it becomes the formal Latest Release', async () => {
     getVersionMock.mockResolvedValue('0.3.0')
     invokeMock.mockResolvedValue(null)
-    mockRemote()
+    mockRemote('0.3.1', '0.3.0')
+
+    await checkForUpdates()
+
+    expect(invokeMock).toHaveBeenCalledWith('check_application_update', { expectedVersion: '0.3.0' })
+    expect(availableUpdate.value).toBeNull()
+    expect(publishedUpdateVersion.value).toBeNull()
+    expect(latestReadyVersion.value).toBe('0.3.0')
+    expect(updateStage.value).toBe('idle')
+    expect(updateMessage.value).toContain('已是最新')
+  })
+
+  it('uses the formal Latest Release instead of a newer catalog entry', async () => {
+    getVersionMock.mockResolvedValue('0.3.0')
+    invokeMock.mockResolvedValue({ currentVersion: '0.3.0', version: '0.3.1' })
+    mockRemote('0.3.2', '0.3.1')
 
     await checkForUpdates()
 
     expect(invokeMock).toHaveBeenCalledWith('check_application_update', { expectedVersion: '0.3.1' })
+    expect(availableUpdate.value?.version).toBe('0.3.1')
+    expect(latestReadyVersion.value).toBe('0.3.1')
+    expect(updateStage.value).toBe('available')
+  })
+
+  it('does not expose a formal release until its fixed-version manifest is readable', async () => {
+    getVersionMock.mockResolvedValue('0.3.0')
+    invokeMock.mockRejectedValue(new Error('MANIFEST_NOT_READY'))
+    mockRemote('0.3.1', '0.3.1')
+
+    await checkForUpdates()
+
     expect(availableUpdate.value).toBeNull()
-    expect(publishedUpdateVersion.value).toBe('0.3.1')
-    expect(updateStage.value).toBe('published-but-not-ready')
-    expect(updateError.value).toContain('安装包正在准备')
-    expect(updateMessage.value).not.toContain('已是最新')
+    expect(publishedUpdateVersion.value).toBeNull()
+    expect(latestReadyVersion.value).toBeNull()
+    expect(updateStage.value).toBe('manifest-error')
   })
 
   it('treats a target manifest version mismatch as a dedicated synchronization error', async () => {
     getVersionMock.mockResolvedValue('0.3.0')
     invokeMock.mockResolvedValue({ currentVersion: '0.3.0', version: '0.3.2' })
-    mockRemote()
+    mockRemote('0.3.1', '0.3.1')
 
     await checkForUpdates()
 

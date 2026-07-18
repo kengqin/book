@@ -1,6 +1,6 @@
 [package]
 name = "novel-library-desktop"
-version = "0.5.3"
+version = "0.5.4"
 description = "Local-first desktop novel library"
 authors = ["Novel Library"]
 edition = "2021"
