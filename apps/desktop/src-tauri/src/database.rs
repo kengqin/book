@@ -577,10 +577,68 @@ fn load_configured_database(config_path: &Path) -> Option<ActiveDatabase> {
     })
 }
 
+const CURRENT_SCHEMA_VERSION: i64 = 5;
+const EPUB_VOLUME_BACKFILL: &str = "epub-volume-backfill-v1";
+
+fn ensure_epub_volume_backfill(connection: &Connection, force: bool) -> Result<(), String> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS migration_markers (name TEXT PRIMARY KEY NOT NULL);",
+        )
+        .map_err(|error| error.to_string())?;
+    let applied = connection
+        .query_row(
+            "SELECT 1 FROM migration_markers WHERE name = ?1",
+            [EPUB_VOLUME_BACKFILL],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?
+        .is_some();
+    if applied && !force {
+        return Ok(());
+    }
+    connection
+        .execute_batch("BEGIN IMMEDIATE")
+        .map_err(|error| error.to_string())?;
+    let result = (|| {
+        connection
+            .execute(
+                "UPDATE chapters SET volume = title WHERE content_format = 'html' AND trim(volume) = '' AND EXISTS (SELECT 1 FROM chapters AS member WHERE member.book_id = chapters.book_id AND member.volume = chapters.title)",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO migration_markers (name) VALUES (?1)",
+                [EPUB_VOLUME_BACKFILL],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok::<(), String>(())
+    })();
+    match result {
+        Ok(()) => connection
+            .execute_batch("COMMIT")
+            .map_err(|error| error.to_string()),
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
 fn migrate(connection: &Connection) -> Result<(), String> {
     let previous_version = connection
         .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
         .map_err(|error| error.to_string())?;
+    if previous_version > CURRENT_SCHEMA_VERSION {
+        return Err(format!(
+            "当前书库版本过高：{previous_version}，应用最多支持 {CURRENT_SCHEMA_VERSION}"
+        ));
+    }
+    if previous_version == CURRENT_SCHEMA_VERSION {
+        return ensure_epub_volume_backfill(connection, false);
+    }
     connection
         .execute_batch(
             r#"
@@ -730,13 +788,8 @@ fn migrate(connection: &Connection) -> Result<(), String> {
             )
             .map_err(|error| error.to_string())?;
     }
-    connection
-        .execute(
-            "UPDATE chapters SET volume = title WHERE content_format = 'html' AND trim(volume) = '' AND EXISTS (SELECT 1 FROM chapters AS member WHERE member.book_id = chapters.book_id AND member.volume = chapters.title)",
-            [],
-        )
-        .map_err(|error| error.to_string())?;
-    if previous_version < 5 {
+    if previous_version < CURRENT_SCHEMA_VERSION {
+        ensure_epub_volume_backfill(connection, true)?;
         connection
             .execute_batch("BEGIN IMMEDIATE")
             .map_err(|error| error.to_string())?;
@@ -751,7 +804,7 @@ fn migrate(connection: &Connection) -> Result<(), String> {
         }
     }
     connection
-        .execute_batch("PRAGMA user_version = 5")
+        .execute_batch(&format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"))
         .map_err(|error| error.to_string())
 }
 
@@ -1518,6 +1571,38 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read version");
         assert_eq!(version, 5);
+    }
+
+    #[test]
+    fn skips_epub_volume_backfill_after_schema_is_current() {
+        let mut connection = Connection::open_in_memory().expect("open database");
+        migrate(&connection).expect("create current schema");
+        save_imported_book(&mut connection, sample_import()).expect("save book");
+        connection
+            .execute_batch(
+                "UPDATE books SET source_format = 'epub';
+                 UPDATE chapters SET content_format = 'html', volume = '', title = '卷一' WHERE number = 1;
+                 UPDATE chapters SET content_format = 'html', volume = '卷一' WHERE number = 2;",
+            )
+            .expect("prepare epub rows");
+
+        migrate(&connection).expect("check current schema");
+        let volume: String = connection
+            .query_row("SELECT volume FROM chapters WHERE number = 1", [], |row| {
+                row.get(0)
+            })
+            .expect("read chapter volume");
+        assert!(volume.is_empty());
+    }
+
+    #[test]
+    fn rejects_a_database_from_a_newer_schema() {
+        let connection = Connection::open_in_memory().expect("open database");
+        connection
+            .execute_batch("PRAGMA user_version = 6")
+            .expect("set future schema");
+        let error = migrate(&connection).expect_err("future schema must be rejected");
+        assert!(error.contains("版本过高"));
     }
 
     #[test]
