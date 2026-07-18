@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{
-    BackupPayload, BackupResult, BookRecord, ChapterRecord, ChapterSummary, NoteRecord,
-    NoteSummary, NotesExportPayload, NotesTransferResult, SaveImportedBookInput, SaveNoteInput,
-    SearchResult,
+    BackupPayload, BackupResult, BookListRecord, BookRecord, ChapterRecord, ChapterSummary,
+    NoteRecord, NoteSummary, NotesExportPayload, NotesTransferResult, SaveImportedBookInput,
+    SaveNoteInput, SearchResult,
 };
 
 #[derive(Clone)]
@@ -1015,6 +1015,37 @@ pub fn list_books(connection: &Connection) -> Result<Vec<BookRecord>, String> {
     Ok(books)
 }
 
+pub fn list_book_summaries(connection: &Connection) -> Result<Vec<BookListRecord>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT b.id, b.title, b.author, b.source_format, b.cover_data_url, COUNT(CASE WHEN c.kind = 'chapter' THEN 1 END), b.total_words, b.current_chapter, b.progress, b.chapter_progress
+             FROM books b
+             LEFT JOIN chapters c ON c.book_id = b.id
+             GROUP BY b.id
+             ORDER BY b.last_read_at DESC, b.updated_at DESC",
+        )
+        .map_err(|error| error.to_string())?;
+    let books = statement
+        .query_map([], |row| {
+            Ok(BookListRecord {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                author: row.get(2)?,
+                source_format: row.get(3)?,
+                cover_data_url: row.get(4)?,
+                chapter_count: row.get(5)?,
+                total_words: row.get(6)?,
+                current_chapter: row.get(7)?,
+                progress: row.get(8)?,
+                chapter_progress: row.get(9)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    Ok(books)
+}
+
 pub fn get_book(connection: &Connection, id: &str) -> Result<Option<BookRecord>, String> {
     connection
         .query_row(
@@ -1762,6 +1793,10 @@ mod tests {
         assert_eq!(book.total_words, 16);
         assert_eq!(book.source_format, "txt");
         assert_eq!(list_books(&connection).expect("list books").len(), 1);
+        let summaries = list_book_summaries(&connection).expect("list book summaries");
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].chapter_count, 2);
+        assert_eq!(summaries[0].title, book.title);
         assert_eq!(
             list_chapters(&connection, &book.id)
                 .expect("list chapters")

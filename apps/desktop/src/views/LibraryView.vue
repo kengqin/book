@@ -2,15 +2,16 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { BookOpen, FilePlus2, RefreshCw, Trash2 } from 'lucide-vue-next'
-import { defaultParseOptions, defaultTheme, isNumberedChapter } from '@novel-library/reader-core'
-import { deleteDesktopBook, listDesktopBooks, listDesktopChapters, readDesktopExternalFile, saveDesktopBook, type DesktopBook } from '../services/desktop-library'
+import { defaultParseOptions, defaultTheme } from '@novel-library/reader-core'
+import { deleteDesktopBook, getCachedDesktopBooks, listDesktopBooks, readDesktopExternalFile, saveDesktopBook, type DesktopBookSummary } from '../services/desktop-library'
 import { parseNovelFile } from '../services/parse-novel-file'
 import { parseEpubFile } from '../services/parse-epub-file'
 
 const router = useRouter()
-const books = ref<DesktopBook[]>([])
-const chapterCounts = ref<Record<string, number>>({})
-const loading = ref(true)
+const cachedBooks = getCachedDesktopBooks()
+const books = ref<DesktopBookSummary[]>(cachedBooks || [])
+const loading = ref(cachedBooks === undefined)
+const refreshing = ref(false)
 const error = ref('')
 const importing = ref(false)
 const importProgress = ref(0)
@@ -18,19 +19,17 @@ const importMessage = ref('')
 const fileInput = ref<HTMLInputElement>()
 
 async function loadBooks() {
-  loading.value = true
+  const hasVisibleBooks = books.value.length > 0
+  loading.value = !hasVisibleBooks
+  refreshing.value = hasVisibleBooks
   error.value = ''
   try {
-    books.value = await listDesktopBooks()
-    const entries = await Promise.all(books.value.map(async book => {
-      const chapters = await listDesktopChapters(book.id)
-      return [book.id, chapters.filter(isNumberedChapter).length] as const
-    }))
-    chapterCounts.value = Object.fromEntries(entries)
+    books.value = await listDesktopBooks({ forceRefresh: true })
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
     loading.value = false
+    refreshing.value = false
   }
 }
 
@@ -84,7 +83,7 @@ async function importExternalFile(event: Event) {
   }
 }
 
-async function removeBook(book: DesktopBook) {
+async function removeBook(book: DesktopBookSummary) {
   if (!window.confirm(`确认删除《${book.title}》及全部章节吗？`)) return
   await deleteDesktopBook(book.id)
   await loadBooks()
@@ -105,7 +104,7 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
         <h1>我的书架</h1>
       </div>
       <div class="header-actions">
-        <button type="button" class="icon-button" title="刷新书架" :disabled="loading" @click="loadBooks"><RefreshCw :size="18" /></button>
+        <button type="button" class="icon-button" title="刷新书架" :disabled="loading || refreshing" @click="loadBooks"><RefreshCw :size="18" :class="{ spinning: refreshing }" /></button>
         <button type="button" class="primary-command" :disabled="importing" @click="fileInput?.click()"><FilePlus2 :size="18" />{{ importing ? '正在导入' : '导入书籍' }}</button>
         <input ref="fileInput" type="file" accept=".txt,.epub,text/plain,application/epub+zip" hidden @change="importFile" />
       </div>
@@ -123,7 +122,7 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
       <article v-for="book in books" :key="book.id">
         <button type="button" class="book-seal" :class="{ 'book-seal--image': book.coverDataUrl }" @click="router.push(`/book/${book.id}`)"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></button>
         <button type="button" class="book-copy" @click="router.push(`/book/${book.id}`)"><strong>{{ book.title }}</strong><span>{{ book.author || '佚名' }}</span></button>
-        <span><b class="format-badge">{{ book.sourceFormat.toUpperCase() }}</b> {{ chapterCounts[book.id] ?? book.chapterCount }} 章</span>
+        <span><b class="format-badge">{{ book.sourceFormat.toUpperCase() }}</b> {{ book.chapterCount }} 章</span>
         <span>{{ book.totalWords.toLocaleString() }} 字</span>
         <div class="book-progress" :title="`阅读进度 ${book.progress.toFixed(1)}%`"><span :style="{ width: `${book.progress}%` }" /></div>
         <div class="row-actions"><button type="button" class="icon-button" title="继续阅读" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" /></button><button type="button" class="icon-button danger-icon" title="删除书籍" @click="removeBook(book)"><Trash2 :size="16" /></button></div>

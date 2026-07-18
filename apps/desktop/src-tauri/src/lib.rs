@@ -9,9 +9,9 @@ use std::{fs, path::PathBuf};
 
 use database::DatabaseState;
 use models::{
-    BackupResult, BookRecord, ChapterRecord, ChapterSummary, NoteRecord, NoteSummary,
-    NotesTransferResult, SaveImportedBookInput, SaveNoteInput, SaveProgressInput, SearchResult,
-    StorageStatus,
+    BackupResult, BookListRecord, BookRecord, ChapterRecord, ChapterSummary, NoteRecord,
+    NoteSummary, NotesTransferResult, SaveImportedBookInput, SaveNoteInput, SaveProgressInput,
+    SavedBookResult, SearchResult, StorageStatus,
 };
 use tauri::{Manager, State};
 use updater::UpdateDownloadState;
@@ -42,6 +42,11 @@ fn default_data_directory(install_directory: &PathBuf) -> Result<PathBuf, String
 #[tauri::command]
 fn list_books(state: State<'_, DatabaseState>) -> Result<Vec<BookRecord>, String> {
     database::list_books(&state.connect()?)
+}
+
+#[tauri::command]
+fn list_book_summaries(state: State<'_, DatabaseState>) -> Result<Vec<BookListRecord>, String> {
+    database::list_book_summaries(&state.connect()?)
 }
 
 #[tauri::command]
@@ -78,8 +83,9 @@ fn get_chapter(
 fn save_imported_book(
     state: State<'_, DatabaseState>,
     input: SaveImportedBookInput,
-) -> Result<BookRecord, String> {
-    database::save_imported_book(&mut state.connect()?, input)
+) -> Result<SavedBookResult, String> {
+    let book = database::save_imported_book(&mut state.connect()?, input)?;
+    Ok(SavedBookResult { id: book.id })
 }
 
 #[tauri::command]
@@ -357,6 +363,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_books,
+            list_book_summaries,
             get_book,
             list_chapters,
             get_chapter,

@@ -3,6 +3,23 @@ import type { ChapterKind, LocalBook, ParseOptions, ParseResult, ThemeSettings }
 
 export type DesktopBook = LocalBook & { chapterProgress: number }
 
+export interface DesktopBookSummary {
+  id: string
+  title: string
+  author: string
+  sourceFormat: 'txt' | 'epub'
+  coverDataUrl?: string
+  chapterCount: number
+  totalWords: number
+  currentChapter: number
+  progress: number
+  chapterProgress: number
+}
+
+export interface SavedBookResult {
+  id: string
+}
+
 export interface DesktopChapterSummary {
   id: string
   bookId: string
@@ -86,8 +103,29 @@ export interface IdeInstallResult {
   message: string
 }
 
-export function listDesktopBooks() {
-  return invoke<DesktopBook[]>('list_books')
+let bookSummaryCache: DesktopBookSummary[] | undefined
+let bookSummaryRequest: Promise<DesktopBookSummary[]> | undefined
+
+export function getCachedDesktopBooks() {
+  return bookSummaryCache ? [...bookSummaryCache] : undefined
+}
+
+export function invalidateDesktopBookCache() {
+  bookSummaryCache = undefined
+}
+
+export function listDesktopBooks(options: { forceRefresh?: boolean } = {}) {
+  if (!options.forceRefresh && bookSummaryCache) return Promise.resolve([...bookSummaryCache])
+  if (bookSummaryRequest) return bookSummaryRequest
+  bookSummaryRequest = invoke<DesktopBookSummary[]>('list_book_summaries')
+    .then(books => {
+      bookSummaryCache = books
+      return [...books]
+    })
+    .finally(() => {
+      bookSummaryRequest = undefined
+    })
+  return bookSummaryRequest
 }
 
 export function getDesktopBook(bookId: string) {
@@ -108,15 +146,22 @@ export function saveDesktopBook(input: {
   options: ParseOptions
   existingId?: string
 }) {
-  return invoke<DesktopBook>('save_imported_book', { input })
+  return invoke<SavedBookResult>('save_imported_book', { input }).then(book => {
+    invalidateDesktopBookCache()
+    return book
+  })
 }
 
 export function saveDesktopProgress(bookId: string, chapterNumber: number, chapterProgress: number) {
-  return invoke<void>('save_reading_progress', { input: { bookId, chapterNumber, chapterProgress } })
+  return invoke<void>('save_reading_progress', { input: { bookId, chapterNumber, chapterProgress } }).then(() => {
+    invalidateDesktopBookCache()
+  })
 }
 
 export function deleteDesktopBook(bookId: string) {
-  return invoke<void>('delete_book', { bookId })
+  return invoke<void>('delete_book', { bookId }).then(() => {
+    invalidateDesktopBookCache()
+  })
 }
 
 export function searchDesktopLibrary(query: string) {
@@ -128,15 +173,24 @@ export function getDesktopStorageStatus() {
 }
 
 export function changeDesktopDataDirectory(dataDirectory: string) {
-  return invoke<DesktopStorageStatus>('change_data_directory', { dataDirectory })
+  return invoke<DesktopStorageStatus>('change_data_directory', { dataDirectory }).then(status => {
+    invalidateDesktopBookCache()
+    return status
+  })
 }
 
 export function resetDesktopDataDirectory() {
-  return invoke<DesktopStorageStatus>('reset_data_directory')
+  return invoke<DesktopStorageStatus>('reset_data_directory').then(status => {
+    invalidateDesktopBookCache()
+    return status
+  })
 }
 
 export function changeDesktopDatabaseFile(databasePath: string) {
-  return invoke<DesktopStorageStatus>('change_database_file', { databasePath })
+  return invoke<DesktopStorageStatus>('change_database_file', { databasePath }).then(status => {
+    invalidateDesktopBookCache()
+    return status
+  })
 }
 
 export function exportDesktopBackup(targetPath: string) {
@@ -144,7 +198,10 @@ export function exportDesktopBackup(targetPath: string) {
 }
 
 export function importDesktopBackup(sourcePath: string) {
-  return invoke<DesktopBackupResult>('import_backup', { sourcePath })
+  return invoke<DesktopBackupResult>('import_backup', { sourcePath }).then(result => {
+    invalidateDesktopBookCache()
+    return result
+  })
 }
 
 export function readDesktopExternalFile(path: string) {
