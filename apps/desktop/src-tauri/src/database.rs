@@ -123,7 +123,8 @@ fn repair_epub_chapter_structure(connection: &Connection, legacy: bool) -> Resul
             && normalized_heading(&title) == normalized_heading(&volume)
         {
             "volume"
-        } else if !volume.trim().is_empty() && volume != "前置内容" && volume != "附加内容" {
+        } else if !volume.trim().is_empty() && volume != "前置内容" && volume != "附加内容"
+        {
             // Nested entries in a volume are正文 even when their source title
             // does not contain a conventional numbered-chapter heading.
             "chapter"
@@ -1730,7 +1731,9 @@ mod tests {
             )
             .expect("prepare intro chapter");
         connection
-            .execute_batch("DELETE FROM migration_markers WHERE name = 'book-description-backfill-v2'")
+            .execute_batch(
+                "DELETE FROM migration_markers WHERE name = 'book-description-backfill-v2'",
+            )
             .expect("clear description marker");
 
         migrate(&connection).expect("backfill description");
