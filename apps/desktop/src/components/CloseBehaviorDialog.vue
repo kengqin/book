@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { Minimize2, Power, X } from 'lucide-vue-next'
 import { cancelCloseBehaviorPrompt, resolveCloseBehavior, type CloseBehavior } from '../services/desktop-library'
@@ -36,6 +37,7 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  if (!isTauri()) return
   unlisten = await listen('close-behavior-requested', async () => {
     remember.value = false
     error.value = ''
@@ -57,7 +59,7 @@ onBeforeUnmount(() => {
     <div v-if="visible" class="close-dialog-backdrop" role="presentation">
       <section ref="dialog" class="close-dialog" role="dialog" aria-modal="true" aria-labelledby="close-dialog-title" tabindex="-1">
         <header>
-          <div><span>关闭小说书库</span><h2 id="close-dialog-title">关闭窗口后要做什么？</h2></div>
+          <h2 id="close-dialog-title">关闭窗口后要做什么？</h2>
           <button type="button" class="icon-button" title="取消关闭" :disabled="busy" @click="cancel"><X :size="17" /></button>
         </header>
         <p>缩小到托盘后，IDE 插件仍可正常同步；直接退出后，需要重新打开小说书库才能继续同步。</p>

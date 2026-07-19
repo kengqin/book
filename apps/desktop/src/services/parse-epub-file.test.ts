@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import JSZip from 'jszip'
 import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
-import { parseEpubBuffer } from './parse-epub'
+import { inferEpubDescription, parseEpubBuffer } from './parse-epub'
+import type { ParsedChapter } from '@novel-library/reader-core'
 
 const pixel = Uint8Array.from([
   137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
@@ -63,6 +64,15 @@ async function epubFixture() {
 }
 
 describe('EPUB parser', () => {
+  it('uses the content intro chapter when EPUB metadata has no description', () => {
+    const chapters = [{
+      kind: 'frontmatter',
+      title: '内容简介',
+      contentText: '蒸汽与机械的浪潮中，谁能触及非凡？',
+    }] as ParsedChapter[]
+    expect(inferEpubDescription(chapters)).toBe('蒸汽与机械的浪潮中，谁能触及非凡？')
+  })
+
   it('parses metadata, spine order, nested navigation and embedded images', async () => {
     const bytes = await epubFixture()
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer

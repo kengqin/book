@@ -40,6 +40,10 @@ static CHAPTER_HEADING_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\s*第\s*([0-9零〇一二两三四五六七八九十百千万]+)\s*[章回节]")
         .expect("valid chapter heading regex")
 });
+static VOLUME_HEADING_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*第\s*[0-9零〇一二两三四五六七八九十百千万]+\s*[卷部篇册集]")
+        .expect("valid volume heading regex")
+});
 
 fn decode_generated_html_text(value: &str) -> String {
     HTML_TAG_RE
@@ -113,10 +117,16 @@ fn repair_epub_chapter_structure(connection: &Connection, legacy: bool) -> Resul
         let (chapter_label, heading_end) = chapter_heading_info(&content, &title);
         let inferred_kind = if chapter_label.is_some() {
             "chapter"
+        } else if VOLUME_HEADING_RE.is_match(title.trim()) {
+            "volume"
         } else if !volume.trim().is_empty()
             && normalized_heading(&title) == normalized_heading(&volume)
         {
             "volume"
+        } else if !volume.trim().is_empty() && volume != "前置内容" && volume != "附加内容" {
+            // Nested entries in a volume are正文 even when their source title
+            // does not contain a conventional numbered-chapter heading.
+            "chapter"
         } else if volume.trim().is_empty() || volume == "前置内容" {
             "frontmatter"
         } else {
@@ -127,6 +137,10 @@ fn repair_epub_chapter_structure(connection: &Connection, legacy: bool) -> Resul
                 stored_kind.as_str(),
                 "frontmatter" | "volume" | "chapter" | "appendix"
             ) {
+            inferred_kind
+        } else if stored_kind == "appendix" && inferred_kind == "chapter" {
+            inferred_kind
+        } else if stored_kind != "volume" && inferred_kind == "volume" {
             inferred_kind
         } else {
             stored_kind.as_str()
@@ -577,8 +591,9 @@ fn load_configured_database(config_path: &Path) -> Option<ActiveDatabase> {
     })
 }
 
-const CURRENT_SCHEMA_VERSION: i64 = 5;
+const CURRENT_SCHEMA_VERSION: i64 = 6;
 const EPUB_VOLUME_BACKFILL: &str = "epub-volume-backfill-v1";
+const BOOK_DESCRIPTION_BACKFILL: &str = "book-description-backfill-v2";
 
 fn ensure_epub_volume_backfill(connection: &Connection, force: bool) -> Result<(), String> {
     connection
@@ -627,6 +642,72 @@ fn ensure_epub_volume_backfill(connection: &Connection, force: bool) -> Result<(
     }
 }
 
+fn ensure_book_description_backfill(connection: &Connection, force: bool) -> Result<(), String> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS migration_markers (name TEXT PRIMARY KEY NOT NULL);",
+        )
+        .map_err(|error| error.to_string())?;
+    let applied = connection
+        .query_row(
+            "SELECT 1 FROM migration_markers WHERE name = ?1",
+            [BOOK_DESCRIPTION_BACKFILL],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?
+        .is_some();
+    if applied && !force {
+        return Ok(());
+    }
+    connection
+        .execute_batch("BEGIN IMMEDIATE")
+        .map_err(|error| error.to_string())?;
+    let result = (|| {
+        connection
+            .execute(
+                "UPDATE books
+                 SET description = (
+                     SELECT trim(content_text)
+                     FROM chapters
+                     WHERE chapters.book_id = books.id
+                       AND chapters.kind = 'frontmatter'
+                       AND replace(replace(trim(chapters.title), ' ', ''), '　', '') IN ('内容简介', '内容提要', '内容介绍', '简介', '作品简介')
+                       AND trim(chapters.content_text) <> ''
+                     ORDER BY chapters.number
+                     LIMIT 1
+                 )
+                 WHERE trim(description) = ''
+                   AND EXISTS (
+                       SELECT 1
+                       FROM chapters
+                       WHERE chapters.book_id = books.id
+                         AND chapters.kind = 'frontmatter'
+                         AND replace(replace(trim(chapters.title), ' ', ''), '　', '') IN ('内容简介', '内容提要', '内容介绍', '简介', '作品简介')
+                         AND trim(chapters.content_text) <> ''
+                   )",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO migration_markers (name) VALUES (?1)",
+                [BOOK_DESCRIPTION_BACKFILL],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok::<(), String>(())
+    })();
+    match result {
+        Ok(()) => connection
+            .execute_batch("COMMIT")
+            .map_err(|error| error.to_string()),
+        Err(error) => {
+            let _ = connection.execute_batch("ROLLBACK");
+            Err(error)
+        }
+    }
+}
+
 fn migrate(connection: &Connection) -> Result<(), String> {
     let previous_version = connection
         .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
@@ -637,7 +718,11 @@ fn migrate(connection: &Connection) -> Result<(), String> {
         ));
     }
     if previous_version == CURRENT_SCHEMA_VERSION {
-        return ensure_epub_volume_backfill(connection, false);
+        ensure_epub_volume_backfill(connection, false)?;
+        // Re-evaluate legacy EPUB chapter kinds so unnumbered entries nested
+        // under a volume are promoted from appendix to正文.
+        repair_epub_chapter_structure(connection, false)?;
+        return ensure_book_description_backfill(connection, false);
     }
     connection
         .execute_batch(
@@ -802,6 +887,7 @@ fn migrate(connection: &Connection) -> Result<(), String> {
                 return Err(error);
             }
         }
+        ensure_book_description_backfill(connection, true)?;
     }
     connection
         .execute_batch(&format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"))
@@ -1601,7 +1687,7 @@ mod tests {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("read version");
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
     }
 
     #[test]
@@ -1627,10 +1713,38 @@ mod tests {
     }
 
     #[test]
+    fn backfills_missing_book_description_from_epub_intro_chapter() {
+        let mut connection = Connection::open_in_memory().expect("open database");
+        migrate(&connection).expect("create current schema");
+        let book = save_imported_book(&mut connection, sample_import()).expect("save book");
+        connection
+            .execute(
+                "UPDATE books SET source_format = 'epub', description = '' WHERE id = ?1",
+                params![book.id],
+            )
+            .expect("prepare epub book");
+        connection
+            .execute(
+                "UPDATE chapters SET kind = 'frontmatter', title = '内容简介', content_text = '蒸汽与机械的浪潮中，谁能触及非凡？' WHERE book_id = ?1 AND number = 1",
+                params![book.id],
+            )
+            .expect("prepare intro chapter");
+        connection
+            .execute_batch("DELETE FROM migration_markers WHERE name = 'book-description-backfill-v2'")
+            .expect("clear description marker");
+
+        migrate(&connection).expect("backfill description");
+        let restored = get_book(&connection, &book.id)
+            .expect("read book")
+            .expect("book exists");
+        assert_eq!(restored.description, "蒸汽与机械的浪潮中，谁能触及非凡？");
+    }
+
+    #[test]
     fn rejects_a_database_from_a_newer_schema() {
         let connection = Connection::open_in_memory().expect("open database");
         connection
-            .execute_batch("PRAGMA user_version = 6")
+            .execute_batch("PRAGMA user_version = 7")
             .expect("set future schema");
         let error = migrate(&connection).expect_err("future schema must be rejected");
         assert!(error.contains("版本过高"));
@@ -1704,6 +1818,57 @@ mod tests {
         assert_eq!(chapter.kind, "chapter");
         assert_eq!(chapter.original_label, "十四");
         assert_eq!(chapter.content, "<p>正文</p>");
+    }
+
+    #[test]
+    fn promotes_unnumbered_nested_epub_entries_to_chapters() {
+        let mut connection = Connection::open_in_memory().expect("open database");
+        migrate(&connection).expect("create schema");
+        let book = save_imported_book(&mut connection, sample_import()).expect("save book");
+        connection
+            .execute(
+                "UPDATE books SET source_format = 'epub' WHERE id = ?1",
+                params![book.id],
+            )
+            .expect("mark book as epub");
+        connection
+            .execute(
+                "UPDATE chapters SET title = '情况', volume = '第一部 小丑', kind = 'appendix', content_format = 'html' WHERE book_id = ?1 AND number = 2",
+                params![book.id],
+            )
+            .expect("prepare unnumbered nested entry");
+
+        migrate(&connection).expect("repair nested entry");
+        let chapter = get_chapter(&connection, &book.id, 2)
+            .expect("read repaired entry")
+            .expect("entry exists");
+        assert_eq!(chapter.kind, "chapter");
+        assert_eq!(chapter.volume, "第一部 小丑");
+    }
+
+    #[test]
+    fn repairs_volume_heading_even_when_legacy_volume_is_wrong() {
+        let mut connection = Connection::open_in_memory().expect("open database");
+        migrate(&connection).expect("create schema");
+        let book = save_imported_book(&mut connection, sample_import()).expect("save book");
+        connection
+            .execute(
+                "UPDATE books SET source_format = 'epub' WHERE id = ?1",
+                params![book.id],
+            )
+            .expect("mark book as epub");
+        connection
+            .execute(
+                "UPDATE chapters SET title = '第七部 总结', volume = '第六部 终章', kind = 'chapter', content_format = 'html' WHERE book_id = ?1 AND number = 1",
+                params![book.id],
+            )
+            .expect("prepare misplaced volume");
+
+        migrate(&connection).expect("repair volume heading");
+        let volume = get_chapter(&connection, &book.id, 1)
+            .expect("read repaired volume")
+            .expect("volume exists");
+        assert_eq!(volume.kind, "volume");
     }
 
     #[test]

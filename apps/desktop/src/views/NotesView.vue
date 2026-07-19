@@ -54,6 +54,7 @@ import {
   type NoteRecord,
   type NoteSummary
 } from '../services/notes'
+import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 
 type ExportFormat = 'markdown' | 'html' | 'json'
 
@@ -69,6 +70,7 @@ const dirty = ref(false)
 const saveStatus = ref('')
 const error = ref('')
 const message = ref('')
+const deleteDialogOpen = ref(false)
 const exportMenuOpen = ref(false)
 let hydrating = false
 let saveTimer = 0
@@ -218,7 +220,8 @@ async function addNote() {
 
 async function removeCurrentNote() {
   const note = selectedNote.value
-  if (!note || !window.confirm(`确认删除“${note.title}”吗？此操作无法撤销。`)) return
+  if (!note) return
+  deleteDialogOpen.value = false
   window.clearTimeout(saveTimer)
   dirty.value = false
   try {
@@ -398,8 +401,8 @@ onBeforeUnmount(() => {
     </section>
 
     <section class="note-editor-pane">
-      <div v-if="error" class="note-editor-alert">{{ error }}</div>
-      <div v-if="message" class="note-editor-toast"><Check :size="15" />{{ message }}</div>
+      <div v-if="error" class="note-editor-alert" role="alert">{{ error }}</div>
+      <div v-if="message" class="note-editor-toast" role="status"><Check :size="15" />{{ message }}</div>
       <div v-if="!selectedNote" class="note-editor-empty">
         <NotebookPen :size="34" />
         <h2>新建一篇本地笔记</h2>
@@ -419,7 +422,7 @@ onBeforeUnmount(() => {
                 <button type="button" @click="exportCurrentNote('json')"><FileJson :size="15" />JSON</button>
               </div>
             </div>
-            <button type="button" class="icon-button danger-icon" title="删除笔记" @click="removeCurrentNote"><Trash2 :size="16" /></button>
+            <button type="button" class="icon-button danger-icon" title="删除笔记" @click="deleteDialogOpen = true"><Trash2 :size="16" /></button>
           </div>
         </header>
 
@@ -453,5 +456,6 @@ onBeforeUnmount(() => {
         <EditorContent v-if="editor" :editor="editor" class="note-editor-content" />
       </template>
     </section>
+    <UiConfirmDialog :open="deleteDialogOpen" danger title="删除这篇笔记？" :description="`“${selectedNote?.title || '无标题笔记'}”将从本机永久删除，此操作无法撤销。`" confirm-label="删除笔记" @close="deleteDialogOpen = false" @confirm="removeCurrentNote" />
   </section>
 </template>

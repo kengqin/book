@@ -25,10 +25,14 @@ import {
   updateError,
   updateMessage,
   updateProgress,
+  updateRequiresBackup,
   updateStage,
   type ReleaseEntry,
   type ReleaseManifestSource
 } from '../services/release-center'
+import PageHeader from '../components/ui/PageHeader.vue'
+import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
+import UiSwitch from '../components/ui/UiSwitch.vue'
 
 const initialManifest = getCachedReleaseManifest()
 const currentVersion = ref('0.0.0')
@@ -40,8 +44,9 @@ const autoDownload = ref(isAutoDownloadEnabled())
 const historyRefreshing = ref(false)
 const checkingFromView = ref(false)
 const historicalInstallVersion = ref<string | null>(null)
+const downgradeRelease = ref<ReleaseEntry | null>(null)
+const backupDialogOpen = ref(false)
 
-const currentRelease = computed(() => releases.value.find((release) => release.version === currentVersion.value))
 const visibleReleases = computed(() => {
   const ceiling = latestReadyVersion.value || (currentVersion.value === '0.0.0'
     ? releases.value.find((release) => release.published)?.version || currentVersion.value
@@ -64,7 +69,14 @@ function updateAutoDownload() {
 async function installHistoricalVersion(release: ReleaseEntry) {
   if (historicalInstallVersion.value) return
   const isDowngrade = compareVersions(release.version, currentVersion.value) < 0
-  if (isDowngrade && !window.confirm(`将从 ${currentVersion.value} 降级到 ${release.version}。旧版本可能无法读取新版数据库，请先在设置中导出备份。仍要继续吗？`)) return
+  if (isDowngrade) {
+    downgradeRelease.value = release
+    return
+  }
+  await openHistoricalInstaller(release)
+}
+
+async function openHistoricalInstaller(release: ReleaseEntry) {
   historicalInstallVersion.value = release.version
   updateError.value = ''
   try {
@@ -74,6 +86,25 @@ async function installHistoricalVersion(release: ReleaseEntry) {
   } finally {
     historicalInstallVersion.value = null
   }
+}
+
+function confirmHistoricalInstall() {
+  const release = downgradeRelease.value
+  downgradeRelease.value = null
+  if (release) void openHistoricalInstaller(release)
+}
+
+function requestDownload() {
+  if (updateRequiresBackup.value) {
+    backupDialogOpen.value = true
+    return
+  }
+  void downloadAvailableUpdate()
+}
+
+function confirmDownload() {
+  backupDialogOpen.value = false
+  void downloadAvailableUpdate(false, true)
 }
 
 async function openRelease(release: ReleaseEntry) {
@@ -119,13 +150,12 @@ onMounted(async () => {
 
 <template>
   <section class="workspace-view updates-view">
-    <header class="workspace-header"><div><p>RELEASES</p><h1>版本与更新</h1></div></header>
+    <PageHeader title="版本与更新" />
 
     <section class="update-status-panel">
       <div class="version-identity">
         <span>当前版本</span>
         <strong>v{{ currentVersion }}</strong>
-        <small>{{ currentRelease?.title || '小说书库桌面端' }}</small>
       </div>
       <div class="update-status-copy">
         <strong v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</strong>
@@ -134,29 +164,30 @@ onMounted(async () => {
         <strong v-else><CheckCircle2 :size="17" />{{ updateMessage || '版本状态正常' }}</strong>
         <span v-if="updateError" class="update-error">{{ updateError }}</span>
         <span v-else-if="updateCompatibilityNote" class="update-error">{{ updateCompatibilityNote }}</span>
-        <span v-else>{{ autoCheck ? '启动时自动检查更新' : '仅手动检查更新' }}</span>
         <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
       </div>
       <div class="header-actions">
         <button type="button" class="secondary-command" :disabled="checkingFromView || updateChecking || ['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateStage)" @click="checkForUpdatesFromView"><RefreshCw :size="16" :class="{ spinning: updateChecking || checkingFromView }" />检查</button>
-        <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'download-error')" type="button" class="primary-command" @click="downloadAvailableUpdate()"><Download :size="16" />下载更新</button>
+        <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'download-error')" type="button" class="primary-command" @click="requestDownload"><Download :size="16" />下载更新</button>
         <button v-else-if="updateStage === 'downloading'" type="button" class="secondary-command" @click="cancelUpdateDownload">取消下载</button>
         <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate"><RefreshCw :size="16" />安装并重启</button>
       </div>
     </section>
 
-    <label class="auto-update-setting">
-      <input v-model="autoCheck" type="checkbox" @change="updateAutoCheck">
-      <span><strong>自动检查更新</strong><small>应用启动后静默检查稳定版本</small></span>
-    </label>
-    <label class="auto-update-setting">
-      <input v-model="backgroundCheck" type="checkbox" @change="updateBackgroundCheck">
-      <span><strong>后台定时检查</strong><small>每 1 小时静默检查一次，默认关闭</small></span>
-    </label>
-    <label class="auto-update-setting">
-      <input v-model="autoDownload" type="checkbox" @change="updateAutoDownload">
-      <span><strong>后台自动下载</strong><small>仅下载通过校验且无需备份的更新，仍由你确认安装和重启</small></span>
-    </label>
+    <div class="auto-update-list">
+      <div class="auto-update-setting">
+        <span class="auto-update-copy"><strong>自动检查更新</strong><small>应用启动后静默检查稳定版本</small></span>
+        <UiSwitch v-model="autoCheck" label="自动检查更新" @update:model-value="updateAutoCheck" />
+      </div>
+      <div class="auto-update-setting">
+        <span class="auto-update-copy"><strong>后台定时检查</strong><small>每 1 小时静默检查一次，默认关闭</small></span>
+        <UiSwitch v-model="backgroundCheck" label="后台定时检查" @update:model-value="updateBackgroundCheck" />
+      </div>
+      <div class="auto-update-setting">
+        <span class="auto-update-copy"><strong>后台自动下载</strong><small>仅下载通过校验且无需备份的更新，仍由你确认安装和重启</small></span>
+        <UiSwitch v-model="autoDownload" label="后台自动下载" @update:model-value="updateAutoDownload" />
+      </div>
+    </div>
 
     <section class="release-history">
       <header><div><History :size="18" /><strong>历史更新</strong></div><small class="manifest-status"><RefreshCw v-if="historyRefreshing" :size="11" class="spinning" />{{ historyRefreshing ? '正在同步...' : manifestSource === 'remote' ? '在线记录' : manifestSource === 'cached' ? '本地缓存' : '内置记录' }}</small></header>
@@ -181,5 +212,7 @@ onMounted(async () => {
         </div>
       </article>
     </section>
+    <UiConfirmDialog :open="backupDialogOpen" title="确认已完成完整备份？" description="此版本升级前要求导出完整数据备份。确认备份完成后才会开始下载安装包。" confirm-label="已备份，继续下载" @close="backupDialogOpen = false" @confirm="confirmDownload" />
+    <UiConfirmDialog :open="Boolean(downgradeRelease)" danger title="安装历史版本？" :description="`将从 ${currentVersion} 降级到 ${downgradeRelease?.version || ''}。旧版本可能无法读取新版数据库，请先在设置中导出完整备份。`" confirm-label="继续安装" @close="downgradeRelease = null" @confirm="confirmHistoricalInstall" />
   </section>
 </template>
