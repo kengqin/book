@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { AlertTriangle } from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{
   open: boolean
@@ -41,7 +40,6 @@ function cancel(event: Event) {
 <template>
   <Teleport to="body">
     <dialog ref="dialog" class="ui-dialog" @cancel="cancel" @close="open && close()">
-      <div class="ui-dialog-icon" :class="{ danger }"><AlertTriangle :size="18" /></div>
       <h2>{{ title }}</h2>
       <p>{{ description }}</p>
       <div class="ui-dialog-actions">
