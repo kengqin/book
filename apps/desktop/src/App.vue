@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { useRouter } from 'vue-router'
-import { BookOpen, LibraryBig, Search, Settings, Wrench } from 'lucide-vue-next'
+import { useRoute, useRouter } from 'vue-router'
 import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
 import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
+import AppSidebar from './components/ui/AppSidebar.vue'
+import { useAppearance } from './composables/useAppearance'
 import { availableUpdate, checkForUpdates, configureBackgroundUpdateChecks, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
 
 const router = useRouter()
+const route = useRoute()
+const immersive = computed(() => route.meta.layout === 'reader')
+useAppearance()
 let unlistenImport: UnlistenFn | undefined
 let unlistenOpen: UnlistenFn | undefined
 
@@ -34,26 +38,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell">
-    <aside class="app-sidebar">
-      <header>
-        <span class="app-mark"><BookOpen :size="19" /></span>
-        <div>
-          <strong>小说书库</strong>
-          <small>DESKTOP</small>
-        </div>
-      </header>
-
-      <nav class="sidebar-primary" aria-label="主导航">
-        <RouterLink to="/library"><LibraryBig :size="18" /><span>书架</span></RouterLink>
-        <RouterLink to="/search"><Search :size="18" /><span>搜索</span></RouterLink>
-        <RouterLink to="/tools"><Wrench :size="18" /><span>工具</span></RouterLink>
-      </nav>
-
-      <nav class="sidebar-secondary" aria-label="应用设置">
-        <RouterLink to="/settings"><Settings :size="18" /><span>设置</span><i v-if="availableUpdate || publishedUpdateVersion" class="update-badge" /></RouterLink>
-      </nav>
-    </aside>
+  <div class="app-shell" :class="{ 'app-shell--reader': immersive }">
+    <AppSidebar v-if="!immersive" :has-update="Boolean(availableUpdate || publishedUpdateVersion)" />
 
     <main class="app-workspace">
       <RouterView />

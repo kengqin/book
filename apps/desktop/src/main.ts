@@ -3,6 +3,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import App from './App.vue'
 import { router } from './router'
 import './styles.css'
+import './styles/editorial.css'
 
 const app = createApp(App).use(router)
 app.mount('#app')

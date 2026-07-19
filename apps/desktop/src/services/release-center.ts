@@ -102,6 +102,7 @@ export const updateChecking = ref(false)
 export const publishedUpdateVersion = ref<string | null>(null)
 export const latestReadyVersion = ref<string | null>(null)
 export const updateCompatibilityNote = ref('')
+export const updateRequiresBackup = ref(false)
 export const updateTask = reactive<UpdateTaskState>({
   stage: 'idle',
   version: '',
@@ -402,6 +403,7 @@ export async function checkForUpdates(silent = false) {
     publishedUpdateVersion.value = null
     const { manifest } = await loadReleaseManifest({ forceRefresh: !silent, requiredVersion: expectedVersion })
     targetRelease = hasNewerVersion ? manifest.releases.find((release) => release.version === expectedVersion) || null : null
+    updateRequiresBackup.value = Boolean(targetRelease?.requiresBackup)
     updateCompatibilityNote.value = targetRelease?.minimumSupportedVersion && compareVersions(currentVersion, targetRelease.minimumSupportedVersion) < 0
       ? `当前版本低于直接升级基线 v${targetRelease.minimumSupportedVersion}，建议先导出完整备份。`
       : targetRelease?.requiresBackup
@@ -429,6 +431,7 @@ export async function checkForUpdates(silent = false) {
     availableUpdate.value = null
     publishedUpdateVersion.value = null
     targetRelease = null
+    updateRequiresBackup.value = false
     updateCompatibilityNote.value = ''
     updateTask.version = expectedVersion || ''
     setFailure(classifyFailure(cause, 'manifest-error'))
@@ -438,13 +441,13 @@ export async function checkForUpdates(silent = false) {
   }
 }
 
-export async function downloadAvailableUpdate(automatic = false) {
+export async function downloadAvailableUpdate(automatic = false, backupConfirmed = false) {
   const blocked = ['downloading', 'cancelling', 'downloaded', 'installing'].includes(updateTask.stage)
   if (!availableUpdate.value || blocked || downloadStarting) return
   downloadStarting = true
   try {
     if (targetRelease?.requiresBackup) {
-      if (automatic || !window.confirm('该版本要求升级前导出完整备份。确认已完成备份并继续下载吗？')) return
+      if (automatic || !backupConfirmed) return
     }
     await initializeUpdateEvents()
     updateTask.stage = 'downloading'
@@ -500,6 +503,7 @@ export async function dismissUpdate() {
   availableUpdate.value = null
   publishedUpdateVersion.value = null
   targetRelease = null
+  updateRequiresBackup.value = false
   updateCompatibilityNote.value = ''
   Object.assign(updateTask, {
     stage: 'idle', version: '', progress: 0, message: '', error: '', downloadedBytes: 0, totalBytes: 0, retryCount: 0

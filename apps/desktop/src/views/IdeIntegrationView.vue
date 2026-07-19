@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ArrowLeft, CheckCircle2, Code2, Download, RefreshCw, RotateCcw, Search, Trash2 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { getIdeIntegrationStatus, installIdePlugin, uninstallIdePlugin, type BundledIdePlugin, type IdeIntegrationStatus, type IdeTarget } from '../services/desktop-library'
+import PageHeader from '../components/ui/PageHeader.vue'
 
 const router = useRouter()
 const fallbackPlugins: BundledIdePlugin[] = [
@@ -18,7 +19,6 @@ const error = ref('')
 const message = ref('')
 const query = ref('')
 const detectionTimeoutMs = 8000
-const availableCount = computed(() => status.value.plugins.filter(plugin => plugin.available).length)
 const visiblePlugins = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
   if (!keyword) return status.value.plugins
@@ -96,22 +96,21 @@ onMounted(refresh)
 
 <template>
   <section class="workspace-view ide-integration-view">
-    <header class="workspace-header">
-      <div><p>IDE INTEGRATION</p><h1>IDE 插件</h1></div>
-      <button type="button" class="icon-button" title="重新检测本机 IDE" :disabled="detecting" @click="refresh"><RefreshCw :size="18" :class="{ spinning: detecting }" /></button>
-    </header>
+    <PageHeader title="IDE 插件">
+      <template #actions><button type="button" class="icon-button" title="重新检测本机 IDE" :disabled="detecting" @click="refresh"><RefreshCw :size="18" :class="{ spinning: detecting }" /></button></template>
+    </PageHeader>
     <button type="button" class="text-command" @click="router.push('/tools')"><ArrowLeft :size="16" />返回工具库</button>
 
     <div class="ide-plugin-toolbar">
       <label class="ide-plugin-search"><Search :size="16" /><input v-model="query" type="search" placeholder="搜索支持的 IDE 或插件" /></label>
-      <span>{{ detecting ? '正在校验插件包与本机 IDE' : `${availableCount} / ${status.plugins.length} 个插件包可用` }}</span>
+      <span>{{ detecting ? '正在校验插件包与本机 IDE' : error ? '检测失败' : `${visiblePlugins.length} 个插件包` }}</span>
     </div>
 
-    <div class="ide-plugin-catalog">
+    <div class="ide-plugin-catalog" aria-label="插件包目录">
       <article v-for="plugin in visiblePlugins" :key="plugin.id" class="ide-plugin-card">
         <header>
           <span class="ide-target-icon"><Code2 :size="20" /></span>
-          <div class="ide-plugin-heading"><strong>{{ plugin.label }}</strong><small>{{ plugin.description }}</small><span>插件版本 v{{ plugin.version }} · {{ plugin.packageType }} · ID {{ plugin.identifier }}</span></div>
+          <div class="ide-plugin-heading"><strong>{{ plugin.label }}</strong><small>{{ plugin.description }}</small></div>
           <span class="ide-package-state" :class="{ ready: plugin.available }">{{ plugin.available ? `安装包已内置 · ${plugin.packageType}` : detecting ? '正在校验安装包' : '安装包缺失' }}</span>
         </header>
         <div class="ide-plugin-supported"><span>支持：</span>{{ plugin.supportedIdes.join('、') }}</div>
@@ -124,10 +123,10 @@ onMounted(refresh)
             <button v-else type="button" class="primary-command" :disabled="!plugin.available" @click="install(target, plugin)"><Download :size="15" />安装</button>
           </div>
         </div>
-        <div v-else class="ide-plugin-empty">{{ detecting ? '正在检测本机实例...' : `未检测到 ${plugin.supportedIdes.join('、')}，请确认 IDE 已安装` }}</div>
+        <div v-else class="ide-plugin-empty">{{ detecting ? '正在检测本机实例...' : `未检测到 ${plugin.supportedIdes.join('、')}` }}</div>
       </article>
     </div>
-    <p v-if="message" class="settings-message"><CheckCircle2 :size="15" />{{ message }}</p>
-    <p v-if="error" class="inline-error">{{ error }}</p>
+    <p v-if="message" class="settings-message" role="status"><CheckCircle2 :size="15" />{{ message }}</p>
+    <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
   </section>
 </template>

@@ -352,7 +352,7 @@ button { letter-spacing: 0; }
   .book-detail-seal { width: 110px; }
   .chapter-group > div { grid-template-columns: 1fr; }
   .chapter-group button:nth-child(odd) { border-right: 0; }
-  .reader-controls label:nth-child(2) { display: none; }
+  .reader-controls .reader-font-size { display: none; }
   .update-status-panel { grid-template-columns: 150px minmax(0, 1fr); }
   .update-status-panel > .header-actions { grid-column: 1 / -1; }
   .notes-workspace { grid-template-columns: 250px minmax(340px, 1fr); }

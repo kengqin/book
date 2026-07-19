@@ -6,7 +6,7 @@ export const router = createRouter({
     { path: '/', redirect: '/library' },
     { path: '/library', component: () => import('./views/LibraryView.vue') },
     { path: '/book/:bookId', component: () => import('./views/BookView.vue') },
-    { path: '/read/:bookId/:chapterNumber', component: () => import('./views/ReaderView.vue') },
+    { path: '/read/:bookId/:chapterNumber', component: () => import('./views/ReaderView.vue'), meta: { layout: 'reader' } },
     { path: '/search', component: () => import('./views/SearchView.vue') },
     { path: '/tools', component: () => import('./views/ToolsView.vue') },
     { path: '/tools/notes', component: () => import('./views/NotesView.vue') },
