@@ -205,10 +205,21 @@ function chapterTitleMap(items: TOCItem[], output = new Map<string, string>()) {
   return output
 }
 
+export function inferEpubDescription(chapters: ParsedChapter[]) {
+  const intro = chapters.find(chapter => {
+    if (chapter.kind !== 'frontmatter' || !chapter.contentText.trim()) return false
+    const title = normalizeHeading(chapter.title)
+    return ['内容简介', '内容提要', '内容介绍', '简介', '作品简介'].includes(title)
+  })
+  return intro?.contentText.trim().slice(0, 600) || ''
+}
+
 export function parseEpubBuffer(buffer: ArrayBuffer, filename: string, onProgress: ProgressListener = () => {}): ParseResult {
   onProgress({ type: 'progress', progress: 8, message: '正在读取 EPUB 容器' })
   const book = parse(new Uint8Array(buffer), { blockAttributes: false })
-  const sourceChapters = book.chapters({ granularity: 'toc', titleSource: 'auto' })
+  const sourceChapters = book.toc.length
+    ? book.chapters({ granularity: 'toc', titleSource: 'auto' })
+    : book.chapters({ granularity: 'spine', titleSource: 'auto' })
   if (!sourceChapters.length) throw new Error('EPUB 中没有可阅读的章节')
 
   onProgress({ type: 'progress', progress: 24, message: `正在整理 ${sourceChapters.length} 个章节` })
@@ -230,8 +241,15 @@ export function parseEpubBuffer(buffer: ArrayBuffer, filename: string, onProgres
     if (chapterHeading) {
       kind = 'chapter'
       seenNumberedChapter = true
+    } else if (isVolumeTitle(sourceTitle)) {
+      kind = 'volume'
     } else if (mappedVolume && normalizeHeading(sourceTitle) === normalizeHeading(mappedVolume)) {
       kind = 'volume'
+    } else if (mappedVolume) {
+      // A TOC item nested under a volume is normally a正文 entry even when
+      // the source heading omits the conventional “第 X 章” label.
+      kind = 'chapter'
+      seenNumberedChapter = true
     } else if (!seenNumberedChapter && !mappedVolume) {
       kind = 'frontmatter'
     } else {
@@ -265,7 +283,7 @@ export function parseEpubBuffer(buffer: ArrayBuffer, filename: string, onProgres
     metadata: {
       title: book.metadata.title?.trim() || filename.replace(/\.epub$/i, ''),
       author: book.metadata.authors.join('、'),
-      description: book.metadata.descriptions[0]?.value?.trim() || '',
+      description: book.metadata.descriptions[0]?.value?.trim() || inferEpubDescription(chapters),
       encoding: 'utf-8',
       sourceName: filename,
       sourceSize: buffer.byteLength,

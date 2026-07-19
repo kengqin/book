@@ -34,6 +34,17 @@ const chapterGroups = computed(() => {
 })
 const numberedChapterCount = computed(() => chapters.value.filter(isNumberedChapter).length)
 
+function chapterMetaLabel(chapter: DesktopChapterSummary) {
+  if (chapter.kind === 'chapter') {
+    const label = formatChapterLabel(chapter)
+    if (label !== chapter.title) return label
+    const originalLabel = chapter.originalLabel.trim()
+    if (/^(?:番外|楔子|序章|尾声)/u.test(originalLabel)) return originalLabel
+    return ''
+  }
+  return chapter.kind === 'volume' ? '分卷' : chapter.kind === 'frontmatter' ? '前置' : '附加'
+}
+
 async function load() {
   loading.value = true
   try {
@@ -71,13 +82,13 @@ onMounted(load)
     <template v-else-if="book">
       <header class="book-detail-header" :style="{ '--book-accent': book.theme.accent }">
         <div class="book-detail-seal" :class="{ 'book-detail-seal--image': book.coverDataUrl }"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></div>
-        <div class="book-detail-copy"><p>{{ book.sourceFormat.toUpperCase() }} · {{ numberedChapterCount }} 章 · {{ book.totalWords.toLocaleString() }} 字</p><h1>{{ book.title }}</h1><span>{{ book.author || '佚名' }}</span><blockquote v-if="book.description" v-html="safeDescription" /><blockquote v-else>暂无简介</blockquote></div>
-        <aside class="book-action-panel"><button type="button" class="primary-command" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" />{{ book.progress ? '继续阅读' : '开始阅读' }}</button><dl><div><dt>阅读进度</dt><dd>{{ book.progress.toFixed(0) }}%</dd></div><div><dt>当前章节</dt><dd>第 {{ book.currentChapter }} 章</dd></div><div><dt>来源</dt><dd>{{ book.sourceFormat.toUpperCase() }}</dd></div></dl><button type="button" class="book-delete-button" @click="deleteDialogOpen = true"><Trash2 :size="15" />删除书籍</button></aside>
+        <div class="book-detail-copy"><h1>{{ book.title }}</h1><span>{{ book.author || '佚名' }}</span><blockquote v-if="book.description" v-html="safeDescription" /><blockquote v-else>暂无简介</blockquote></div>
+        <aside class="book-detail-side"><div class="book-detail-stats"><span>{{ book.sourceFormat.toUpperCase() }}</span><span>{{ numberedChapterCount }} 章</span><span>{{ book.totalWords.toLocaleString() }} 字</span></div><div class="book-action-panel"><dl><div><dt>阅读进度</dt><dd>{{ book.progress.toFixed(0) }}%</dd></div><div><dt>当前章节</dt><dd>第 {{ book.currentChapter }} 章</dd></div></dl><div class="book-action-buttons"><button type="button" class="primary-command" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" />{{ book.progress ? '继续阅读' : '开始阅读' }}</button><button type="button" class="book-delete-button" @click="deleteDialogOpen = true"><Trash2 :size="15" />删除书籍</button></div></div></aside>
       </header>
 
       <section class="chapter-catalogue">
         <header><h2>章节目录</h2></header>
-        <section v-for="group in chapterGroups" :key="group.name" class="chapter-group"><h3>{{ group.name }} <span v-if="group.chapterCount">{{ group.chapterCount }} 章</span><span v-if="group.extraCount">{{ group.chapterCount ? ' · ' : '' }}{{ group.extraCount }} 项</span></h3><div><button v-for="chapter in group.items" :key="chapter.id" type="button" @click="router.push(`/read/${book.id}/${chapter.number}`)"><small>{{ isNumberedChapter(chapter) ? formatChapterLabel(chapter) : chapter.kind === 'volume' ? '分卷' : chapter.kind === 'frontmatter' ? '前置' : '附加' }}</small><span>{{ chapter.title }}</span><ChevronRight :size="15" /></button></div></section>
+        <section v-for="group in chapterGroups" :key="group.name" class="chapter-group"><h3>{{ group.name }} <span v-if="group.chapterCount">{{ group.chapterCount }} 章</span><span v-if="group.extraCount">{{ group.chapterCount ? ' · ' : '' }}{{ group.extraCount }} 项</span></h3><div><button v-for="chapter in group.items" :key="chapter.id" type="button" :class="{ 'chapter-entry--plain': !chapterMetaLabel(chapter) }" @click="router.push(`/read/${book.id}/${chapter.number}`)"><small v-if="chapterMetaLabel(chapter)">{{ chapterMetaLabel(chapter) }}</small><span>{{ chapter.title }}</span><ChevronRight :size="15" /></button></div></section>
       </section>
     </template>
     <UiConfirmDialog :open="deleteDialogOpen" :busy="deleting" danger title="删除这本书？" :description="`《${book?.title || ''}》及其全部章节、阅读进度将从本机删除，此操作无法撤销。`" confirm-label="删除书籍" @close="deleteDialogOpen = false" @confirm="removeBook" />

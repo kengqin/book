@@ -38,10 +38,20 @@ const safeRichContent = computed(() => isRichContent.value ? sanitizeReaderHtml(
 const compactText = computed(() => chapter.value?.contentText || chapter.value?.content.replace(/<[^>]+>/gu, ' ') || '')
 const compactWindow = computed(() => getCompactReaderWindow(compactText.value, compactAnchor.value, compactLines.value, compactColumns.value))
 
+function chapterDisplayLabel() {
+  if (!chapter.value) return ''
+  const label = formatChapterLabel(chapter.value)
+  if (label !== chapter.value.title) return label
+  const originalLabel = chapter.value.originalLabel.trim()
+  if (/^(?:番外|楔子|序章|尾声)/u.test(originalLabel)) return originalLabel
+  return ''
+}
+
 function chapterPositionLabel() {
   if (!chapter.value) return ''
   if (isNumberedChapter(chapter.value)) {
-    return formatChapterLabel(chapter.value) + ' · 本卷 ' + (volumeChapterIndex.value + 1) + ' / ' + volumeChapters.value.length
+    const label = chapterDisplayLabel()
+    return (label ? label + ' · ' : '') + '本卷 ' + (volumeChapterIndex.value + 1) + ' / ' + volumeChapters.value.length
   }
   const kindLabel = chapter.value.kind === 'volume' ? '分卷' : chapter.value.kind === 'frontmatter' ? '前置内容' : '附加内容'
   return kindLabel + ' · 全书 ' + (chapterIndex.value + 1) + ' / ' + chapters.value.length + ' 项'
@@ -49,9 +59,9 @@ function chapterPositionLabel() {
 
 function chapterHeading() {
   if (!chapter.value) return ''
-  return isNumberedChapter(chapter.value)
-    ? formatChapterLabel(chapter.value) + ' ' + chapter.value.title
-    : chapter.value.title
+  if (!isNumberedChapter(chapter.value)) return chapter.value.title
+  const label = chapterDisplayLabel()
+  return label ? `${label} ${chapter.value.title}` : chapter.value.title
 }
 
 function saveSettings() {
