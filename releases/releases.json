@@ -1,8 +1,42 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.5.6",
+  "latest": "0.6.0",
   "releases": [
+    {
+      "version": "0.6.0",
+      "date": "2026-07-19",
+      "title": "设置页与基础交互视觉升级",
+      "channel": "stable",
+      "databaseSchema": 5,
+      "published": true,
+      "minimumSupportedVersion": "0.5.6",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.0",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.0/NovelLibrary_0.6.0_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "设置页新增常规、数据、更新分组导航，配置项按使用场景集中管理",
+            "新增统一的圆角下拉菜单和开关组件，选中状态、焦点状态和关闭行为保持一致"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "设置页统一采用浅灰背景、白色圆角面板和薄荷绿强调色，减少无意义辅助文字",
+            "外观、关闭窗口行为、数据目录、数据库文件、备份恢复和版本入口全部接入新的设置交互",
+            "更新页保留原有版本时间线结构，自动检查、后台检查和后台下载改用统一开关",
+            "下拉菜单支持点击外部收起、键盘焦点和 Esc 关闭，窄窗口下设置操作自动换行"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "本版本数据库 Schema 保持为 5，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.5.6",
       "date": "2026-07-19",

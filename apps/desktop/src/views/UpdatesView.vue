@@ -32,6 +32,7 @@ import {
 } from '../services/release-center'
 import PageHeader from '../components/ui/PageHeader.vue'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
+import UiSwitch from '../components/ui/UiSwitch.vue'
 
 const initialManifest = getCachedReleaseManifest()
 const currentVersion = ref('0.0.0')
@@ -174,18 +175,18 @@ onMounted(async () => {
     </section>
 
     <div class="auto-update-list">
-      <label class="auto-update-setting">
-        <input v-model="autoCheck" type="checkbox" @change="updateAutoCheck">
-        <span><strong>自动检查更新</strong><small>应用启动后静默检查稳定版本</small></span>
-      </label>
-      <label class="auto-update-setting">
-        <input v-model="backgroundCheck" type="checkbox" @change="updateBackgroundCheck">
-        <span><strong>后台定时检查</strong><small>每 1 小时静默检查一次，默认关闭</small></span>
-      </label>
-      <label class="auto-update-setting">
-        <input v-model="autoDownload" type="checkbox" @change="updateAutoDownload">
-        <span><strong>后台自动下载</strong><small>仅下载通过校验且无需备份的更新，仍由你确认安装和重启</small></span>
-      </label>
+      <div class="auto-update-setting">
+        <span class="auto-update-copy"><strong>自动检查更新</strong><small>应用启动后静默检查稳定版本</small></span>
+        <UiSwitch v-model="autoCheck" label="自动检查更新" @update:model-value="updateAutoCheck" />
+      </div>
+      <div class="auto-update-setting">
+        <span class="auto-update-copy"><strong>后台定时检查</strong><small>每 1 小时静默检查一次，默认关闭</small></span>
+        <UiSwitch v-model="backgroundCheck" label="后台定时检查" @update:model-value="updateBackgroundCheck" />
+      </div>
+      <div class="auto-update-setting">
+        <span class="auto-update-copy"><strong>后台自动下载</strong><small>仅下载通过校验且无需备份的更新，仍由你确认安装和重启</small></span>
+        <UiSwitch v-model="autoDownload" label="后台自动下载" @update:model-value="updateAutoDownload" />
+      </div>
     </div>
 
     <section class="release-history">

@@ -260,6 +260,77 @@ a:focus-visible {
 .ui-select:focus, .settings-select:focus { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-selected); }
 .ui-select:disabled, .settings-select:disabled { color: var(--ui-text-3); border-color: var(--ui-border); background-color: var(--ui-surface-2); opacity: .7; }
 
+/* Settings use the same quiet, pill-led interaction language as the reference app. */
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  margin: -5px 0 18px;
+  padding: 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: 11px;
+  background: var(--ui-surface-2);
+}
+.settings-tabs button {
+  min-width: 72px;
+  height: 32px;
+  padding: 0 13px;
+  color: var(--ui-text-2);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  transition: color 160ms ease-out, background-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.settings-tabs button:hover { color: var(--ui-text); background: var(--ui-hover); }
+.settings-tabs button.active { color: var(--ui-accent); background: var(--ui-surface); box-shadow: 0 1px 4px rgba(28, 28, 27, .08); font-weight: 650; }
+.settings-panel {
+  overflow: visible;
+  border: 1px solid var(--ui-border);
+  border-radius: 13px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+.setting-row {
+  position: relative;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.setting-row:last-child { border-bottom: 0; }
+.setting-icon { width: 32px; height: 32px; display: grid; place-items: center; color: var(--ui-accent); border-radius: 9px; background: var(--ui-selected); }
+.setting-copy { min-width: 0; display: grid; gap: 5px; }
+.setting-copy strong { color: var(--ui-text); font-size: 13px; font-weight: 650; }
+.setting-copy span { overflow: hidden; color: var(--ui-text-3); font-size: 11px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.setting-row-wide .setting-copy span { white-space: normal; overflow-wrap: anywhere; }
+.setting-state { padding: 5px 9px; color: var(--ui-text-2); border-radius: 999px; background: var(--ui-surface-2); font-size: 11px; }
+.setting-state.ready { color: var(--ui-success); background: color-mix(in srgb, var(--ui-success) 10%, var(--ui-surface)); }
+.settings-update-panel { overflow: hidden; }
+
+/* Native selects are replaced by this shared menu so every setting has the same affordance. */
+.ui-select { position: relative; min-width: 158px; height: auto; padding: 0; border: 0; background: transparent; }
+.ui-select-trigger { width: 100%; min-width: 158px; height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 11px 0 13px; color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface-2); cursor: pointer; font-size: 12px; text-align: left; transition: border-color 160ms ease-out, background-color 160ms ease-out, box-shadow 160ms ease-out; }
+.ui-select-trigger:hover:not(:disabled) { border-color: var(--ui-border-strong); background: var(--ui-hover); }
+.ui-select-trigger:focus-visible { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-selected); outline: 0; }
+.ui-select.is-open .ui-select-trigger { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-selected); }
+.ui-select-trigger:disabled { color: var(--ui-text-3); opacity: .7; cursor: not-allowed; }
+.ui-select-menu { position: absolute; top: calc(100% + 7px); right: 0; z-index: 30; min-width: 100%; overflow: hidden; padding: 5px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-surface); box-shadow: 0 14px 32px rgba(28, 28, 27, .16); }
+.ui-select-option { width: 100%; min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 9px; color: var(--ui-text-2); border: 0; border-radius: 7px; background: transparent; cursor: pointer; font-size: 12px; text-align: left; }
+.ui-select-option:hover { color: var(--ui-text); background: var(--ui-hover); }
+.ui-select-option.selected { color: var(--ui-accent); background: var(--ui-selected); font-weight: 650; }
+.ui-switch { position: relative; width: 42px; height: 24px; flex: 0 0 42px; padding: 0; border: 0; border-radius: 999px; background: var(--ui-border-strong); cursor: pointer; transition: background-color 160ms ease-out, opacity 160ms ease-out; }
+.ui-switch > span { position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; display: block; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform 160ms ease-out; }
+.ui-switch.checked { background: var(--ui-accent); }
+.ui-switch.checked > span { transform: translateX(18px); }
+.ui-switch:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+.ui-switch:disabled { opacity: .55; cursor: not-allowed; }
+.ui-select-option.selected svg { color: var(--ui-accent); }
+
 .update-status-panel, .global-update-status { color: var(--ui-text); border-color: var(--ui-border); border-radius: 12px; background: var(--ui-surface); box-shadow: var(--ui-shadow); }
 .version-identity { border-color: var(--ui-border); }
 .version-identity strong { color: var(--ui-accent); }
@@ -270,6 +341,11 @@ a:focus-visible {
 .auto-update-list { overflow: hidden; margin-top: 18px; border: 1px solid var(--ui-border); border-radius: 11px; background: var(--ui-surface); }
 .auto-update-list .auto-update-setting { min-height: 62px; margin: 0; padding: 0 15px; color: var(--ui-text); border-bottom: 1px solid var(--ui-border); }
 .auto-update-list .auto-update-setting:last-child { border-bottom: 0; }
+.auto-update-list .auto-update-setting { justify-content: space-between; }
+.auto-update-copy { min-width: 0; display: grid; gap: 4px; }
+.auto-update-copy strong { color: var(--ui-text); font-size: 13px; font-weight: 650; }
+.auto-update-copy small { color: var(--ui-text-3); font-size: 11px; line-height: 1.4; }
+.auto-update-setting .ui-switch > span { display: block; gap: 0; }
 .auto-update-setting input, .remember-close-choice input {
   width: 17px;
   height: 17px;
@@ -393,6 +469,16 @@ a:focus-visible {
   .book-action-panel { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr); gap: 12px; }
   .book-action-panel dl { margin-top: 0; }
   .book-delete-button { grid-column: 1 / -1; }
+  .setting-row { grid-template-columns: 34px minmax(0, 1fr); }
+  .setting-row > .ui-select, .setting-row > .setting-state, .setting-row > .primary-command, .setting-row > .header-actions, .setting-row > a { grid-column: 2; justify-self: start; }
+  .setting-row > .ui-select { width: min(100%, 260px); }
+}
+
+@media (max-width: 560px) {
+  .settings-tabs { width: 100%; }
+  .settings-tabs button { flex: 1; }
+  .setting-row-wide .header-actions { width: 100%; }
+  .setting-row-wide .header-actions button { flex: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
