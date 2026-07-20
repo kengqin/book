@@ -109,12 +109,12 @@ foreach ($requiredScheme in @('v1 scheme \(JAR signing\): true', 'v2 scheme \(AP
 
 $certificateDigestMatch = [regex]::Match(
     $apkVerificationText,
-    'Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F]+)'
+    'certificate SHA-256 digest:\s*([0-9a-fA-F:]+)'
 )
 if (!$certificateDigestMatch.Success) {
     throw 'Could not read the signer certificate SHA-256 digest from apksigner output.'
 }
-$apkCertificateSha256 = $certificateDigestMatch.Groups[1].Value.ToLowerInvariant()
+$apkCertificateSha256 = ($certificateDigestMatch.Groups[1].Value -replace ':', '').ToLowerInvariant()
 if ($apkCertificateSha256 -ne $keystoreCertificateSha256) {
     throw "APK signer does not match the release keystore. APK=$apkCertificateSha256 Keystore=$keystoreCertificateSha256"
 }
