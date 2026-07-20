@@ -1,8 +1,40 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.1",
+  "latest": "0.6.2",
   "releases": [
+    {
+      "version": "0.6.2",
+      "date": "2026-07-20",
+      "title": "JetBrains 插件安装可靠性修复",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.1",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.2",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.2/NovelLibrary_0.6.2_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "修复 IntelliJ IDEA 和 Android Studio 安装内置插件时把本地 ZIP 误当作 Marketplace 插件 ID 而失败的问题",
+            "移除插件操作的 8 秒固定超时，安装、更新和卸载会等待实际结果并在完成后重新校验状态",
+            "JetBrains 插件使用安全解压、插件 ID 与版本校验、原子替换和失败回滚，避免残留目录或并发操作破坏已有安装"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "完善 IntelliJ IDEA、Android Studio 及多个配置目录的识别，清理同一插件 ID 的重复旧目录，安装过程不再启动 IDE"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.1",
       "date": "2026-07-20",
