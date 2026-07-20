@@ -1,8 +1,41 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.0",
+  "latest": "0.6.1",
   "releases": [
+    {
+      "version": "0.6.1",
+      "date": "2026-07-20",
+      "title": "跨端架构与 Android 发布能力",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.0",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.1",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.1/NovelLibrary_0.6.1_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "新增 Capacitor 移动端应用，覆盖 Android 和 iOS 工程边界、TXT/EPUB 导入、本地书库、阅读进度、搜索和备份恢复",
+            "新增 Android 正式签名、增量打包、版本校验和 mobile-v* GitHub Release 工作流"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "Web 在线端统一迁入 apps/web，与桌面端、移动端形成一致的应用层结构",
+            "CI 质量门禁新增 Web、移动端构建和 Android 发布元数据校验",
+            "简化桌面端确认弹窗视觉，移除重复的警告图标及占位样式"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.0",
       "date": "2026-07-19",
