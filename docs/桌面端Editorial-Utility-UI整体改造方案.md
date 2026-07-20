@@ -4,7 +4,6 @@
 > 方案版本：1.0  
 > 审核日期：2026-07-19  
 > 当前产品基线：NovelLibrary v0.5.6（`develop`）  
-> 视觉参考：NBchitu/CodexThemes-App `88d57eb2da08038049d0fce0993676115b7a6844`
 
 ## 1. 结论
 
@@ -273,7 +272,6 @@ apps/desktop/src/components/library/
 | `src/views/NotesView.vue` | 编辑器视觉与确认框 |
 | `src/views/ReaderView.vue` | 仅统一工具栏与焦点 |
 | `src-tauri/tauri.conf.json` | 必要时更新启动背景色，不改窗口尺寸 |
-| `THIRD_PARTY_NOTICES.md` | 记录参考项目 MIT 来源 |
 
 ## 10. 实施阶段
 
