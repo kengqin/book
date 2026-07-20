@@ -18,7 +18,7 @@ const busyAction = ref<'install' | 'uninstall' | ''>('')
 const error = ref('')
 const message = ref('')
 const query = ref('')
-const detectionTimeoutMs = 8000
+let refreshGeneration = 0
 const visiblePlugins = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
   if (!keyword) return status.value.plugins
@@ -29,27 +29,17 @@ function targetsFor(plugin: BundledIdePlugin) {
   return status.value.targets.filter(target => target.kind === plugin.kind)
 }
 
-async function withTimeout<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('IDE 检测超过 8 秒，已停止等待，请稍后重试')), milliseconds)
-  })
-  try {
-    return await Promise.race([promise, timeout])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
-
 async function refresh() {
+  const generation = ++refreshGeneration
   detecting.value = true
   error.value = ''
   try {
-    status.value = await withTimeout(getIdeIntegrationStatus(), detectionTimeoutMs)
+    const nextStatus = await getIdeIntegrationStatus()
+    if (generation === refreshGeneration) status.value = nextStatus
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    if (generation === refreshGeneration) error.value = cause instanceof Error ? cause.message : String(cause)
   } finally {
-    detecting.value = false
+    if (generation === refreshGeneration) detecting.value = false
   }
 }
 

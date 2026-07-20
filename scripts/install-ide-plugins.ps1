@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
   [string]$Root = '',
   [ValidateSet('', 'All', 'VSCode', 'JetBrains', 'VisualStudio')]
@@ -13,7 +13,7 @@ if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
 $artifactRoot = Join-Path $Root '.release-local\ide-plugins'
 $pluginManifestPath = Join-Path $Root 'apps\desktop\src-tauri\resources\ide-plugins\manifest.json'
 if (-not (Test-Path -LiteralPath $pluginManifestPath)) { throw "IDE plugin manifest was not found: $pluginManifestPath" }
-$pluginManifest = Get-Content -Raw -LiteralPath $pluginManifestPath | ConvertFrom-Json
+$pluginManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath $pluginManifestPath | ConvertFrom-Json
 $results = [System.Collections.Generic.List[object]]::new()
 
 function Get-PluginDefinition([string]$Id) {
@@ -127,8 +127,52 @@ function Get-JetBrainsExecutables {
   return $executables
 }
 
-function Install-JetBrainsOfficial([System.IO.FileInfo]$Executable, [string]$PluginPath) {
-  Invoke-External $Executable.FullName @('installPlugins', $PluginPath) $Root
+function Get-JetBrainsPluginRoot([System.IO.FileInfo]$Executable) {
+  $installRoot = $Executable.Directory.Parent
+  $productInfoPath = Join-Path $installRoot.FullName 'product-info.json'
+  if (-not (Test-Path -LiteralPath $productInfoPath)) { throw "JetBrains product-info.json was not found: $productInfoPath" }
+  $productInfo = Get-Content -Raw -Encoding UTF8 -LiteralPath $productInfoPath | ConvertFrom-Json
+  $dataDirectoryName = [string]$productInfo.dataDirectoryName
+  if ([string]::IsNullOrWhiteSpace($dataDirectoryName) -or $dataDirectoryName -match '[\\/:]' -or $dataDirectoryName.Contains('..')) {
+    throw "Invalid JetBrains data directory name: $dataDirectoryName"
+  }
+  $vendorRoot = if ([string]$productInfo.productVendor -ieq 'Google') { 'Google' } else { 'JetBrains' }
+  return Join-Path (Join-Path $env:APPDATA $vendorRoot) (Join-Path $dataDirectoryName 'plugins')
+}
+
+function Install-JetBrainsLocal([System.IO.FileInfo]$Executable, [string]$PluginPath) {
+  if ($WhatIf) {
+    Write-Host "WHATIF: deploy $PluginPath to $($Executable.FullName)"
+    return
+  }
+  $pluginRoot = Get-JetBrainsPluginRoot $Executable
+  New-Item -ItemType Directory -Force -Path $pluginRoot | Out-Null
+  $stagingRoot = Split-Path -Parent $pluginRoot
+  $temporaryId = [guid]::NewGuid().ToString('N')
+  $temporary = Join-Path $stagingRoot ".novel-library-install-$PID-$temporaryId"
+  $backup = $null
+  try {
+    Expand-Archive -LiteralPath $PluginPath -DestinationPath $temporary -Force
+    $topLevel = @(Get-ChildItem -LiteralPath $temporary -Directory -Force)
+    if ($topLevel.Count -ne 1) { throw 'JetBrains 插件包必须只有一个顶层目录' }
+    $staged = $topLevel[0].FullName
+    $destination = Join-Path $pluginRoot $topLevel[0].Name
+    if (Test-Path -LiteralPath $destination) {
+      $backupId = [guid]::NewGuid().ToString('N')
+      $backup = Join-Path $stagingRoot ".novel-library-backup-$backupId"
+      Move-Item -LiteralPath $destination -Destination $backup
+    }
+    try {
+      Move-Item -LiteralPath $staged -Destination $destination
+    } catch {
+      if ($backup -and (Test-Path -LiteralPath $backup)) { Move-Item -LiteralPath $backup -Destination $destination -Force }
+      throw "无法写入 JetBrains 插件目录：$($_.Exception.Message)"
+    }
+    Write-Host "JetBrains local plugin deployed to $destination"
+  } finally {
+    if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($backup -and (Test-Path -LiteralPath $backup)) { Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue }
+  }
 }
 
 function Install-JetBrains([string]$PluginPath) {
@@ -148,8 +192,7 @@ function Install-JetBrains([string]$PluginPath) {
   }
   if (-not $targets.Count) { throw 'No JetBrains IDE was selected' }
   foreach ($executable in $targets) {
-    if ($WhatIf) { Write-Host "WHATIF: $($executable.FullName) installPlugins $PluginPath"; continue }
-    Install-JetBrainsOfficial $executable $PluginPath
+    Install-JetBrainsLocal $executable $PluginPath
   }
   return "$($targets.Count) JetBrains IDE(s)"
 }

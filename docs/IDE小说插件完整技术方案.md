@@ -342,7 +342,7 @@ manifest.json
 - 如果同时检测到 VS Code 和 Cursor，让用户选择安装到哪一个或全部。
 - 检测 Visual Studio 的 `VSIXInstaller.exe`。
 - 检测 JetBrains Toolbox、Program Files 下的 IDE，并让用户选择具体产品或全部产品。
-- JetBrains 使用目标 IDE 官方 `installPlugins <zip>` 安装、`uninstallPlugins <pluginId>` 卸载，不自行解压或删除插件目录。
+- JetBrains 使用 `product-info.json` 定位目标 IDE 的插件目录，安全解压并原子部署本地 ZIP，安装前校验插件 ID/版本、安装后复检；卸载删除已识别的插件目录。当前 IDEA 的 `installPlugins <zip>` 会把本地路径当作 Marketplace ID，因此不再调用该命令。
 - 所有外部检测和 CLI 安装进程在 Windows 上使用隐藏窗口标志，不弹命令行窗口。
 - 已安装版本从 VS Code/Cursor 扩展目录或 JetBrains 插件 JAR 的 `META-INF/plugin.xml` 读取；页面展示版本和卸载操作，不重复显示安装。
 - 安装失败时显示具体原因，不删除用户现有插件。
@@ -475,7 +475,7 @@ cargo test
 - 桌面端与三个 IDE 插件独立维护版本；插件只有自身代码或协议发生兼容性变更时才升级。当前桌面端为 `0.5.0`，三个插件制品为 `0.4.5`，两者不是发布约束。
 - Windows IDE 插件 CI 工作流。
 - 桌面端完整插件目录、搜索、逐 IDE 安装/卸载、安装状态和版本展示。
-- JetBrains 官方 `installPlugins` / `uninstallPlugins`、JAR 元数据检测和 VS Code/Cursor 官方 CLI 版本检测。
+- JetBrains 本地 ZIP 部署、JAR 元数据检测和 VS Code/Cursor 官方 CLI 版本检测。
 - VS Code/Cursor 安装状态以各自 CLI 扩展清单为准，避免旧版本目录残留造成假安装；检测、安装和卸载统一调用官方 `.cmd`，不解析、不拼接、也不直接传入 `cli.js`，且命令返回后必须复检。
 - Visual Studio 官方 VSIX 构建，包含扩展清单、主 DLL、`.pkgdef`、命令表注册和 MEF 组件，构建为 0 警告。
 - 本机 VS Code `1.129.0`、Cursor `3.5.17` 安装 `0.4.2` 成功；隔离扩展宿主连接真实 Bridge，验证 `诡秘之主 / 绯红 / 5 行` 和逐行前移。
