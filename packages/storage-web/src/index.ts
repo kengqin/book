@@ -3,6 +3,7 @@ import {
   calculateOverallProgress,
   type LibraryMaintenanceService,
   type LibraryRepository,
+  type LibrarySearchResult,
   type LocalAsset,
   type LocalBook,
   type LocalChapter,
@@ -86,6 +87,7 @@ export async function saveImportedBook(input: SaveImportedBookInput) {
     parseOptions: { ...input.options },
     currentChapter: Math.min(previous?.currentChapter ?? 1, input.result.chapters.length),
     progress: previous?.progress ?? 0,
+    chapterProgress: previous?.chapterProgress ?? 0,
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     lastReadAt: previous?.lastReadAt ?? now
@@ -124,7 +126,7 @@ export async function updateBookProgress(bookId: string, chapter: number, progre
   const book = await db.get('books', bookId)
   if (!book) return
   const overallProgress = calculateOverallProgress(chapter, progress, book.chapterCount)
-  await db.put('books', { ...book, currentChapter: chapter, progress: overallProgress, lastReadAt: Date.now() })
+  await db.put('books', { ...book, currentChapter: chapter, progress: overallProgress, chapterProgress: Math.min(100, Math.max(0, progress)), lastReadAt: Date.now() })
 }
 
 export async function updateBookTheme(bookId: string, theme: ThemeSettings, cover?: Blob) {
@@ -169,6 +171,7 @@ export async function exportLibrary() {
   const db = await getDB()
   const [books, chapters, assets] = await Promise.all([db.getAll('books'), db.getAll('chapters'), db.getAll('assets')])
   return {
+    format: 'novel-library-backup',
     version: 1,
     exportedAt: new Date().toISOString(),
     books,
@@ -177,15 +180,73 @@ export async function exportLibrary() {
   }
 }
 
+export async function exportBook(bookId: string) {
+  const db = await getDB()
+  const book = await db.get('books', bookId)
+  if (!book) throw new Error('要导出的书籍不存在')
+  const [chapters, assets] = await Promise.all([
+    db.getAllFromIndex('chapters', 'by-book', bookId),
+    db.getAllFromIndex('assets', 'by-book', bookId)
+  ])
+  return {
+    format: 'novel-library-book',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    books: [book],
+    chapters,
+    assets: await Promise.all(assets.map(async asset => ({ ...asset, blob: await blobToDataURL(asset.blob) })))
+  }
+}
+
 export async function importLibraryBackup(payload: unknown) {
-  const backup = payload as { version?: number; books?: LocalBook[]; chapters?: LocalChapter[]; assets?: Array<Omit<LocalAsset, 'blob'> & { blob: string }> }
+  const backup = payload as { format?: string; version?: number; books?: LocalBook[]; chapters?: LocalChapter[]; assets?: Array<Omit<LocalAsset, 'blob'> & { blob: string }> }
   if (backup?.version !== 1 || !Array.isArray(backup.books) || !Array.isArray(backup.chapters)) throw new Error('不是有效的本地书架备份')
+  if (backup.format !== undefined && !['novel-library-backup', 'novel-library-book'].includes(backup.format)) throw new Error('不支持的备份格式')
+  const bookIds = new Set(backup.books.map(book => book?.id).filter((id): id is string => typeof id === 'string' && Boolean(id)))
+  if (bookIds.size !== backup.books.length || backup.chapters.some(chapter => !chapter?.id || !bookIds.has(chapter.bookId))) throw new Error('备份中的书籍或章节关联无效')
   const db = await getDB()
   const tx = db.transaction(['books', 'chapters', 'assets'], 'readwrite')
-  for (const book of backup.books) tx.objectStore('books').put(book)
+  for (const book of backup.books) tx.objectStore('books').put({ ...book, chapterProgress: Number.isFinite(book.chapterProgress) ? book.chapterProgress : 0 })
   for (const chapter of backup.chapters) tx.objectStore('chapters').put(chapter)
   for (const asset of backup.assets ?? []) tx.objectStore('assets').put({ ...asset, blob: dataURLToBlob(asset.blob) })
   await tx.done
+}
+
+function searchSnippet(content: string, query: string) {
+  const normalizedContent = content.replace(/\s+/gu, ' ').trim()
+  const index = normalizedContent.toLocaleLowerCase().indexOf(query.toLocaleLowerCase())
+  if (index < 0) return normalizedContent.slice(0, 100)
+  const start = Math.max(0, index - 42)
+  const end = Math.min(normalizedContent.length, index + query.length + 58)
+  return `${start > 0 ? '…' : ''}${normalizedContent.slice(start, end)}${end < normalizedContent.length ? '…' : ''}`
+}
+
+export async function searchLibrary(query: string, limit = 200): Promise<LibrarySearchResult[]> {
+  const normalized = query.trim().toLocaleLowerCase()
+  if (!normalized) return []
+  const db = await getDB()
+  const [books, chapters] = await Promise.all([db.getAll('books'), db.getAll('chapters')])
+  const bookMap = new Map(books.map(book => [book.id, book]))
+  const results: LibrarySearchResult[] = []
+  for (const chapter of chapters.sort((left, right) => left.number - right.number)) {
+    const book = bookMap.get(chapter.bookId)
+    if (!book) continue
+    const metadataMatch = `${book.title}\n${book.author}`.toLocaleLowerCase().includes(normalized)
+    const chapterMatch = `${chapter.title}\n${chapter.originalLabel}`.toLocaleLowerCase().includes(normalized)
+    const contentMatch = chapter.contentText.toLocaleLowerCase().includes(normalized)
+    if (!metadataMatch && !chapterMatch && !contentMatch) continue
+    results.push({
+      bookId: book.id,
+      bookTitle: book.title,
+      chapterNumber: chapter.number,
+      originalLabel: chapter.originalLabel,
+      kind: chapter.kind,
+      chapterTitle: chapter.title,
+      snippet: searchSnippet(chapter.contentText, query.trim())
+    })
+    if (results.length >= Math.max(1, limit)) break
+  }
+  return results
 }
 
 export async function clearLibrary() {

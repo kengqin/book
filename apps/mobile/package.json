@@ -1,0 +1,40 @@
+{
+  "name": "@novel-library/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 1430",
+    "build": "node ../../scripts/mobile/incremental-build.mjs web",
+    "build:raw": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "native:sync": "node ../../scripts/mobile/incremental-build.mjs native-sync",
+    "native:sync:raw": "cap sync",
+    "android:open": "cap open android",
+    "android:build": "node ../../scripts/mobile/incremental-build.mjs android-release",
+    "ios:open": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "^7.1.0",
+    "@capacitor-community/sqlite": "^7.0.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/filesystem": "^7.1.4",
+    "@capacitor/share": "^7.0.2",
+    "@novel-library/novel-parser": "0.1.0",
+    "@novel-library/reader-core": "0.1.0",
+    "@novel-library/reader-protocol": "0.1.0",
+    "@novel-library/storage-web": "0.1.0",
+    "dompurify": "^3.4.12",
+    "lucide-vue-next": "^0.577.0",
+    "vue": "^3.5.39",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "vite": "^8.1.4",
+    "vue-tsc": "^3.3.7"
+  }
+}

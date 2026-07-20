@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "appId": "com.kengqin.novellibrary.mobile",
+  "latest": "0.1.0",
+  "releases": [
+    {
+      "version": "0.1.0",
+      "date": "2026-07-19",
+      "title": "移动端首个可测试版本",
+      "channel": "stable",
+      "published": true,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.0",
+      "storeUrls": {
+        "androidApk": "https://github.com/kengqin/book/releases/download/v0.1.0/novel-library-mobile.apk",
+        "iosTestFlight": "https://testflight.apple.com/join/novel-library"
+      },
+      "apkSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sections": [
+        {
+          "title": "首版能力",
+          "items": ["TXT/EPUB 导入", "本地阅读和备份恢复"]
+        }
+      ]
+    }
+  ]
+}
