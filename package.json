@@ -9,11 +9,12 @@
     "apps/*"
   ],
   "scripts": {
-    "content:library": "node scripts/generate-library.mjs",
-    "docs:dev": "npm run content:library && vitepress dev 正文",
-    "docs:build": "npm run content:library && vitepress build 正文",
-    "docs:preview": "vitepress preview 正文",
-    "docs:publish": "npm run docs:build && gh-pages -d \"正文/.vitepress/dist\" -b gh-pages --dotfiles",
+    "web:content": "npm run content --workspace @novel-library/web",
+    "web:dev": "npm run dev --workspace @novel-library/web",
+    "web:build": "npm run build --workspace @novel-library/web",
+    "web:preview": "npm run preview --workspace @novel-library/web",
+    "web:publish": "npm run publish --workspace @novel-library/web",
+    "content:library": "npm run web:content",
     "desktop:dev": "npm run tauri --workspace @novel-library/desktop -- dev",
     "desktop:web:build": "npm run build --workspace @novel-library/desktop",
     "desktop:build": "npm run tauri --workspace @novel-library/desktop -- build",
@@ -36,17 +37,7 @@
   "homepage": "https://github.com/kengqin/book#readme",
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",
-    "gh-pages": "^6.3.0",
     "typescript": "^5.8.3",
-    "vitepress": "^1.6.4",
     "vitest": "^3.2.4"
-  },
-  "dependencies": {
-    "@novel-library/reader-protocol": "0.1.0",
-    "@novel-library/novel-parser": "0.1.0",
-    "@novel-library/reader-core": "0.1.0",
-    "@novel-library/storage-web": "0.1.0",
-    "idb": "^8.0.3",
-    "lucide-vue-next": "^0.577.0"
   }
 }
