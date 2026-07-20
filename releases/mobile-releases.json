@@ -13,11 +13,14 @@
       "storeUrls": {
         "androidApk": "https://github.com/kengqin/book/releases/download/mobile-v0.1.0/novel-library-mobile-0.1.0.apk"
       },
-      "apkSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "apkSha256": "b0e83ff6abcbb28f83f83e7afb197aabf68f8f2887ebc03469975e8b5da73fb0",
       "sections": [
         {
           "title": "首版能力",
-          "items": ["TXT/EPUB 导入", "本地阅读和备份恢复"]
+          "items": [
+            "TXT/EPUB 导入",
+            "本地阅读和备份恢复"
+          ]
         }
       ]
     }
