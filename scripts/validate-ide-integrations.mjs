@@ -6,6 +6,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const files = [
   'apps/desktop/src-tauri/resources/ide-plugins/manifest.json',
   'apps/desktop/src-tauri/src/ide_integration.rs',
+  'apps/desktop/src/views/IdeIntegrationView.vue',
   'plugins/vscode/package.json',
   'plugins/README.md',
   'plugins/vscode/bridge.js',
@@ -151,10 +152,13 @@ requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /GetProcesse
 const desktopManifest = JSON.parse(source('apps/desktop/src-tauri/resources/ide-plugins/manifest.json'))
 const desktopIdeIntegration = source('apps/desktop/src-tauri/src/ide_integration.rs')
 requireMatch(desktopIdeIntegration, /vscode_script_process/, 'VS Code and Cursor must use their official command scripts')
-requireMatch(desktopIdeIntegration, /\.arg\("installPlugins"\)/, 'JetBrains must use its official installation command')
+requireMatch(desktopIdeIntegration, /install_jetbrains_plugin/, 'JetBrains local ZIP deployment is missing')
 requireValue(!desktopIdeIntegration.includes('cli' + '.js'), 'Desktop plugin installation must never construct a cli.js argument')
 requireMatch(desktopIdeIntegration, /--list-extensions/, 'VS Code installed state must use the IDE CLI')
 requireMatch(desktopIdeIntegration, /parse_vscode_extension_state/, 'VS Code CLI installed-state parser is missing')
+requireMatch(desktopIdeIntegration, /clean_installer_diagnostic/, 'IDE installer diagnostic filtering is missing')
+requireMatch(desktopIdeIntegration, /std::thread::scope/, 'IDE installed-state checks must run concurrently')
+requireValue(!source('apps/desktop/src/views/IdeIntegrationView.vue').includes('detectionTimeoutMs'), 'IDE detection must not have an arbitrary UI timeout')
 const expectedArtifacts = new Map([
   ['vscode', [vscode.version, `novel-library-reader-${vscode.version}.vsix`]],
   ['intellij', [intellijVersion, `novel-library-intellij-${intellijVersion}.zip`]],
@@ -166,8 +170,7 @@ for (const [id, [version, file]] of expectedArtifacts) {
 }
 
 const installer = source('scripts/install-ide-plugins.ps1')
-requireMatch(installer, /Install-JetBrainsOfficial/, 'JetBrains official installation command is missing')
-requireMatch(installer, /installPlugins/, 'JetBrains official installPlugins command is missing')
+requireMatch(installer, /Install-JetBrainsLocal/, 'JetBrains local ZIP deployment script is missing')
 requireMatch(installer, /\[switch\]\$AllTargets/, 'Non-interactive all-target installation is missing')
 const visualPackager = source('scripts/package-visual-studio-plugin.ps1')
 for (const entry of ['[Content_Types].xml', 'NovelLibrary.VisualStudio.dll', 'NovelLibrary.VisualStudio.pkgdef']) {

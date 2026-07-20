@@ -40,7 +40,7 @@ Bridge 监听 `127.0.0.1` 的动态端口，并在用户安装目录内的 `brid
 
 桌面端侧栏主导航只保留书架、搜索和工具；设置固定在侧栏底部，不展示“本地模式”文案。版本与更新不占用独立主导航位置，设置页展示当前版本和更新状态，并提供进入完整版本历史页的入口；存在更新时提示圆点显示在设置入口。
 
-JetBrains ZIP 交给目标产品官方 `installPlugins` 命令安装，卸载使用官方 `uninstallPlugins`，不自行解压或删除插件目录。VS Code/Cursor 使用官方 `.cmd --install-extension/--uninstall-extension`，Visual Studio 使用官方 `VSIXInstaller.exe`。检测和安装子进程均隐藏命令行窗口。命令行入口支持交互选择，也支持 `-Only ... -AllTargets` 自动化验收。
+JetBrains ZIP 由桌面端按目标产品 `product-info.json` 的数据目录安全解压并原子部署，安装前校验插件 ID、版本和 ZIP 路径，安装后复检；卸载删除已识别的插件目录。这样不会把本地 ZIP 路径误传给当前 IDEA 仅支持 Marketplace ID 的 `installPlugins` 命令。VS Code/Cursor 使用官方 `.cmd --install-extension/--uninstall-extension`，Visual Studio 使用官方 `VSIXInstaller.exe`。检测和安装子进程均隐藏命令行窗口。命令行入口支持交互选择，也支持 `-Only ... -AllTargets` 自动化验收。
 
 ## 验收
 
