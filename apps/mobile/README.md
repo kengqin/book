@@ -31,3 +31,5 @@ npm run mobile:package:android:release
 推荐在仓库根目录使用上述增量打包命令。输入和现有产物均未变化时，会直接复用并跳过 Web、Capacitor 或 Gradle 阶段。需要无条件重建时执行 `npm run mobile:package:force`。
 
 Release APK 已接入项目本地正式签名密钥和自动验签。完整缓存规则见 `docs/移动端增量打包流程.md`。
+
+正式发布使用 `mobile-v*` Tag 触发独立的 Android Release 工作流。该工作流不会改变桌面端 GitHub Latest Release。iOS 暂不发布。

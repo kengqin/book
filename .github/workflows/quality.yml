@@ -42,6 +42,15 @@ jobs:
       - name: Typecheck and build desktop web assets
         run: npm run desktop:web:build
 
+      - name: Build online reading site
+        run: npm run web:build
+
+      - name: Typecheck and build mobile web assets
+        run: npm run mobile:web:build
+
+      - name: Validate Android release metadata
+        run: npm run mobile:release:validate
+
       - name: Validate IDE integrations
         run: npm run plugins:validate
 

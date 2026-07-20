@@ -59,3 +59,36 @@ npm run mobile:android:signing:verify
 ## 换电脑恢复
 
 将备份的 `android-signing` 目录原样放回新工作区的 `.release-local/` 下，安装 JDK 和 Android SDK，然后执行验证命令。不要再次运行生成命令。
+
+## GitHub Actions 正式发布
+
+Android 使用独立的 `mobile-v*` Tag，例如 `mobile-v0.1.0`。Tag 必须指向已经合并到 `main` 的提交。工作流会构建、验签并发布 APK，但显式保持 `latest=false`，不会覆盖桌面端依赖的 GitHub Latest Release。
+
+首次发布前，在 GitHub 仓库 Actions Secrets 中配置：
+
+- `ANDROID_SIGNING_KEYSTORE_BASE64`：`novel-library-release.jks` 的 Base64 内容。
+- `ANDROID_SIGNING_PASSWORD`：生成签名时保存的密钥库密码；当前生成流程的私钥密码与其相同。
+
+在本机生成 Base64 文本时不要输出到仓库文件，可复制到剪贴板后直接录入 GitHub Secret：
+
+```powershell
+$key = '.release-local/android-signing/novel-library-release.jks'
+[Convert]::ToBase64String([IO.File]::ReadAllBytes($key)) | Set-Clipboard
+```
+
+发布前执行：
+
+```powershell
+npm test
+npm run mobile:release:validate -- --tag=mobile-v0.1.0
+npm run mobile:package:android:release
+```
+
+确认版本提交已进入 `main` 后创建并推送 Tag：
+
+```powershell
+git tag mobile-v0.1.0
+git push origin mobile-v0.1.0
+```
+
+工作流会上传版本化 APK 和 `.sha256`，公开 Release 后把实际 APK SHA-256 回写到 `main` 的 `releases/mobile-releases.json`。正式发布后不得复用或覆盖同一版本 Tag。

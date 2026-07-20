@@ -28,6 +28,7 @@
     "mobile:package:ios:archive": "node scripts/mobile/incremental-build.mjs ios-archive",
     "mobile:package:force": "node scripts/mobile/incremental-build.mjs android-all --force",
     "mobile:package:cache:clear": "node scripts/mobile/incremental-build.mjs clear-cache",
+    "mobile:release:validate": "node scripts/mobile/validate-release.mjs",
     "mobile:android:signing:generate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android/generate-release-signing.ps1",
     "mobile:android:signing:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android/verify-release-signing.ps1",
     "release:validate": "node scripts/validate-release.mjs",

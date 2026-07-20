@@ -5,14 +5,13 @@
   "releases": [
     {
       "version": "0.1.0",
-      "date": "2026-07-19",
+      "date": "2026-07-20",
       "title": "移动端首个可测试版本",
       "channel": "stable",
       "published": true,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.0",
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/mobile-v0.1.0",
       "storeUrls": {
-        "androidApk": "https://github.com/kengqin/book/releases/download/v0.1.0/novel-library-mobile.apk",
-        "iosTestFlight": "https://testflight.apple.com/join/novel-library"
+        "androidApk": "https://github.com/kengqin/book/releases/download/mobile-v0.1.0/novel-library-mobile-0.1.0.apk"
       },
       "apkSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "sections": [
