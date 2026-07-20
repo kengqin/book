@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const workspace = path.resolve(import.meta.dirname, '..')
-const libraryRoot = path.join(workspace, '书库')
-const manifestPath = path.join(workspace, '正文', '.vitepress', 'library.generated.json')
+const webRoot = path.resolve(import.meta.dirname, '..')
+const libraryRoot = path.join(webRoot, '书库')
+const manifestPath = path.join(webRoot, '.vitepress', 'library.generated.json')
 const metadataFilename = 'book.json'
 const chineseNumberPattern = '零〇一二两三四五六七八九十百千万两'
 

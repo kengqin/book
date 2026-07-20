@@ -28,7 +28,7 @@ export default defineConfig({
   description: '沉浸式在线小说阅读平台',
   lang: 'zh-CN',
   base: '/book/',
-  srcDir: '../书库',
+  srcDir: './书库',
   srcExclude: [
     '**/设定/**',
     '**/原文/**',

@@ -1,21 +1,27 @@
 # 在线小说书库
 
-基于 VitePress 的多书阅读项目。每本书的内容与资料独立存放在 `书库/<书名>/`，平台主题和构建配置保留在 `正文/`。
+基于 VitePress 的多书阅读项目。Web、桌面端和移动端统一位于 `apps/`，跨端共享能力位于 `packages/`。每本书的内容与资料独立存放在 `apps/web/书库/<书名>/`。
 
 桌面端采用 Tauri 2、Vue 3 和 SQLite，并与在线端共享小说解析和阅读内核。架构与使用方式参见 [桌面端架构设计方案](docs/桌面端架构设计方案.md) 和 [桌面端使用说明](docs/桌面端使用说明.md)。
 
 ## 目录结构
 
 ```text
-书库/
-└── <书名>/
-    ├── book.json   # 书名、作者、状态、简介与封面配置
-    ├── 正文/       # 已发布章节
-    ├── 设定/       # 可选
-    └── 站点/       # 专题封面等静态资源
+apps/
+├── web/            # VitePress 在线阅读端
+│   ├── .vitepress/ # 站点配置与公共主题
+│   ├── scripts/    # Web 内容清单生成脚本
+│   └── 书库/
+│       └── <书名>/
+│           ├── book.json   # 书名、作者、状态、简介与封面配置
+│           ├── 正文/       # 已发布章节
+│           ├── 设定/       # 可选
+│           └── 站点/       # 专题封面等静态资源
+├── desktop/        # Tauri 桌面端
+└── mobile/         # Capacitor 移动端
 
-正文/               # VitePress 平台配置与公共主题
-scripts/            # 通用书库清单生成脚本
+packages/           # 跨端解析、阅读协议、业务内核与存储适配
+scripts/            # 仓库级发布、校验与平台自动化脚本
 ```
 
 ## 当前展示
@@ -45,8 +51,10 @@ scripts/            # 通用书库清单生成脚本
 
 ```bash
 npm run content:library
-npm run docs:dev
-npm run docs:build
+npm run web:dev
+npm run web:build
+npm run web:preview
+npm run web:publish
 npm test
 npm run desktop:dev
 npm run desktop:web:build
@@ -70,10 +78,10 @@ npm run desktop:build
 确认本地内容无误后执行：
 
 ```bash
-npm run docs:publish
+npm run web:publish
 ```
 
-该命令会先在本地生成静态站点，再仅将 `正文/.vitepress/dist` 的内容推送到
+该命令会先在本地生成静态站点，再仅将 `apps/web/.vitepress/dist` 的内容推送到
 `gh-pages` 分支。书库中的原始 TXT 不会进入发布分支。
 
 GitHub Actions 中保留了仅可手动触发的备用发布流程，不再响应 `main` 推送。

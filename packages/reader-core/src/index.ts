@@ -65,6 +65,7 @@ export interface LocalBook {
   parseOptions: ParseOptions
   currentChapter: number
   progress: number
+  chapterProgress: number
   createdAt: number
   updatedAt: number
   lastReadAt: number
@@ -152,6 +153,16 @@ export interface LibraryRepository {
   updateBookProgress(bookId: string, chapter: number, progress: number): Promise<void>
   updateBookTheme(bookId: string, theme: ThemeSettings, cover?: Blob): Promise<void>
   deleteBook(bookId: string): Promise<void>
+}
+
+export interface LibrarySearchResult {
+  bookId: string
+  bookTitle: string
+  chapterNumber: number
+  originalLabel: string
+  kind: ChapterKind
+  chapterTitle: string
+  snippet: string
 }
 
 export interface StorageStats {

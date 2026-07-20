@@ -1,0 +1,206 @@
+name: Release Android
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing Android release tag, for example mobile-v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-android:
+    runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      apk_name: ${{ steps.release.outputs.apk_name }}
+    steps:
+      - name: Checkout Android release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 2
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Resolve and validate Android release
+        id: release
+        shell: pwsh
+        env:
+          REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:REQUESTED_TAG
+          npm ci
+          npm run mobile:release:validate -- --tag=$tag
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "$tag^{commit}" origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Android release Tag must point to a commit merged into main' }
+          $version = $tag -replace '^mobile-v', ''
+          $apkName = "novel-library-mobile-$version.apk"
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "apk_name=$apkName" >> $env:GITHUB_OUTPUT
+
+      - name: Restore Android release signing
+        shell: pwsh
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:KEYSTORE_BASE64)) { throw 'ANDROID_SIGNING_KEYSTORE_BASE64 is not configured' }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_PASSWORD)) { throw 'ANDROID_SIGNING_PASSWORD is not configured' }
+          $signingDir = Join-Path $PWD '.release-local/android-signing'
+          New-Item -ItemType Directory -Force $signingDir | Out-Null
+          $encoded = $env:KEYSTORE_BASE64 -replace '\s', ''
+          [IO.File]::WriteAllBytes((Join-Path $signingDir 'novel-library-release.jks'), [Convert]::FromBase64String($encoded))
+          $properties = @(
+            'storeFile=novel-library-release.jks',
+            "storePassword=$env:SIGNING_PASSWORD",
+            'keyAlias=novel-library-release',
+            "keyPassword=$env:SIGNING_PASSWORD"
+          ) -join "`n"
+          [IO.File]::WriteAllText((Join-Path $signingDir 'signing.properties'), "$properties`n", [Text.UTF8Encoding]::new($false))
+
+      - name: Test and build signed APK
+        shell: pwsh
+        run: |
+          npm test
+          npm run mobile:package:android:release
+
+      - name: Prepare and verify release assets
+        id: assets
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          APK_NAME: ${{ steps.release.outputs.apk_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = 'apps/mobile/android/app/build/outputs/apk/release/app-release.apk'
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/android/verify-release-signing.ps1 -Apk $source
+          if ($LASTEXITCODE -ne 0) { throw 'Android signing verification failed' }
+          New-Item -ItemType Directory -Force android-release | Out-Null
+          $target = Join-Path 'android-release' $env:APK_NAME
+          Copy-Item -LiteralPath $source -Destination $target
+          $checksum = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$checksum  $env:APK_NAME" | Set-Content -LiteralPath "$target.sha256" -Encoding utf8NoBOM
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Android release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-release-${{ steps.release.outputs.version }}
+          path: android-release/*
+          if-no-files-found: error
+
+  publish-android:
+    needs: build-android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Android release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build-android.outputs.tag }}
+
+      - name: Download signed APK
+        uses: actions/download-artifact@v8
+        with:
+          name: android-release-${{ needs.build-android.outputs.version }}
+          path: android-release
+
+      - name: Create staged Android Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-android.outputs.tag }}
+          VERSION: ${{ needs.build-android.outputs.version }}
+          APK_NAME: ${{ needs.build-android.outputs.apk_name }}
+        run: |
+          set -euo pipefail
+          node - <<'NODE' > android-release-notes.md
+          const manifest = require('./releases/mobile-releases.json')
+          const release = manifest.releases[0]
+          console.log(`# 小说书库 Android v${release.version}\n`)
+          console.log(`> ${release.title}\n`)
+          for (const section of release.sections) {
+            console.log(`## ${section.title}\n`)
+            for (const item of section.items) console.log(`- ${item}`)
+            console.log('')
+          }
+          NODE
+          if state=$(gh release view "$TAG" --json isDraft,isPrerelease 2>/dev/null); then
+            draft=$(jq -r '.isDraft' <<<"$state")
+            prerelease=$(jq -r '.isPrerelease' <<<"$state")
+            if [[ "$draft" != "true" && "$prerelease" != "true" ]]; then
+              echo "$TAG is already a formal Release and cannot be overwritten" >&2
+              exit 1
+            fi
+            gh release edit "$TAG" --title "小说书库 Android v$VERSION" --notes-file android-release-notes.md --latest=false
+          else
+            gh release create "$TAG" --verify-tag --draft --latest=false --title "小说书库 Android v$VERSION" --notes-file android-release-notes.md
+          fi
+          gh release upload "$TAG" --clobber "android-release/$APK_NAME" "android-release/$APK_NAME.sha256"
+
+      - name: Verify staged assets and publish without changing Desktop Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-android.outputs.tag }}
+          APK_NAME: ${{ needs.build-android.outputs.apk_name }}
+        run: |
+          set -euo pipefail
+          expected=$(awk '{print $1}' "android-release/$APK_NAME.sha256")
+          verify_dir=$(mktemp -d)
+          gh release download "$TAG" --dir "$verify_dir" --pattern "$APK_NAME"
+          actual=$(sha256sum "$verify_dir/$APK_NAME" | awk '{print $1}')
+          test "$actual" = "$expected"
+          gh release edit "$TAG" --draft=false --prerelease=false --latest=false
+          latest_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')
+          [[ "$latest_tag" == v* ]] || { echo 'Android Release replaced Desktop Latest' >&2; exit 1; }
+
+      - name: Record published APK checksum on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-android.outputs.version }}
+          APK_NAME: ${{ needs.build-android.outputs.apk_name }}
+        run: |
+          set -euo pipefail
+          checksum=$(awk '{print $1}' "android-release/$APK_NAME.sha256")
+          current=$(mktemp)
+          updated=$(mktemp)
+          gh api "repos/$GITHUB_REPOSITORY/contents/releases/mobile-releases.json?ref=main" > "$current"
+          jq -r '.content' "$current" | base64 --decode > "$updated"
+          jq --arg version "$VERSION" --arg checksum "$checksum" '(.releases[] | select(.version == $version)).apkSha256 = $checksum' "$updated" > "$updated.next"
+          encoded=$(base64 --wrap=0 "$updated.next")
+          file_sha=$(jq -r '.sha' "$current")
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/releases/mobile-releases.json" \
+            -f message="chore(mobile-release): record v$VERSION APK checksum" \
+            -f content="$encoded" \
+            -f sha="$file_sha" \
+            -f branch=main > /dev/null
