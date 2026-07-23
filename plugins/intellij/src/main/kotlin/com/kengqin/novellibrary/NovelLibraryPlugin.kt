@@ -16,6 +16,9 @@ import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.editor.ex.util.EditorUtil
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.keymap.KeymapManager
+import com.intellij.openapi.keymap.KeymapUtil
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.ui.Messages
@@ -50,9 +53,10 @@ import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JTextArea
 import javax.swing.SwingUtilities
+import kotlin.math.roundToInt
 
 data class BridgeConfig(val port: Int, val token: String)
-data class BookOption(val id: String, val title: String, val currentChapter: Int?) { override fun toString() = title }
+data class BookOption(val id: String, val title: String, val currentChapter: Int?, val chapterProgress: Double) { override fun toString() = title }
 data class ChapterOption(val number: Int, val title: String, val kind: String?, val ordinal: Int = 0) {
     override fun toString() = if (ordinal > 0) "第 $ordinal 章 · $title" else title
 }
@@ -122,6 +126,13 @@ fun displayLines(text: String): List<String> {
     return result.filter(String::isNotBlank)
 }
 
+fun lineStartFromProgress(lineCount: Int, progress: Double): Int {
+    val maximumStart = maxOf(0, lineCount - 5)
+    return (maximumStart * progress.coerceIn(0.0, 100.0) / 100.0)
+        .roundToInt()
+        .coerceIn(0, maximumStart)
+}
+
 object BridgeClient {
     private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build()
     private var cachedInstalledBridge: java.nio.file.Path? = null
@@ -177,7 +188,8 @@ object BridgeClient {
         BookOption(
             value["id"].asString,
             value["title"].asString,
-            value.get("currentChapter")?.takeUnless { it.isJsonNull }?.asInt
+            value.get("currentChapter")?.takeUnless { it.isJsonNull }?.asInt,
+            value.get("chapterProgress")?.takeUnless { it.isJsonNull }?.asDouble ?: 0.0
         )
     }
 
@@ -548,8 +560,15 @@ class NovelReaderSession(private val project: Project) {
                     status = "当前小说没有章节"
                     publish()
                 } else {
-                    val restoredLineStart = position?.takeIf { it.chapterNumber == preferred.number }?.lineStart ?: 0
-                    loadChapter(preferred, restoredLineStart = restoredLineStart)
+                    val restoredLineStart = position?.takeIf { it.chapterNumber == preferred.number }?.lineStart
+                    val restoredProgress = if (position == null && preferred.number == book.currentChapter) {
+                        book.chapterProgress
+                    } else null
+                    loadChapter(
+                        preferred,
+                        restoredLineStart = restoredLineStart,
+                        restoredProgress = restoredProgress
+                    )
                 }
             }
         }
@@ -557,13 +576,18 @@ class NovelReaderSession(private val project: Project) {
 
     fun selectChapter(chapter: ChapterOption) = loadChapter(chapter)
 
-    private fun loadChapter(chapter: ChapterOption, direction: Int = 1, restoredLineStart: Int = 0) {
+    private fun loadChapter(
+        chapter: ChapterOption,
+        direction: Int = 1,
+        restoredLineStart: Int? = null,
+        restoredProgress: Double? = null
+    ) {
         val book = selectedBook ?: return
         val candidates = chapters
         val version = ++requestVersion
         status = "正在加载 ${chapter.title}..."
         publish()
-        background({ loadChapter(chapter, direction, restoredLineStart) }) {
+        background({ loadChapter(chapter, direction, restoredLineStart, restoredProgress) }) {
             var index = candidates.indexOfFirst { it.number == chapter.number }
             var result = BridgeClient.chapter(book.id, chapter.number)
             var resultLines = displayLines(result.text)
@@ -581,11 +605,22 @@ class NovelReaderSession(private val project: Project) {
                 currentChapter = result
                 lines = resultLines
                 lineStart = if (result.number == chapter.number) {
-                    restoredLineStart.coerceIn(0, maxOf(0, resultLines.size - 5))
+                    (restoredLineStart ?: restoredProgress?.let {
+                        lineStartFromProgress(resultLines.size, it)
+                    } ?: 0).coerceIn(0, maxOf(0, resultLines.size - 5))
                 } else 0
                 render()
+                syncProgress()
             }
         }
+    }
+
+    private fun syncProgress() {
+        val book = selectedBook ?: return
+        val chapter = currentChapter ?: return
+        if (lines.isEmpty()) return
+        val progress = if (lines.size <= 5) 100.0 else lineStart.toDouble() / (lines.size - 5) * 100.0
+        background { BridgeClient.saveProgress(book.id, chapter.number, progress) }
     }
 
     private fun render() {
@@ -606,10 +641,7 @@ class NovelReaderSession(private val project: Project) {
         if (next == lineStart || lines.isEmpty()) return
         lineStart = next
         render()
-        val book = selectedBook ?: return
-        val chapter = currentChapter ?: return
-        val progress = if (lines.size <= 5) 100.0 else lineStart.toDouble() / (lines.size - 5) * 100.0
-        background { BridgeClient.saveProgress(book.id, chapter.number, progress) }
+        syncProgress()
     }
 
     fun moveChapter(direction: Int) {
@@ -651,6 +683,7 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
         val nextLine = JButton("下一行")
         val refresh = JButton("刷新")
         val shortcuts = JButton("快捷键")
+        val configureShortcuts = JButton("自定义快捷键")
         toolbar.add(books)
         toolbar.add(chapters)
         toolbar.add(previousChapter)
@@ -661,6 +694,7 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
         toolbar.add(displayMode)
         toolbar.add(readerVisibility)
         toolbar.add(shortcuts)
+        toolbar.add(configureShortcuts)
 
         content.isEditable = false
         content.lineWrap = true
@@ -699,6 +733,7 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
             syncReaderVisibility()
         }
         shortcuts.addActionListener { showShortcutHelp(project) }
+        configureShortcuts.addActionListener { openShortcutSettings(project) }
         session.attach(::applySnapshot)
     }
 
@@ -731,19 +766,34 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 }
 
+private fun activeShortcut(actionId: String): String {
+    val shortcuts = KeymapManager.getInstance().activeKeymap.getShortcuts(actionId)
+    return shortcuts.joinToString(" / ") { KeymapUtil.getShortcutText(it) }.ifBlank { "未设置" }
+}
+
+private fun openShortcutSettings(project: Project?) {
+    ShowSettingsUtil.getInstance().showSettingsDialog(project, "Keymap")
+}
+
 private fun showShortcutHelp(project: Project?) {
-    Messages.showInfoMessage(
-        project,
-        listOf(
-            "Ctrl+Alt+N    开启或关闭代码内阅读",
-            "Ctrl+Alt+9    切换段落/行尾显示模式",
-            "Ctrl+Alt+↑    上一行",
-            "Ctrl+Alt+↓    下一行",
-            "Ctrl+Alt+←    上一章",
-            "Ctrl+Alt+→    下一章"
-        ).joinToString("\n"),
-        "小说书库快捷键"
+    val actions = listOf(
+        "NovelLibrary.ToggleReaderVisibility" to "开启或关闭代码内阅读",
+        "NovelLibrary.ToggleDisplayMode" to "切换段落/行尾显示模式",
+        "NovelLibrary.PreviousLine" to "上一行",
+        "NovelLibrary.NextLine" to "下一行",
+        "NovelLibrary.PreviousChapter" to "上一章",
+        "NovelLibrary.NextChapter" to "下一章"
     )
+    val choice = Messages.showDialog(
+        project,
+        actions.joinToString("\n") { (id, label) -> "${activeShortcut(id).padEnd(18)}$label" } +
+            "\n\n以上为当前 Keymap 的实际绑定，用户设置优先。",
+        "小说书库快捷键",
+        arrayOf("打开 Keymap 设置", "关闭"),
+        0,
+        Messages.getInformationIcon()
+    )
+    if (choice == 0) openShortcutSettings(project)
 }
 
 class NovelToolWindowFactory : ToolWindowFactory {

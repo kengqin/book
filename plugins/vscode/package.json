@@ -2,13 +2,13 @@
   "name": "novel-library-reader",
   "displayName": "小说书库阅读器",
   "description": "在 VS Code 和 Cursor 代码行内阅读本地小说，并与小说书库桌面端同步。",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "publisher": "novel-library",
   "license": "MIT",
   "engines": { "vscode": ">=1.85.0" },
   "categories": ["Other"],
   "main": "extension.js",
-  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.selectBook", "onCommand:novelLibrary.selectChapter", "onCommand:novelLibrary.importFile", "onCommand:novelLibrary.toggleDisplayMode"],
+  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onView:novelLibrary.wheelReader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.selectBook", "onCommand:novelLibrary.selectChapter", "onCommand:novelLibrary.importFile", "onCommand:novelLibrary.toggleDisplayMode", "onCommand:novelLibrary.configureShortcuts"],
   "contributes": {
     "commands": [
       { "command": "novelLibrary.openReader", "title": "小说书库: 显示或隐藏代码内阅读", "icon": "$(eye)" },
@@ -23,6 +23,7 @@
       { "command": "novelLibrary.refreshLibrary", "title": "刷新书架", "icon": "$(refresh)" },
       { "command": "novelLibrary.toggleDisplayMode", "title": "切换阅读显示模式", "icon": "$(layout)" },
       { "command": "novelLibrary.showShortcuts", "title": "小说书库: 查看快捷键", "icon": "$(keyboard)" },
+      { "command": "novelLibrary.configureShortcuts", "title": "小说书库: 自定义快捷键", "icon": "$(settings-gear)" },
       { "command": "novelLibrary.importFile", "title": "小说书库: 导入当前文件", "icon": "$(file-add)" },
       { "command": "novelLibrary.openDesktop", "title": "小说书库: 打开桌面端", "icon": "$(open-preview)" }
     ],
@@ -42,7 +43,8 @@
     },
     "views": {
       "novelLibrary": [
-        { "id": "novelLibrary.reader", "name": "小说阅读器", "visibility": "visible" }
+        { "id": "novelLibrary.reader", "name": "小说阅读器", "visibility": "visible" },
+        { "id": "novelLibrary.wheelReader", "name": "滚轮阅读区", "type": "webview", "visibility": "visible" }
       ]
     },
     "menus": {
@@ -56,6 +58,7 @@
         { "command": "novelLibrary.refreshLibrary", "when": "view == novelLibrary.reader", "group": "navigation@6" },
         { "command": "novelLibrary.toggleDisplayMode", "when": "view == novelLibrary.reader", "group": "navigation@7" },
         { "command": "novelLibrary.showShortcuts", "when": "view == novelLibrary.reader", "group": "navigation@8" },
+        { "command": "novelLibrary.configureShortcuts", "when": "view == novelLibrary.reader", "group": "navigation@9" },
         { "command": "novelLibrary.importFile", "when": "view == novelLibrary.reader", "group": "2_actions@1" },
         { "command": "novelLibrary.openDesktop", "when": "view == novelLibrary.reader", "group": "2_actions@2" }
       ],
@@ -64,5 +67,5 @@
       ]
     }
   },
-  "scripts": { "validate": "node --check extension.js && node --check bridge.js" }
+  "scripts": { "validate": "node --check extension.js && node --check bridge.js && node --check reader-utils.js" }
 }

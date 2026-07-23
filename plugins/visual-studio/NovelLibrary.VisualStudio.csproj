@@ -7,11 +7,11 @@
     <LangVersion>latest</LangVersion>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <UseWPF>true</UseWPF>
-    <Version>0.4.6</Version>
+    <Version>0.4.7</Version>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
     <UseCodebase>true</UseCodebase>
     <TemplateOutputDirectory>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\</TemplateOutputDirectory>
-    <IntermediateVsixManifest>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\extension.vsixmanifest</IntermediateVsixManifest>
+    <IntermediateVsixManifest>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\extension.$(Version).vsixmanifest</IntermediateVsixManifest>
     <TargetVsixContainer>$(MSBuildProjectDirectory)\bin\novel-library-visual-studio-$(Version).vsix</TargetVsixContainer>
   </PropertyGroup>
   <ItemGroup>

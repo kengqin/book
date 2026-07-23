@@ -18,6 +18,7 @@ internal sealed class BookItem
     public string Id { get; set; } = "";
     public string Title { get; set; } = "";
     public int? CurrentChapter { get; set; }
+    public double ChapterProgress { get; set; }
     public override string ToString() => Title;
 }
 
@@ -159,16 +160,7 @@ internal static class NovelLibraryReaderSession
         await EnsureLoadedAsync().ConfigureAwait(false);
         _lineStart = Math.Max(0, Math.Min(Math.Max(0, _lines.Count - 5), _lineStart + direction));
         RaiseChanged();
-        if (CurrentBook != null && CurrentChapter != null)
-        {
-            var progress = _lines.Count <= 5 ? 100d : _lineStart * 100d / (_lines.Count - 5);
-            await Bridge.PostAsync("/v1/progress", new
-            {
-                bookId = CurrentBook.Id,
-                chapterNumber = CurrentChapter.Number,
-                chapterProgress = progress
-            }).ConfigureAwait(false);
-        }
+        await SaveProgressAsync().ConfigureAwait(false);
     }
 
     public static async Task MoveChapterAsync(int direction)
@@ -194,10 +186,10 @@ internal static class NovelLibraryReaderSession
         var preferred = Chapters.FirstOrDefault(item => item.Number == book.CurrentChapter)
             ?? Chapters.FirstOrDefault()
             ?? throw new InvalidOperationException("当前小说没有章节");
-        await LoadReadableChapterAsync(preferred.Number, 1).ConfigureAwait(false);
+        await LoadReadableChapterAsync(preferred.Number, 1, book.ChapterProgress).ConfigureAwait(false);
     }
 
-    private static async Task LoadReadableChapterAsync(int chapterNumber, int direction)
+    private static async Task LoadReadableChapterAsync(int chapterNumber, int direction, double? restoredProgress = null)
     {
         if (CurrentBook == null) return;
         var index = Chapters.ToList().FindIndex(item => item.Number == chapterNumber);
@@ -209,10 +201,32 @@ internal static class NovelLibraryReaderSession
             if (lines.Count == 0) continue;
             CurrentChapter = chapter;
             _lines = lines;
-            _lineStart = 0;
+            _lineStart = chapter.Number == chapterNumber && restoredProgress.HasValue
+                ? LineStartFromProgress(lines.Count, restoredProgress.Value)
+                : 0;
+            await SaveProgressAsync().ConfigureAwait(false);
             return;
         }
         throw new InvalidOperationException("附近没有可阅读的正文章节");
+    }
+
+    private static int LineStartFromProgress(int lineCount, double progress)
+    {
+        var maximumStart = Math.Max(0, lineCount - 5);
+        var normalized = Math.Max(0d, Math.Min(100d, progress));
+        return Math.Max(0, Math.Min(maximumStart, (int)Math.Round(maximumStart * normalized / 100d)));
+    }
+
+    private static async Task SaveProgressAsync()
+    {
+        if (CurrentBook == null || CurrentChapter == null || _lines.Count == 0) return;
+        var progress = _lines.Count <= 5 ? 100d : _lineStart * 100d / (_lines.Count - 5);
+        await Bridge.PostAsync("/v1/progress", new
+        {
+            bookId = CurrentBook.Id,
+            chapterNumber = CurrentChapter.Number,
+            chapterProgress = progress
+        }).ConfigureAwait(false);
     }
 
     private static List<string> SplitLines(string text)
