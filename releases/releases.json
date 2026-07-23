@@ -14,7 +14,7 @@
       "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.3",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.3/NovelLibrary_0.6.3_x64-setup.exe",
-      "sha256": "",
+      "sha256": "0393b7792e1eafb02f54fc134346b12602d70453f1296431d7d6b57283c6cad2",
       "sections": [
         {
           "title": "新增",
