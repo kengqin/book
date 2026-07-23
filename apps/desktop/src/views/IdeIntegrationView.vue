@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ArrowLeft, CheckCircle2, Code2, Download, RefreshCw, RotateCcw, Search, Trash2 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { getIdeIntegrationStatus, installIdePlugin, uninstallIdePlugin, type BundledIdePlugin, type IdeIntegrationStatus, type IdeTarget } from '../services/desktop-library'
+import { idePluginUpdateAvailable } from '../services/ide-plugin-update'
 import PageHeader from '../components/ui/PageHeader.vue'
 
 const router = useRouter()
@@ -14,7 +15,7 @@ const fallbackPlugins: BundledIdePlugin[] = [
 const status = ref<IdeIntegrationStatus>({ plugins: fallbackPlugins, targets: [] })
 const detecting = ref(true)
 const busyTarget = ref('')
-const busyAction = ref<'install' | 'uninstall' | ''>('')
+const busyAction = ref<'install' | 'update' | 'uninstall' | ''>('')
 const error = ref('')
 const message = ref('')
 const query = ref('')
@@ -44,15 +45,16 @@ async function refresh() {
 }
 
 async function install(target: IdeTarget, plugin: BundledIdePlugin) {
+  const updating = idePluginUpdateAvailable(target, plugin)
   busyTarget.value = target.id
-  busyAction.value = 'install'
+  busyAction.value = updating ? 'update' : 'install'
   error.value = ''
   message.value = ''
   try {
     const result = await installIdePlugin(target.id, plugin.id)
     if (!result.installed || !result.verified) throw new Error(`${result.plugin} 安装命令已返回，但复检未确认安装完成`)
     const version = result.installedVersion ? ` · v${result.installedVersion}` : ''
-    message.value = `${result.plugin} 已安装到 ${result.target}${version}。${result.message}`
+    message.value = `${result.plugin} 已${updating ? '更新' : '安装'}到 ${result.target}${version}。${result.message}`
     await refresh()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
@@ -106,8 +108,9 @@ onMounted(refresh)
         <div class="ide-plugin-supported"><span>支持：</span>{{ plugin.supportedIdes.join('、') }}</div>
         <div v-if="targetsFor(plugin).length" class="ide-target-list">
           <div v-for="target in targetsFor(plugin)" :key="target.id" class="ide-target-row">
-            <div><strong>{{ target.label }}</strong><small>安装位置：{{ target.path }}</small><span v-if="target.installed">插件已安装{{ target.installedVersion ? ` · v${target.installedVersion}` : '' }}</span><span v-else>插件未安装</span></div>
-            <button v-if="busyTarget === target.id" type="button" class="secondary-command" disabled><RotateCcw :size="15" class="spinning" />{{ busyAction === 'uninstall' ? '卸载中' : '安装中' }}</button>
+            <div><strong>{{ target.label }}</strong><small>安装位置：{{ target.path }}</small><span v-if="idePluginUpdateAvailable(target, plugin)">插件已安装 · v{{ target.installedVersion }}，可更新至 v{{ plugin.version }}</span><span v-else-if="target.installed">插件已安装{{ target.installedVersion ? ` · v${target.installedVersion}` : '' }}</span><span v-else>插件未安装</span></div>
+            <button v-if="busyTarget === target.id" type="button" class="secondary-command" disabled><RotateCcw :size="15" class="spinning" />{{ busyAction === 'uninstall' ? '卸载中' : busyAction === 'update' ? '更新中' : '安装中' }}</button>
+            <button v-else-if="idePluginUpdateAvailable(target, plugin)" type="button" class="primary-command" :disabled="!plugin.available" @click="install(target, plugin)"><RefreshCw :size="15" />更新</button>
             <button v-else-if="target.installed && target.canUninstall" type="button" class="secondary-command" @click="uninstall(target, plugin)"><Trash2 :size="15" />卸载</button>
             <button v-else-if="target.installed" type="button" class="secondary-command" disabled><CheckCircle2 :size="15" />已安装</button>
             <button v-else type="button" class="primary-command" :disabled="!plugin.available" @click="install(target, plugin)"><Download :size="15" />安装</button>
