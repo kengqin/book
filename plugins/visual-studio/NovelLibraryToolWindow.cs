@@ -54,6 +54,13 @@ internal sealed class NovelLibraryReaderControl : UserControl
         var shortcuts = new Button { Content = "快捷键", Margin = new Thickness(0, 0, 6, 4), Padding = new Thickness(8, 3, 8, 3) };
         shortcuts.Click += (_, __) => ShortcutHelp.Show();
         toolbar.Children.Add(shortcuts);
+        var configureShortcuts = new Button { Content = "自定义快捷键", Margin = new Thickness(0, 0, 6, 4), Padding = new Thickness(8, 3, 8, 3) };
+        configureShortcuts.Click += (_, __) =>
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            ShortcutHelp.OpenKeyboardSettings();
+        };
+        toolbar.Children.Add(configureShortcuts);
         DockPanel.SetDock(toolbar, Dock.Top);
         DockPanel.SetDock(_status, Dock.Bottom);
         root.Children.Add(toolbar);
@@ -133,16 +140,37 @@ internal sealed class NovelLibraryReaderControl : UserControl
 internal static class ShortcutHelp
 {
     private const string Content =
+        "以下为默认键位，用户设置优先：\n\n" +
         "Ctrl+Alt+N    开启或关闭代码内阅读\n" +
         "Ctrl+Alt+9    切换段落/行尾显示模式\n" +
         "Ctrl+Alt+↑    上一行\n" +
         "Ctrl+Alt+↓    下一行\n" +
         "Ctrl+Alt+←    上一章\n" +
-        "Ctrl+Alt+→    下一章";
+        "Ctrl+Alt+→    下一章\n\n" +
+        "可在 工具 → 选项 → 环境 → 键盘 中为“小说书库”命令重新绑定。";
 
     internal static void Show() => MessageBox.Show(
         Content,
         "小说书库快捷键",
         MessageBoxButton.OK,
         MessageBoxImage.Information);
+
+    internal static void OpenKeyboardSettings()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        var dte = Package.GetGlobalService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+        if (dte == null)
+        {
+            MessageBox.Show("请打开 工具 → 选项 → 环境 → 键盘，并搜索“小说书库”命令。", "自定义快捷键");
+            return;
+        }
+        try
+        {
+            dte.ExecuteCommand("Tools.Options", "Environment.Keyboard");
+        }
+        catch
+        {
+            MessageBox.Show("请打开 工具 → 选项 → 环境 → 键盘，并搜索“小说书库”命令。", "自定义快捷键");
+        }
+    }
 }

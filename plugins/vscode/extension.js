@@ -1,5 +1,6 @@
 const vscode = require('vscode')
 const { openDesktopApp, request } = require('./bridge')
+const { lineStartFromProgress } = require('./reader-utils')
 
 const state = {
   books: [],
@@ -114,9 +115,9 @@ function createReader(context) {
     status.show()
   }
 
-  const persistProgress = () => {
+  const persistProgress = async () => {
     if (!state.book || !state.chapter) return
-    request('/v1/progress', {
+    await request('/v1/progress', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -124,10 +125,10 @@ function createReader(context) {
         chapterNumber: state.chapter.number,
         chapterProgress: currentProgress()
       })
-    }).catch(() => {})
+    })
   }
 
-  const updateChapter = async (chapterNumber, direction = 1, restoredLineStart = 0) => {
+  const updateChapter = async (chapterNumber, direction = 1, restoredLineStart = 0, restoredProgress) => {
     if (!state.book) return
     let index = state.chapters.findIndex(chapter => chapter.number === chapterNumber)
     for (let attempts = 0; index >= 0 && index < state.chapters.length && attempts < 30; attempts += 1, index += direction) {
@@ -136,11 +137,15 @@ function createReader(context) {
       if (lines.length) {
         state.chapter = chapter
         state.lines = lines
+        const requestedLineStart = restoredProgress === undefined
+          ? restoredLineStart
+          : lineStartFromProgress(lines.length, restoredProgress)
         state.lineStart = chapter.number === chapterNumber
-          ? Math.max(0, Math.min(lines.length - 5, restoredLineStart))
+          ? Math.max(0, Math.min(Math.max(0, lines.length - 5), requestedLineStart))
           : 0
         render()
         notifySidebar()
+        await persistProgress()
         return
       }
     }
@@ -164,7 +169,10 @@ function createReader(context) {
       const preferredChapter = position?.chapterNumber ?? book.currentChapter
       const preferred = state.chapters.find(chapter => chapter.number === preferredChapter) || state.chapters[0]
       const restoredLineStart = preferred.number === position?.chapterNumber ? position.lineStart : 0
-      await updateChapter(preferred.number, 1, restoredLineStart)
+      const restoredProgress = !position && preferred.number === book.currentChapter
+        ? book.chapterProgress
+        : undefined
+      await updateChapter(preferred.number, 1, restoredLineStart, restoredProgress)
     } catch (error) {
       Object.assign(state, previous)
       render()
@@ -205,6 +213,7 @@ function createReader(context) {
 
   const toggle = async (forceVisible, silent = false) => {
     if (forceVisible === false || (forceVisible === undefined && state.enabled)) {
+      await persistProgress()
       state.enabled = false
       await storage.update('novelLibrary.readerEnabled', false)
       clear()
@@ -236,7 +245,7 @@ function createReader(context) {
     state.lineStart = Math.max(0, Math.min(maximumStart, state.lineStart + direction))
     render()
     notifySidebar()
-    persistProgress()
+    await persistProgress()
   }
 
   const moveChapter = async direction => {
@@ -444,9 +453,67 @@ class ReaderTreeProvider {
   }
 }
 
+class ReaderWheelViewProvider {
+  constructor(reader) {
+    this.reader = reader
+    this.view = undefined
+  }
+
+  resolveWebviewView(view) {
+    this.view = view
+    view.webview.options = { enableScripts: true }
+    view.webview.html = this.html(view.webview)
+    view.webview.onDidReceiveMessage(async message => {
+      if (message?.type !== 'move' || !state.enabled) return
+      try {
+        await this.reader.moveLines(message.direction > 0 ? 1 : -1)
+      } catch (error) {
+        vscode.window.showErrorMessage(`小说阅读器滚动失败：${error.message}`)
+      }
+    })
+    this.refresh()
+  }
+
+  refresh() {
+    this.view?.webview.postMessage({
+      type: 'readerState',
+      enabled: state.enabled,
+      title: state.book?.title || '小说书库',
+      chapter: state.chapter?.title || '',
+      start: state.lineStart + 1,
+      end: Math.min(state.lines.length, state.lineStart + 5),
+      total: state.lines.length,
+      lines: state.lines.slice(state.lineStart, state.lineStart + 5)
+    })
+  }
+
+  html(webview) {
+    const nonce = `${Date.now()}${Math.random().toString(36).slice(2)}`
+    return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{padding:8px;color:var(--vscode-foreground);font-family:var(--vscode-font-family);background:transparent}
+#reader{border:1px solid var(--vscode-widget-border);border-radius:6px;padding:10px;min-height:116px;outline:none}
+#reader:focus,#reader:hover{border-color:var(--vscode-focusBorder)}
+#meta{font-size:11px;color:var(--vscode-descriptionForeground);margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#lines{display:grid;gap:4px}.line{min-height:18px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hint{margin-top:7px;font-size:11px;color:var(--vscode-descriptionForeground)}
+</style></head><body>
+<section id="reader" tabindex="0" aria-label="小说滚轮阅读区"><div id="meta">正在连接小说书库…</div><div id="lines"></div><div id="hint">鼠标悬浮在此区域滚动，可切换上一行/下一行</div></section>
+<script nonce="${nonce}">
+const vscode=acquireVsCodeApi();const reader=document.getElementById('reader');const meta=document.getElementById('meta');const lines=document.getElementById('lines');let accumulator=0;let lastMove=0;
+reader.addEventListener('wheel',event=>{event.preventDefault();event.stopPropagation();accumulator+=event.deltaY;const threshold=event.deltaMode===1?1:30;if(Math.abs(accumulator)<threshold)return;const now=Date.now();if(now-lastMove<70)return;vscode.postMessage({type:'move',direction:accumulator>0?1:-1});accumulator=0;lastMove=now},{passive:false});
+window.addEventListener('message',event=>{const value=event.data;if(value?.type!=='readerState')return;meta.textContent=value.enabled&&value.chapter?value.title+' · '+value.chapter+' · '+value.start+'-'+value.end+' / '+value.total+' 行':value.enabled?'正在连接小说书库…':'阅读已关闭';lines.replaceChildren(...(value.lines||[]).map(text=>{const row=document.createElement('div');row.className='line';row.textContent=text;return row}))});
+</script></body></html>`
+  }
+}
+
 function activate(context) {
   const reader = createReader(context)
   const treeProvider = new ReaderTreeProvider()
+  const wheelProvider = new ReaderWheelViewProvider(reader)
   const runReaderAction = action => async (...args) => {
     try {
       await action(...args)
@@ -454,10 +521,14 @@ function activate(context) {
       vscode.window.showErrorMessage(`小说阅读器操作失败：${error.message}`)
     }
   }
-  reader.setSidebarRefresh(() => treeProvider.refresh())
+  reader.setSidebarRefresh(() => {
+    treeProvider.refresh()
+    wheelProvider.refresh()
+  })
   context.subscriptions.push(treeProvider.changed)
   const treeView = vscode.window.createTreeView('novelLibrary.reader', { treeDataProvider: treeProvider })
   context.subscriptions.push(treeView)
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider('novelLibrary.wheelReader', wheelProvider))
   vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openReader', () => reader.toggle()))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.showReader', () => reader.toggle(true)))
@@ -472,10 +543,17 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousLine', runReaderAction(() => reader.moveLines(-1))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextChapter', runReaderAction(() => reader.moveChapter(1))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousChapter', runReaderAction(() => reader.moveChapter(-1))))
-  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.showShortcuts', () => {
-    vscode.window.showInformationMessage('小说书库快捷键', {
+  const configureShortcuts = () => vscode.commands.executeCommand(
+    'workbench.action.openGlobalKeybindings',
+    '@ext:novel-library.novel-library-reader'
+  )
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.configureShortcuts', configureShortcuts))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.showShortcuts', async () => {
+    const choice = await vscode.window.showInformationMessage('小说书库快捷键', {
       modal: true,
       detail: [
+        '以下为默认键位，可在 VS Code / Cursor 快捷键设置中覆盖：',
+        '',
         'Ctrl+Alt+N    开启或关闭代码内阅读',
         'Ctrl+Alt+9    切换段落/行尾显示模式',
         'Ctrl+Alt+↑    上一行',
@@ -484,7 +562,8 @@ function activate(context) {
         'Ctrl+Alt+→    下一章',
         'Ctrl+Alt+D    打开小说书库桌面端'
       ].join('\n')
-    })
+    }, '打开快捷键设置')
+    if (choice === '打开快捷键设置') await configureShortcuts()
   }))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openDesktop', async () => {
     try {

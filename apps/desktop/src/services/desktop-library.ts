@@ -228,8 +228,8 @@ export function getIdeIntegrationStatus() {
   return invoke<IdeIntegrationStatus>('get_ide_integration_status')
 }
 
-export function installIdePlugin(targetId: string, pluginId: string) {
-  return invoke<IdeInstallResult>('install_ide_plugin', { input: { targetId, pluginId } })
+export function installIdePlugin(targetId: string, pluginId: string, closeRunningIde = false) {
+  return invoke<IdeInstallResult>('install_ide_plugin', { input: { targetId, pluginId, closeRunningIde } })
 }
 
 export function uninstallIdePlugin(targetId: string, pluginId: string) {

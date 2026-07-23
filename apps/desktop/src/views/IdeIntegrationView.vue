@@ -5,12 +5,13 @@ import { useRouter } from 'vue-router'
 import { getIdeIntegrationStatus, installIdePlugin, uninstallIdePlugin, type BundledIdePlugin, type IdeIntegrationStatus, type IdeTarget } from '../services/desktop-library'
 import { idePluginUpdateAvailable } from '../services/ide-plugin-update'
 import PageHeader from '../components/ui/PageHeader.vue'
+import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 
 const router = useRouter()
 const fallbackPlugins: BundledIdePlugin[] = [
-  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.6', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 中浏览书架、章节和 5 行正文，并可切换段落或行尾显示模式，同步桌面端进度。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
-  { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.6', identifier: 'com.kengqin.novellibrary.reader', description: '在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中阅读 5 行小说，可切换段落或行尾模式并同步桌面端进度。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
-  { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.6', identifier: 'NovelLibrary.VisualStudio', description: '在 Visual Studio 2022 中打开小说阅读面板，可切换段落或行尾模式，并与桌面端书库同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
+  { id: 'vscode', label: '小说书库 · VS Code / Cursor 阅读器', kind: 'vscode', version: '0.4.7', identifier: 'novel-library.novel-library-reader', description: '在 VS Code 和 Cursor 中浏览书架、章节和 5 行正文，并可切换段落或行尾显示模式，同步桌面端进度。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'Cursor'], available: false },
+  { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.7', identifier: 'com.kengqin.novellibrary.reader', description: '在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中阅读 5 行小说，可切换段落或行尾模式并同步桌面端进度。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
+  { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.7', identifier: 'NovelLibrary.VisualStudio', description: '在 Visual Studio 2022 中打开小说阅读面板，可切换段落或行尾模式，并与桌面端书库同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
 ]
 const status = ref<IdeIntegrationStatus>({ plugins: fallbackPlugins, targets: [] })
 const detecting = ref(true)
@@ -19,6 +20,7 @@ const busyAction = ref<'install' | 'update' | 'uninstall' | ''>('')
 const error = ref('')
 const message = ref('')
 const query = ref('')
+const runningIdeUpdate = ref<{ target: IdeTarget, plugin: BundledIdePlugin }>()
 let refreshGeneration = 0
 const visiblePlugins = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
@@ -44,24 +46,42 @@ async function refresh() {
   }
 }
 
-async function install(target: IdeTarget, plugin: BundledIdePlugin) {
+async function install(target: IdeTarget, plugin: BundledIdePlugin, closeRunningIde = false) {
   const updating = idePluginUpdateAvailable(target, plugin)
   busyTarget.value = target.id
   busyAction.value = updating ? 'update' : 'install'
   error.value = ''
   message.value = ''
   try {
-    const result = await installIdePlugin(target.id, plugin.id)
+    const result = await installIdePlugin(target.id, plugin.id, closeRunningIde)
     if (!result.installed || !result.verified) throw new Error(`${result.plugin} 安装命令已返回，但复检未确认安装完成`)
     const version = result.installedVersion ? ` · v${result.installedVersion}` : ''
     message.value = `${result.plugin} 已${updating ? '更新' : '安装'}到 ${result.target}${version}。${result.message}`
     await refresh()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    if (!closeRunningIde && detail.startsWith('IDE_RUNNING:')) {
+      runningIdeUpdate.value = { target, plugin }
+    } else {
+      error.value = detail.replace(/^IDE_(?:RUNNING|CLOSE_PENDING):\s*/, '')
+    }
   } finally {
     busyTarget.value = ''
     busyAction.value = ''
   }
+}
+
+function chooseManualIdeClose() {
+  const pending = runningIdeUpdate.value
+  runningIdeUpdate.value = undefined
+  if (pending) message.value = `请保存工作并完全关闭 ${pending.target.label}，然后再次点击“更新”。`
+}
+
+async function closeIdeAndInstall() {
+  const pending = runningIdeUpdate.value
+  if (!pending) return
+  runningIdeUpdate.value = undefined
+  await install(pending.target, pending.plugin, true)
 }
 
 async function uninstall(target: IdeTarget, plugin: BundledIdePlugin) {
@@ -121,5 +141,14 @@ onMounted(refresh)
     </div>
     <p v-if="message" class="settings-message" role="status"><CheckCircle2 :size="15" />{{ message }}</p>
     <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
+    <UiConfirmDialog
+      :open="Boolean(runningIdeUpdate)"
+      title="需要关闭 JetBrains IDE 才能更新"
+      :description="`${runningIdeUpdate?.target.label || 'JetBrains IDE'} 正在使用旧版插件文件。可以由桌面端发送正常关闭请求（IDE 仍会询问是否保存未保存内容），也可以自行关闭后再次更新；不会强制结束进程。`"
+      confirm-label="自动关闭并更新"
+      cancel-label="我手动关闭"
+      @close="chooseManualIdeClose"
+      @confirm="closeIdeAndInstall"
+    />
   </section>
 </template>

@@ -6,10 +6,12 @@ const props = withDefaults(defineProps<{
   title: string
   description: string
   confirmLabel?: string
+  cancelLabel?: string
   danger?: boolean
   busy?: boolean
 }>(), {
   confirmLabel: '确认',
+  cancelLabel: '取消',
   danger: false,
   busy: false
 })
@@ -43,7 +45,7 @@ function cancel(event: Event) {
       <h2>{{ title }}</h2>
       <p>{{ description }}</p>
       <div class="ui-dialog-actions">
-        <button type="button" class="secondary-command" :disabled="busy" @click="close">取消</button>
+        <button type="button" class="secondary-command" :disabled="busy" @click="close">{{ cancelLabel }}</button>
         <button type="button" :class="danger ? 'danger-command-filled' : 'primary-command'" :disabled="busy" @click="emit('confirm')">
           {{ busy ? '正在处理' : confirmLabel }}
         </button>

@@ -100,6 +100,8 @@ pub struct IdeIntegrationStatus {
 pub struct InstallIdePluginInput {
     target_id: String,
     plugin_id: String,
+    #[serde(default)]
+    close_running_ide: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -159,6 +161,96 @@ fn installer_failure(kind: &str, output: &Output, action: &str) -> String {
 
 fn installed_version_matches(expected: &str, actual: &Option<String>) -> bool {
     actual.as_deref() == Some(expected)
+}
+
+fn target_executable_is_running(target: &IdeTarget) -> bool {
+    #[cfg(windows)]
+    {
+        let Some(process_name) = Path::new(&target.path)
+            .file_stem()
+            .and_then(|value| value.to_str())
+        else {
+            return false;
+        };
+        let script = "$target=[IO.Path]::GetFullPath($env:NOVEL_LIBRARY_IDE_PATH); $name=$env:NOVEL_LIBRARY_IDE_PROCESS; $running=@(Get-Process -Name $name -ErrorAction SilentlyContinue | Where-Object { try { [IO.Path]::GetFullPath($_.Path) -ieq $target } catch { $false } }); if($running.Count -gt 0){ exit 0 }else{ exit 1 }";
+        let Ok(output) = hidden_command("powershell")
+            .env("NOVEL_LIBRARY_IDE_PROCESS", process_name)
+            .env("NOVEL_LIBRARY_IDE_PATH", &target.path)
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                script,
+            ])
+            .output()
+        else {
+            return false;
+        };
+        return output.status.success();
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = target;
+        false
+    }
+}
+
+fn jetbrains_running_error(target: &IdeTarget) -> String {
+    format!(
+        "IDE_RUNNING: {} 正在运行，Windows 无法替换正在使用的插件文件。请保存工作并完全关闭该 IDE（包括后台进程），然后再次点击更新；现有插件不会被改动。",
+        target.label
+    )
+}
+
+fn close_target_ide_gracefully(target: &IdeTarget) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let process_name = Path::new(&target.path)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| {
+                !value.is_empty()
+                    && value
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric() || character == '-')
+            })
+            .ok_or_else(|| "无法识别目标 IDE 进程名，请手动关闭后重试".to_string())?;
+        let script = "$target=[IO.Path]::GetFullPath($env:NOVEL_LIBRARY_IDE_PATH); $name=$env:NOVEL_LIBRARY_IDE_PROCESS; $find={ @(Get-Process -Name $name -ErrorAction SilentlyContinue | Where-Object { try { [IO.Path]::GetFullPath($_.Path) -ieq $target } catch { $false } }) }; $processes=& $find; $processes | ForEach-Object { if ($_.MainWindowHandle -ne 0) { [void]$_.CloseMainWindow() } }; $deadline=[DateTime]::UtcNow.AddSeconds(15); do { Start-Sleep -Milliseconds 250; $processes=& $find } while($processes.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline); if($processes.Count -eq 0){ exit 0 }else{ exit 2 }";
+        let output = hidden_command("powershell")
+            .env("NOVEL_LIBRARY_IDE_PROCESS", process_name)
+            .env("NOVEL_LIBRARY_IDE_PATH", &target.path)
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                script,
+            ])
+            .output()
+            .map_err(|error| format!("无法请求关闭 {}：{error}", target.label))?;
+        if output.status.code() == Some(2) {
+            return Err(format!(
+                "IDE_CLOSE_PENDING: 已向 {} 发送正常关闭请求，但它仍在运行。请在 IDE 中处理未保存文件或确认框，完全退出后再次点击更新；不会强制结束进程。",
+                target.label
+            ));
+        }
+        if !output.status.success() {
+            return Err(format!(
+                "无法请求关闭 {}：{}",
+                target.label,
+                installer_failure("jetbrains", &output, "关闭请求")
+            ));
+        }
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = target;
+        Err("当前系统不支持自动关闭 IDE，请手动关闭后重试".to_string())
+    }
 }
 
 fn target_id(kind: &str, path: &Path) -> String {
@@ -843,12 +935,19 @@ fn install_jetbrains_plugin_at(
             if restore_error.is_some() {
                 backup_cleanup.disarm();
             }
+            let access_hint = if error.kind() == io::ErrorKind::PermissionDenied {
+                "；插件文件可能正被 IDE 占用，请保存工作并完全关闭对应 JetBrains IDE 后重试"
+            } else {
+                ""
+            };
             return Err(match restore_error {
                 Some(restore_error) => format!(
-                    "无法暂存已安装的 JetBrains 插件：{error}；{restore_error}；备份保留在 {}",
+                    "无法暂存已安装的 JetBrains 插件：{error}{access_hint}；{restore_error}；备份保留在 {}",
                     backup_root.display()
                 ),
-                None => format!("无法暂存已安装的 JetBrains 插件：{error}"),
+                None => format!(
+                    "无法暂存已安装的 JetBrains 插件：{error}{access_hint}；现有插件未被改动"
+                ),
             });
         }
         backups.push((installed.clone(), backup));
@@ -1041,6 +1140,13 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
         return Err(format!("桌面安装包未包含插件文件：{}", plugin.file));
     }
     if target.kind == "jetbrains" {
+        if target_executable_is_running(&target) {
+            if input.close_running_ide {
+                close_target_ide_gracefully(&target)?;
+            } else {
+                return Err(jetbrains_running_error(&target));
+            }
+        }
         let message =
             install_jetbrains_plugin(&target, &plugin_path, &plugin.identifier, &plugin.version)?;
         let (verified, installed_version) = jetbrains_plugin_location(&target, &plugin.identifier)
@@ -1119,6 +1225,12 @@ pub fn uninstall(
     let (_directory, plugin, target) =
         resolve_target_plugin(app, &input.target_id, &input.plugin_id)?;
     if target.kind == "jetbrains" {
+        if target_executable_is_running(&target) {
+            return Err(format!(
+                "IDE_RUNNING: {} 正在运行，Windows 无法删除正在使用的插件文件。请保存工作并完全关闭该 IDE（包括后台进程），然后再次点击卸载；现有插件不会被改动。",
+                target.label
+            ));
+        }
         let _mutation_guard = lock_jetbrains_plugin_mutation()?;
         let root = jetbrains_plugin_root(&target)?;
         let directories = jetbrains_plugin_directories(&root, &plugin.identifier);
@@ -1178,7 +1290,7 @@ mod tests {
         installed_version_matches, is_jetbrains_cds_warning_only,
         jetbrains_plugin_location_in_root, parse_vscode_extension_state, read_plugin_xml_from_jar,
         target_id, vscode_extension_state, vscode_script_process, xml_tag_value, IdeTarget,
-        JETBRAINS_CDS_WARNING,
+        InstallIdePluginInput, JETBRAINS_CDS_WARNING,
     };
     use std::{
         collections::HashSet,
@@ -1194,6 +1306,19 @@ mod tests {
         let second = target_id("vscode", Path::new("C:/Code/code.cmd"));
         assert_eq!(first, second);
         assert_ne!(first, target_id("jetbrains", Path::new("C:/Code/code.cmd")));
+    }
+
+    #[test]
+    fn defaults_to_manual_ide_close_and_accepts_an_explicit_graceful_close() {
+        let manual: InstallIdePluginInput =
+            serde_json::from_str(r#"{"targetId":"jetbrains-a","pluginId":"intellij"}"#)
+                .expect("deserialize manual close input");
+        assert!(!manual.close_running_ide);
+        let automatic: InstallIdePluginInput = serde_json::from_str(
+            r#"{"targetId":"jetbrains-a","pluginId":"intellij","closeRunningIde":true}"#,
+        )
+        .expect("deserialize automatic close input");
+        assert!(automatic.close_running_ide);
     }
 
     #[test]
@@ -1451,7 +1576,7 @@ mod tests {
         let archive_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
             .join("ide-plugins")
-            .join("novel-library-intellij-0.4.5.zip");
+            .join("novel-library-intellij-0.4.7.zip");
         if !archive_path.is_file() {
             eprintln!(
                 "skipping bundled JetBrains artifact check; release ZIP is not present: {}",
@@ -1466,11 +1591,11 @@ mod tests {
             &plugin_root,
             &archive_path,
             "com.kengqin.novellibrary.reader",
-            "0.4.5",
+            "0.4.7",
         )
         .expect("deploy bundled JetBrains plugin");
         assert!(plugin_root
-            .join("novel-library-intellij/lib/novel-library-intellij-0.4.5.jar")
+            .join("novel-library-intellij/lib/novel-library-intellij-0.4.7.jar")
             .is_file());
         fs::remove_dir_all(root).expect("remove real plugin fixture");
     }

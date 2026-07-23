@@ -1,8 +1,40 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.3",
+  "latest": "0.6.4",
   "releases": [
+    {
+      "version": "0.6.4",
+      "date": "2026-07-23",
+      "title": "IDE 进度恢复、滚轮与插件更新修复",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.3",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.4",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.4/NovelLibrary_0.6.4_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "VS Code 和 Cursor 新增独立滚轮阅读区，仅在鼠标悬浮 5 行正文区域时切换上下行",
+            "三套 IDE 插件提供原生快捷键自定义入口，用户绑定优先于默认键位"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "IDE 插件重新打开后恢复桌面端已保存的章节和精确行位置，切章也会立即同步进度",
+            "JetBrains 插件更新遇到运行中的 IDE 时提供自动正常关闭或手动关闭选择，不再只显示拒绝访问"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.3",
       "date": "2026-07-23",
