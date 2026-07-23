@@ -16,3 +16,9 @@ is retained only as a fallback for pre-migration desktop versions.
 
 The desktop installer includes `scripts/install-ide-plugins.ps1` for the one-click
 installation flow. IDEs may still show their own security or permission confirmation.
+
+In every supported IDE, press `Ctrl+Alt+N` to turn code-inline reading on or off.
+In JetBrains IDEs and Visual Studio, hovering over the five-line reading area and
+scrolling the mouse wheel moves to the previous or next novel line.
+Each IDE plugin also provides a `快捷键` button in its reader UI that shows every
+keyboard shortcut supported by that plugin.

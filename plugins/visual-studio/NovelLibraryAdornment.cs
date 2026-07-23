@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.ComponentModel.Composition;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Text.Editor;
@@ -34,6 +37,7 @@ internal sealed class NovelLibraryAdornment
 {
     private readonly IWpfTextView _view;
     private readonly IAdornmentLayer _layer;
+    private readonly List<Rect> _readerRegions = new List<Rect>();
 
     public NovelLibraryAdornment(IWpfTextView view)
     {
@@ -41,7 +45,8 @@ internal sealed class NovelLibraryAdornment
         _layer = view.GetAdornmentLayer(NovelLibraryAdornmentLayer.Name);
         _view.LayoutChanged += (_, __) => Render();
         _view.Caret.PositionChanged += (_, __) => Render();
-        _view.Closed += (_, __) => NovelLibraryReaderSession.Changed -= OnReaderChanged;
+        _view.VisualElement.PreviewMouseWheel += OnPreviewMouseWheel;
+        _view.Closed += OnClosed;
         NovelLibraryReaderSession.Changed += OnReaderChanged;
         _ = LoadAsync();
     }
@@ -55,6 +60,24 @@ internal sealed class NovelLibraryAdornment
 
     private void OnReaderChanged(object sender, EventArgs args) => ScheduleRender();
 
+    private void OnClosed(object sender, EventArgs args)
+    {
+        NovelLibraryReaderSession.Changed -= OnReaderChanged;
+        _view.VisualElement.PreviewMouseWheel -= OnPreviewMouseWheel;
+    }
+
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs args)
+    {
+        if (!NovelLibraryReaderSession.IsReaderVisible || Keyboard.Modifiers != ModifierKeys.None) return;
+        var viewportPoint = args.GetPosition(_view.VisualElement);
+        var point = new Point(
+            viewportPoint.X + _view.ViewportLeft,
+            viewportPoint.Y + _view.ViewportTop);
+        if (!_readerRegions.Any(region => region.Contains(point))) return;
+        args.Handled = true;
+        _ = NovelLibraryReaderSession.MoveLineAsync(args.Delta < 0 ? 1 : -1);
+    }
+
     private void ScheduleRender() => ThreadHelper.JoinableTaskFactory.Run(async () =>
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
@@ -65,6 +88,7 @@ internal sealed class NovelLibraryAdornment
     {
         if (_view.IsClosed) return;
         _layer.RemoveAllAdornments();
+        _readerRegions.Clear();
         if (!NovelLibraryReaderSession.IsReaderVisible) return;
         var lines = NovelLibraryReaderSession.VisibleLines;
         if (lines.Count == 0 || _view.TextSnapshot.LineCount == 0) return;
@@ -91,23 +115,29 @@ internal sealed class NovelLibraryAdornment
                 IsHitTestVisible = false
             };
             FrameworkElement adornment = label;
+            double left;
             if (paragraphMode)
             {
+                var width = Math.Max(220, Math.Min(_view.ViewportWidth * 0.72, _view.ViewportWidth - 32));
                 adornment = new Border
                 {
-                    Width = Math.Max(220, Math.Min(_view.ViewportWidth * 0.72, _view.ViewportWidth - 32)),
+                    Width = width,
                     Height = viewLine.Height,
                     Background = _view.Background,
                     Padding = new Thickness(12, 0, 8, 0),
                     Child = label,
                     IsHitTestVisible = false
                 };
-                Canvas.SetLeft(adornment, _view.ViewportLeft + 12);
+                left = _view.ViewportLeft + 12;
+                _readerRegions.Add(new Rect(left, viewLine.Top, width, viewLine.Height));
             }
             else
             {
-                Canvas.SetLeft(adornment, Math.Max(viewLine.TextRight + 24, _view.ViewportLeft + _view.ViewportWidth * 0.5));
+                left = Math.Max(viewLine.TextRight + 24, _view.ViewportLeft + _view.ViewportWidth * 0.5);
+                label.Measure(new Size(double.PositiveInfinity, viewLine.Height));
+                _readerRegions.Add(new Rect(left, viewLine.Top, label.DesiredSize.Width, viewLine.Height));
             }
+            Canvas.SetLeft(adornment, left);
             Canvas.SetTop(adornment, viewLine.Top);
             _layer.AddAdornment(AdornmentPositioningBehavior.ViewportRelative, null, null, adornment, null);
         }

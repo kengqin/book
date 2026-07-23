@@ -18,6 +18,15 @@ internal sealed class NovelLibraryCommands
         Add(commands, 0x0102, pane => NovelLibraryReaderSession.MoveLineAsync(1));
         Add(commands, 0x0103, pane => NovelLibraryReaderSession.MoveChapterAsync(-1));
         Add(commands, 0x0104, pane => NovelLibraryReaderSession.MoveChapterAsync(1));
+        commands.AddCommand(new MenuCommand(
+            (_, __) => NovelLibraryReaderSession.ToggleVisibility(),
+            new CommandID(CommandSet, 0x0105)));
+        commands.AddCommand(new MenuCommand(
+            (_, __) => ShortcutHelp.Show(),
+            new CommandID(CommandSet, 0x0106)));
+        commands.AddCommand(new MenuCommand(
+            (_, __) => NovelLibraryReaderSession.ToggleDisplayMode(),
+            new CommandID(CommandSet, 0x0107)));
     }
 
     public static async Task InitializeAsync(AsyncPackage package)

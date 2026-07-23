@@ -19,17 +19,22 @@ import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.ui.content.ContentFactory
 import java.awt.BorderLayout
+import java.awt.AWTEvent
 import java.awt.Container
 import java.awt.Dimension
 import java.awt.Font
 import java.awt.FlowLayout
 import java.awt.Graphics
 import java.awt.Rectangle
+import java.awt.Toolkit
+import java.awt.event.AWTEventListener
+import java.awt.event.MouseWheelEvent
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
@@ -48,7 +53,9 @@ import javax.swing.SwingUtilities
 
 data class BridgeConfig(val port: Int, val token: String)
 data class BookOption(val id: String, val title: String, val currentChapter: Int?) { override fun toString() = title }
-data class ChapterOption(val number: Int, val title: String, val kind: String?) { override fun toString() = title }
+data class ChapterOption(val number: Int, val title: String, val kind: String?, val ordinal: Int = 0) {
+    override fun toString() = if (ordinal > 0) "第 $ordinal 章 · $title" else title
+}
 data class ChapterContent(val number: Int, val title: String, val text: String)
 
 class WrapLayout(align: Int, hgap: Int, vgap: Int) : FlowLayout(align, hgap, vgap) {
@@ -297,6 +304,7 @@ class NovelParagraphInlayRenderer(private val line: String) : EditorCustomElemen
 
 object NovelEditorOverlay {
     private val inlays = WeakHashMap<Editor, MutableList<Inlay<*>>>()
+    private val wheelListeners = WeakHashMap<Project, AWTEventListener>()
     private val visibleLines = WeakHashMap<Project, List<String>>()
     private val started = WeakHashMap<Project, Boolean>()
 
@@ -313,6 +321,7 @@ object NovelEditorOverlay {
                 if (event.editor.project == project) refresh(project)
             }
         }, project)
+        installWheelNavigation(project)
     }
 
     @Synchronized
@@ -337,6 +346,33 @@ object NovelEditorOverlay {
         val visible = ReaderVisibilitySettings.toggle(project)
         refresh(project)
         return visible
+    }
+
+    private fun installWheelNavigation(project: Project) {
+        synchronized(this) { if (wheelListeners.containsKey(project)) return }
+        val listener = AWTEventListener { rawEvent ->
+            val event = rawEvent as? MouseWheelEvent ?: return@AWTEventListener
+            val hasModifier = event.isControlDown || event.isAltDown || event.isShiftDown || event.isMetaDown
+            if (event.wheelRotation != 0 && !hasModifier && ReaderVisibilitySettings.isVisible(project)) {
+                val editor = EditorFactory.getInstance().allEditors.firstOrNull {
+                    it.project == project && SwingUtilities.isDescendingFrom(event.component, it.component)
+                } ?: return@AWTEventListener
+                val point = SwingUtilities.convertPoint(event.component, event.point, editor.contentComponent)
+                val overReader = synchronized(this) {
+                    inlays[editor].orEmpty().any { it.bounds?.contains(point) == true }
+                }
+                if (overReader) {
+                    event.consume()
+                    ReaderSessions.get(project).moveLine(if (event.wheelRotation > 0) 1 else -1)
+                }
+            }
+        }
+        synchronized(this) { wheelListeners[project] = listener }
+        Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.MOUSE_WHEEL_EVENT_MASK)
+        Disposer.register(project) {
+            Toolkit.getDefaultToolkit().removeAWTEventListener(listener)
+            synchronized(this) { wheelListeners.remove(project) }
+        }
     }
 
     private fun refresh(project: Project) {
@@ -395,6 +431,8 @@ object ReaderSessions {
 }
 
 class NovelReaderSession(private val project: Project) {
+    private data class ReaderPosition(val bookId: String, val chapterNumber: Int, val lineStart: Int)
+
     private var books = emptyList<BookOption>()
     private var selectedBook: BookOption? = null
     private var chapters = emptyList<ChapterOption>()
@@ -457,9 +495,14 @@ class NovelReaderSession(private val project: Project) {
         listener?.invoke(snapshot())
     }
 
-    private fun loadBooks() {
+    private fun loadBooks(preservePosition: Boolean = false) {
+        val position = if (preservePosition) {
+            val book = selectedBook
+            val chapter = currentChapter
+            if (book != null && chapter != null) ReaderPosition(book.id, chapter.number, lineStart) else null
+        } else null
         val version = ++requestVersion
-        background({ loadBooks() }) {
+        background({ loadBooks(preservePosition) }) {
             val result = BridgeClient.books()
             SwingUtilities.invokeLater {
                 if (version != requestVersion) return@invokeLater
@@ -470,7 +513,8 @@ class NovelReaderSession(private val project: Project) {
                     NovelEditorOverlay.clear(project)
                     publish()
                 } else {
-                    loadChapters(result.first())
+                    val book = result.find { it.id == position?.bookId } ?: result.first()
+                    loadChapters(book, position?.takeIf { it.bookId == book.id })
                 }
             }
         }
@@ -478,7 +522,7 @@ class NovelReaderSession(private val project: Project) {
 
     fun selectBook(book: BookOption) = loadChapters(book)
 
-    private fun loadChapters(book: BookOption) {
+    private fun loadChapters(book: BookOption, position: ReaderPosition? = null) {
         val version = ++requestVersion
         selectedBook = book
         chapters = emptyList()
@@ -488,19 +532,24 @@ class NovelReaderSession(private val project: Project) {
         status = "正在加载 ${book.title}..."
         NovelEditorOverlay.clear(project)
         publish()
-        background({ loadChapters(book) }) {
+        background({ loadChapters(book, position) }) {
             val allChapters = BridgeClient.chapters(book.id)
-            val readable = allChapters.filter { it.kind == null || it.kind == "chapter" }.ifEmpty { allChapters }
+            val readable = allChapters
+                .filter { it.kind == null || it.kind == "chapter" }
+                .ifEmpty { allChapters }
+                .mapIndexed { index, chapter -> chapter.copy(ordinal = index + 1) }
             SwingUtilities.invokeLater {
                 if (version != requestVersion) return@invokeLater
                 reconnectAttempts = 0
                 chapters = readable
-                val preferred = readable.find { it.number == book.currentChapter } ?: readable.firstOrNull()
+                val preferredChapter = position?.chapterNumber ?: book.currentChapter
+                val preferred = readable.find { it.number == preferredChapter } ?: readable.firstOrNull()
                 if (preferred == null) {
                     status = "当前小说没有章节"
                     publish()
                 } else {
-                    loadChapter(preferred)
+                    val restoredLineStart = position?.takeIf { it.chapterNumber == preferred.number }?.lineStart ?: 0
+                    loadChapter(preferred, restoredLineStart = restoredLineStart)
                 }
             }
         }
@@ -508,13 +557,13 @@ class NovelReaderSession(private val project: Project) {
 
     fun selectChapter(chapter: ChapterOption) = loadChapter(chapter)
 
-    private fun loadChapter(chapter: ChapterOption, direction: Int = 1) {
+    private fun loadChapter(chapter: ChapterOption, direction: Int = 1, restoredLineStart: Int = 0) {
         val book = selectedBook ?: return
         val candidates = chapters
         val version = ++requestVersion
         status = "正在加载 ${chapter.title}..."
         publish()
-        background({ loadChapter(chapter, direction) }) {
+        background({ loadChapter(chapter, direction, restoredLineStart) }) {
             var index = candidates.indexOfFirst { it.number == chapter.number }
             var result = BridgeClient.chapter(book.id, chapter.number)
             var resultLines = displayLines(result.text)
@@ -531,7 +580,9 @@ class NovelReaderSession(private val project: Project) {
                 reconnectAttempts = 0
                 currentChapter = result
                 lines = resultLines
-                lineStart = 0
+                lineStart = if (result.number == chapter.number) {
+                    restoredLineStart.coerceIn(0, maxOf(0, resultLines.size - 5))
+                } else 0
                 render()
             }
         }
@@ -571,7 +622,7 @@ class NovelReaderSession(private val project: Project) {
 
     fun reload() {
         reconnectAttempts = 0
-        loadBooks()
+        loadBooks(preservePosition = true)
     }
 }
 
@@ -599,6 +650,7 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
         val previousLine = JButton("上一行")
         val nextLine = JButton("下一行")
         val refresh = JButton("刷新")
+        val shortcuts = JButton("快捷键")
         toolbar.add(books)
         toolbar.add(chapters)
         toolbar.add(previousChapter)
@@ -608,6 +660,7 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
         toolbar.add(refresh)
         toolbar.add(displayMode)
         toolbar.add(readerVisibility)
+        toolbar.add(shortcuts)
 
         content.isEditable = false
         content.lineWrap = true
@@ -616,7 +669,15 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
         content.margin = java.awt.Insets(10, 10, 10, 10)
 
         add(toolbar, BorderLayout.NORTH)
-        add(JScrollPane(content), BorderLayout.CENTER)
+        val contentScroll = JScrollPane(content)
+        contentScroll.addMouseWheelListener { event: MouseWheelEvent ->
+            val hasModifier = event.isControlDown || event.isAltDown || event.isShiftDown || event.isMetaDown
+            if (event.wheelRotation != 0 && !hasModifier && ReaderVisibilitySettings.isVisible(project)) {
+                event.consume()
+                session.moveLine(if (event.wheelRotation > 0) 1 else -1)
+            }
+        }
+        add(contentScroll, BorderLayout.CENTER)
         add(status, BorderLayout.SOUTH)
 
         books.addActionListener {
@@ -637,6 +698,7 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
             NovelEditorOverlay.toggleVisibility(project)
             syncReaderVisibility()
         }
+        shortcuts.addActionListener { showShortcutHelp(project) }
         session.attach(::applySnapshot)
     }
 
@@ -667,6 +729,21 @@ class NovelReaderPanel(private val project: Project) : JPanel(BorderLayout()) {
     fun syncReaderVisibility() {
         readerVisibility.text = ReaderVisibilitySettings.label(project)
     }
+}
+
+private fun showShortcutHelp(project: Project?) {
+    Messages.showInfoMessage(
+        project,
+        listOf(
+            "Ctrl+Alt+N    开启或关闭代码内阅读",
+            "Ctrl+Alt+9    切换段落/行尾显示模式",
+            "Ctrl+Alt+↑    上一行",
+            "Ctrl+Alt+↓    下一行",
+            "Ctrl+Alt+←    上一章",
+            "Ctrl+Alt+→    下一章"
+        ).joinToString("\n"),
+        "小说书库快捷键"
+    )
 }
 
 class NovelToolWindowFactory : ToolWindowFactory {
@@ -707,6 +784,9 @@ class ToggleReaderVisibilityAction : AnAction() {
             ReaderPanels.get(project)?.syncReaderVisibility()
         }
     }
+}
+class ShowShortcutsAction : AnAction() {
+    override fun actionPerformed(event: AnActionEvent) { showShortcutHelp(event.project) }
 }
 class ImportFileAction : AnAction() {
     override fun actionPerformed(event: AnActionEvent) {

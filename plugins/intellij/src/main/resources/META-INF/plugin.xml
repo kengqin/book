@@ -9,9 +9,7 @@
     <postStartupActivity implementation="com.kengqin.novellibrary.NovelStartupActivity" />
   </extensions>
   <actions>
-    <action id="NovelLibrary.OpenReader" class="com.kengqin.novellibrary.OpenReaderAction" text="小说书库: 打开阅读面板" description="Open the Novel Library reader">
-      <keyboard-shortcut first-keystroke="ctrl alt N" keymap="$default" />
-    </action>
+    <action id="NovelLibrary.OpenReader" class="com.kengqin.novellibrary.OpenReaderAction" text="小说书库: 打开阅读面板" description="Open the Novel Library reader" />
     <action id="NovelLibrary.PreviousLine" class="com.kengqin.novellibrary.PreviousLineAction" text="小说书库: 上一行">
       <keyboard-shortcut first-keystroke="ctrl alt UP" keymap="$default" />
     </action>
@@ -24,8 +22,13 @@
     <action id="NovelLibrary.NextChapter" class="com.kengqin.novellibrary.NextChapterAction" text="小说书库: 下一章">
       <keyboard-shortcut first-keystroke="ctrl alt RIGHT" keymap="$default" />
     </action>
-    <action id="NovelLibrary.ToggleDisplayMode" class="com.kengqin.novellibrary.ToggleDisplayModeAction" text="小说书库: 切换段落/行尾显示模式" />
-    <action id="NovelLibrary.ToggleReaderVisibility" class="com.kengqin.novellibrary.ToggleReaderVisibilityAction" text="小说书库: 开启或关闭代码内阅读" />
+    <action id="NovelLibrary.ToggleDisplayMode" class="com.kengqin.novellibrary.ToggleDisplayModeAction" text="小说书库: 切换段落/行尾显示模式">
+      <keyboard-shortcut first-keystroke="ctrl alt 9" keymap="$default" />
+    </action>
+    <action id="NovelLibrary.ToggleReaderVisibility" class="com.kengqin.novellibrary.ToggleReaderVisibilityAction" text="小说书库: 开启或关闭代码内阅读">
+      <keyboard-shortcut first-keystroke="ctrl alt N" keymap="$default" />
+    </action>
+    <action id="NovelLibrary.ShowShortcuts" class="com.kengqin.novellibrary.ShowShortcutsAction" text="小说书库: 查看快捷键" />
     <action id="NovelLibrary.ImportFile" class="com.kengqin.novellibrary.ImportFileAction" text="小说书库: 导入当前文件" />
   </actions>
 </idea-plugin>
