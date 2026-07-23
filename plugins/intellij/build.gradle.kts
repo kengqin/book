@@ -17,7 +17,7 @@ java {
 }
 
 group = "com.kengqin.novellibrary"
-version = "0.4.5"
+version = "0.4.6"
 
 repositories {
     maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies")

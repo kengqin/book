@@ -24,9 +24,10 @@ internal sealed class BookItem
 internal sealed class ChapterItem
 {
     public int Number { get; set; }
+    public int Ordinal { get; set; }
     public string Title { get; set; } = "";
     public string Kind { get; set; }
-    public override string ToString() => Title;
+    public override string ToString() => Ordinal > 0 ? $"第 {Ordinal} 章 · {Title}" : Title;
 }
 
 internal sealed class ChapterPayload
@@ -189,6 +190,7 @@ internal static class NovelLibraryReaderSession
             $"/v1/books/{Uri.EscapeDataString(book.Id)}/chapters").ConfigureAwait(false);
         var readableChapters = allChapters.Where(item => string.IsNullOrEmpty(item.Kind) || item.Kind == "chapter").ToList();
         Chapters = readableChapters.Count > 0 ? readableChapters : allChapters;
+        for (var index = 0; index < Chapters.Count; index++) Chapters[index].Ordinal = index + 1;
         var preferred = Chapters.FirstOrDefault(item => item.Number == book.CurrentChapter)
             ?? Chapters.FirstOrDefault()
             ?? throw new InvalidOperationException("当前小说没有章节");

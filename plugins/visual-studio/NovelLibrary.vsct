@@ -14,14 +14,18 @@
       <Button guid="guidNovelLibraryCommandSet" id="NextLine" priority="0x0120" type="Button"><Parent guid="guidNovelLibraryCommandSet" id="NovelLibraryGroup" /><Strings><ButtonText>小说书库：下一行</ButtonText></Strings></Button>
       <Button guid="guidNovelLibraryCommandSet" id="PreviousChapter" priority="0x0130" type="Button"><Parent guid="guidNovelLibraryCommandSet" id="NovelLibraryGroup" /><Strings><ButtonText>小说书库：上一章</ButtonText></Strings></Button>
       <Button guid="guidNovelLibraryCommandSet" id="NextChapter" priority="0x0140" type="Button"><Parent guid="guidNovelLibraryCommandSet" id="NovelLibraryGroup" /><Strings><ButtonText>小说书库：下一章</ButtonText></Strings></Button>
+      <Button guid="guidNovelLibraryCommandSet" id="ToggleReaderVisibility" priority="0x0150" type="Button"><Parent guid="guidNovelLibraryCommandSet" id="NovelLibraryGroup" /><Strings><ButtonText>小说书库：开启或关闭代码内阅读</ButtonText></Strings></Button>
+      <Button guid="guidNovelLibraryCommandSet" id="ShowShortcuts" priority="0x0160" type="Button"><Parent guid="guidNovelLibraryCommandSet" id="NovelLibraryGroup" /><Strings><ButtonText>小说书库：查看快捷键</ButtonText></Strings></Button>
+      <Button guid="guidNovelLibraryCommandSet" id="ToggleDisplayMode" priority="0x0170" type="Button"><Parent guid="guidNovelLibraryCommandSet" id="NovelLibraryGroup" /><Strings><ButtonText>小说书库：切换段落/行尾显示模式</ButtonText></Strings></Button>
     </Buttons>
   </Commands>
   <KeyBindings>
-    <KeyBinding guid="guidNovelLibraryCommandSet" id="OpenReader" editor="guidVSStd97" key1="N" mod1="CONTROL ALT" />
+    <KeyBinding guid="guidNovelLibraryCommandSet" id="ToggleReaderVisibility" editor="guidVSStd97" key1="N" mod1="CONTROL ALT" />
     <KeyBinding guid="guidNovelLibraryCommandSet" id="PreviousLine" editor="guidVSStd97" key1="VK_UP" mod1="CONTROL ALT" />
     <KeyBinding guid="guidNovelLibraryCommandSet" id="NextLine" editor="guidVSStd97" key1="VK_DOWN" mod1="CONTROL ALT" />
     <KeyBinding guid="guidNovelLibraryCommandSet" id="PreviousChapter" editor="guidVSStd97" key1="VK_LEFT" mod1="CONTROL ALT" />
     <KeyBinding guid="guidNovelLibraryCommandSet" id="NextChapter" editor="guidVSStd97" key1="VK_RIGHT" mod1="CONTROL ALT" />
+    <KeyBinding guid="guidNovelLibraryCommandSet" id="ToggleDisplayMode" editor="guidVSStd97" key1="9" mod1="CONTROL ALT" />
   </KeyBindings>
   <Symbols>
     <GuidSymbol name="guidNovelLibraryPackage" value="{A6EAFB7B-4A30-4EAA-9B0B-B8A8DEBA6E30}" />
@@ -32,6 +36,9 @@
       <IDSymbol name="NextLine" value="0x0102" />
       <IDSymbol name="PreviousChapter" value="0x0103" />
       <IDSymbol name="NextChapter" value="0x0104" />
+      <IDSymbol name="ToggleReaderVisibility" value="0x0105" />
+      <IDSymbol name="ShowShortcuts" value="0x0106" />
+      <IDSymbol name="ToggleDisplayMode" value="0x0107" />
     </GuidSymbol>
   </Symbols>
 </CommandTable>

@@ -1,6 +1,5 @@
 const vscode = require('vscode')
-const fs = require('fs')
-const { bridgeFile, request } = require('./bridge')
+const { openDesktopApp, request } = require('./bridge')
 
 const state = {
   books: [],
@@ -11,7 +10,8 @@ const state = {
   lineStart: 0,
   enabled: false,
   displayMode: 'paragraph',
-  loading: false
+  loading: false,
+  connected: false
 }
 
 function displayLines(text) {
@@ -127,7 +127,7 @@ function createReader(context) {
     }).catch(() => {})
   }
 
-  const updateChapter = async (chapterNumber, direction = 1) => {
+  const updateChapter = async (chapterNumber, direction = 1, restoredLineStart = 0) => {
     if (!state.book) return
     let index = state.chapters.findIndex(chapter => chapter.number === chapterNumber)
     for (let attempts = 0; index >= 0 && index < state.chapters.length && attempts < 30; attempts += 1, index += direction) {
@@ -136,7 +136,9 @@ function createReader(context) {
       if (lines.length) {
         state.chapter = chapter
         state.lines = lines
-        state.lineStart = 0
+        state.lineStart = chapter.number === chapterNumber
+          ? Math.max(0, Math.min(lines.length - 5, restoredLineStart))
+          : 0
         render()
         notifySidebar()
         return
@@ -145,7 +147,7 @@ function createReader(context) {
     throw new Error('附近没有可阅读的正文章节')
   }
 
-  const loadBook = async book => {
+  const loadBook = async (book, position) => {
     const previous = {
       book: state.book,
       chapters: state.chapters,
@@ -159,8 +161,10 @@ function createReader(context) {
       const readableChapters = allChapters.filter(chapter => !chapter.kind || chapter.kind === 'chapter')
       state.chapters = readableChapters.length ? readableChapters : allChapters
       if (!state.chapters.length) throw new Error('当前小说没有可阅读章节')
-      const preferred = state.chapters.find(chapter => chapter.number === book.currentChapter) || state.chapters[0]
-      await updateChapter(preferred.number, 1)
+      const preferredChapter = position?.chapterNumber ?? book.currentChapter
+      const preferred = state.chapters.find(chapter => chapter.number === preferredChapter) || state.chapters[0]
+      const restoredLineStart = preferred.number === position?.chapterNumber ? position.lineStart : 0
+      await updateChapter(preferred.number, 1, restoredLineStart)
     } catch (error) {
       Object.assign(state, previous)
       render()
@@ -170,13 +174,30 @@ function createReader(context) {
   }
 
   const loadLibrary = async () => {
-    if (state.loading) return
+    if (state.loading) return false
     state.loading = true
     try {
+      const position = state.book && state.chapter
+        ? { bookId: state.book.id, chapterNumber: state.chapter.number, lineStart: state.lineStart }
+        : undefined
       state.books = await request('/v1/books')
-      if (!state.books.length) throw new Error('桌面端书库中还没有小说')
+      state.connected = true
+      if (!state.books.length) {
+        state.book = null
+        state.chapters = []
+        state.chapter = null
+        state.lines = []
+        state.lineStart = 0
+        render()
+        notifySidebar()
+        return true
+      }
       const book = state.book && state.books.find(item => item.id === state.book.id) || state.books[0]
-      await loadBook(book)
+      await loadBook(book, position?.bookId === book.id ? position : undefined)
+      return true
+    } catch (error) {
+      state.connected = false
+      throw error
     } finally {
       state.loading = false
     }
@@ -245,7 +266,7 @@ function createReader(context) {
   const selectChapter = async () => {
     if (!state.book || !state.chapters.length) await loadLibrary()
     const picked = await vscode.window.showQuickPick(
-      state.chapters.map(chapter => ({ label: chapter.title, description: `第 ${chapter.number} 项`, chapter })),
+      state.chapters.map((chapter, index) => ({ label: chapter.title, description: `第 ${index + 1} 章`, chapter })),
       { placeHolder: '选择章节' }
     )
     if (picked) await updateChapter(picked.chapter.number, 1)
@@ -368,7 +389,9 @@ class ReaderTreeProvider {
     }
 
     if (element.type === 'books') {
-      if (!state.books.length) return [this.emptyItem('书架为空或桌面端未连接')]
+      if (!state.books.length) {
+        return [this.emptyItem(state.connected ? '桌面端书库暂无小说' : '正在等待桌面端连接（将自动重试）')]
+      }
       return state.books.map(book => {
         const current = book.id === state.book?.id
         return {
@@ -386,12 +409,12 @@ class ReaderTreeProvider {
 
     if (element.type === 'chapters') {
       if (!state.chapters.length) return [this.emptyItem('请先从书架选择小说')]
-      return state.chapters.map(chapter => {
+      return state.chapters.map((chapter, index) => {
         const current = chapter.number === state.chapter?.number
         return {
           id: `chapter.${state.book?.id || 'none'}.${chapter.number}`,
           label: chapter.title,
-          description: current ? '当前' : `第 ${chapter.number} 项`,
+          description: current ? `当前 · 第 ${index + 1} 章` : `第 ${index + 1} 章`,
           tooltip: current ? `正在阅读：${chapter.title}` : `切换到 ${chapter.title}`,
           icon: current ? 'check' : 'symbol-key',
           command: 'novelLibrary.openChapterFromSidebar',
@@ -433,7 +456,8 @@ function activate(context) {
   }
   reader.setSidebarRefresh(() => treeProvider.refresh())
   context.subscriptions.push(treeProvider.changed)
-  context.subscriptions.push(vscode.window.registerTreeDataProvider('novelLibrary.reader', treeProvider))
+  const treeView = vscode.window.createTreeView('novelLibrary.reader', { treeDataProvider: treeProvider })
+  context.subscriptions.push(treeView)
   vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openReader', () => reader.toggle()))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.showReader', () => reader.toggle(true)))
@@ -448,11 +472,29 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousLine', runReaderAction(() => reader.moveLines(-1))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.nextChapter', runReaderAction(() => reader.moveChapter(1))))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.previousChapter', runReaderAction(() => reader.moveChapter(-1))))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.showShortcuts', () => {
+    vscode.window.showInformationMessage('小说书库快捷键', {
+      modal: true,
+      detail: [
+        'Ctrl+Alt+N    开启或关闭代码内阅读',
+        'Ctrl+Alt+9    切换段落/行尾显示模式',
+        'Ctrl+Alt+↑    上一行',
+        'Ctrl+Alt+↓    下一行',
+        'Ctrl+Alt+←    上一章',
+        'Ctrl+Alt+→    下一章',
+        'Ctrl+Alt+D    打开小说书库桌面端'
+      ].join('\n')
+    })
+  }))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openDesktop', async () => {
     try {
-      await vscode.env.openExternal(vscode.Uri.parse('novellibrary://open'))
-    } catch (error) {
-      vscode.window.showErrorMessage(error.message)
+      await request('/v1/show', { method: 'POST' })
+    } catch {
+      try {
+        openDesktopApp()
+      } catch (error) {
+        vscode.window.showErrorMessage(`无法打开小说书库桌面端：${error.message}`)
+      }
     }
   }))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.importFile', async uri => {
@@ -470,20 +512,42 @@ function activate(context) {
     }
   }))
 
-  const connectOnStartup = async () => {
-    if (!state.enabled) {
-      vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
-      notifySidebar()
-      return
-    }
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      if (await reader.toggle(true, true)) return
-      await new Promise(resolve => setTimeout(resolve, 750))
-    }
-    vscode.window.showErrorMessage('小说阅读器暂时无法连接桌面端，请确认桌面端已启动后点击刷新书架。')
+  let reconnectTimer
+  let reconnecting = false
+  const scheduleReconnect = (delay = 0) => {
+    if (reconnectTimer || state.connected) return
+    reconnectTimer = setTimeout(async () => {
+      reconnectTimer = undefined
+      if (reconnecting || state.connected) return
+      reconnecting = true
+      try {
+        const loaded = await reader.loadLibrary()
+        if (!loaded || !state.connected) {
+          if (treeView.visible) scheduleReconnect(1000)
+          return
+        }
+        vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', state.enabled)
+        if (state.enabled) reader.render()
+      } catch {
+        if (treeView.visible) scheduleReconnect(3000)
+      } finally {
+        reconnecting = false
+      }
+    }, delay)
   }
+  context.subscriptions.push(treeView.onDidChangeVisibility(event => {
+    if (event.visible && !state.connected) scheduleReconnect()
+  }))
+  context.subscriptions.push(vscode.window.onDidChangeWindowState(event => {
+    if (event.focused && treeView.visible && !state.connected) scheduleReconnect()
+  }))
+  context.subscriptions.push({
+    dispose() {
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+    }
+  })
 
-  if (fs.existsSync(bridgeFile())) setTimeout(connectOnStartup, 500)
+  scheduleReconnect(500)
 }
 
 module.exports = { activate, deactivate() {} }

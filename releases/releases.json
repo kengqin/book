@@ -1,8 +1,49 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.2",
+  "latest": "0.6.3",
   "releases": [
+    {
+      "version": "0.6.3",
+      "date": "2026-07-23",
+      "title": "IDE 阅读体验与连接可靠性升级",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.2",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.3",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.3/NovelLibrary_0.6.3_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "IDE 阅读器支持在小说展示区域内使用鼠标滚轮切换上一行和下一行",
+            "新增段落/行尾模式切换、打开桌面端和统一快捷键帮助"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "刷新书架时保留当前小说、章节和精确行进度",
+            "插件启动后自动同步书架，桌面端稍晚启动时自动重连",
+            "章节目录按正文顺序显示实际章号，不再使用原始条目编号",
+            "打开桌面端改用本地 Bridge 和进程窗口恢复，不再依赖未注册 URL 协议",
+            "JetBrains 阅读器只在小说区域内接管滚轮，区域外保持代码页面正常滚动"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "VS Code、JetBrains 和 Visual Studio 插件统一阅读开关、显示模式、快捷键提示和进度同步行为"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.2",
       "date": "2026-07-20",

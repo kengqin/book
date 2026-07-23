@@ -6,6 +6,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const files = [
   'apps/desktop/src-tauri/resources/ide-plugins/manifest.json',
   'apps/desktop/src-tauri/src/ide_integration.rs',
+  'apps/desktop/src-tauri/src/bridge.rs',
   'apps/desktop/src/views/IdeIntegrationView.vue',
   'plugins/vscode/package.json',
   'plugins/README.md',
@@ -54,11 +55,11 @@ requireValue(vscode.activationEvents?.includes('onStartupFinished'), 'VS Code au
 requireValue(vscode.contributes?.viewsContainers?.activitybar?.some(item => item.id === 'novelLibrary'), 'VS Code activity bar container is missing')
 requireValue(vscode.contributes?.views?.novelLibrary?.some(item => item.id === 'novelLibrary.reader'), 'VS Code reader sidebar is missing')
 const vscodeViewCommands = new Set(vscode.contributes?.menus?.['view/title']?.map(item => item.command))
-for (const command of ['novelLibrary.showReader', 'novelLibrary.hideReader', 'novelLibrary.previousLine', 'novelLibrary.nextLine', 'novelLibrary.previousChapter', 'novelLibrary.nextChapter', 'novelLibrary.refreshLibrary']) {
+for (const command of ['novelLibrary.showReader', 'novelLibrary.hideReader', 'novelLibrary.previousLine', 'novelLibrary.nextLine', 'novelLibrary.previousChapter', 'novelLibrary.nextChapter', 'novelLibrary.refreshLibrary', 'novelLibrary.showShortcuts']) {
   requireValue(vscodeViewCommands.has(command), `VS Code reader toolbar command is missing: ${command}`)
 }
 const vscodeKeys = new Set(vscode.contributes?.keybindings?.map(item => item.key))
-for (const key of ['ctrl+alt+n', 'ctrl+alt+up', 'ctrl+alt+down', 'ctrl+alt+left', 'ctrl+alt+right']) {
+for (const key of ['ctrl+alt+n', 'ctrl+alt+9', 'ctrl+alt+up', 'ctrl+alt+down', 'ctrl+alt+left', 'ctrl+alt+right', 'ctrl+alt+d']) {
   requireValue(vscodeKeys.has(key), `VS Code keybinding is missing: ${key}`)
 }
 const vscodeExtension = source('plugins/vscode/extension.js')
@@ -67,7 +68,7 @@ requireMatch(vscodeExtension, /createTextEditorDecorationType/, 'VS Code inline 
 requireMatch(vscodeExtension, /displayMode === 'paragraph'/, 'VS Code paragraph display mode is missing')
 requireMatch(vscodeExtension, /displayMode.*lineEnd/, 'VS Code original line-end display mode is missing')
 requireMatch(vscodeExtension, /toggleDisplayMode/, 'VS Code display mode toggle is missing')
-requireMatch(vscodeExtension, /registerTreeDataProvider\('novelLibrary\.reader'/, 'VS Code reader sidebar provider is missing')
+requireMatch(vscodeExtension, /createTreeView\('novelLibrary\.reader'/, 'VS Code reader sidebar provider is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.selectBook'/, 'VS Code book selection command is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.selectChapter'/, 'VS Code chapter selection command is missing')
 requireMatch(vscodeExtension, /label: `书架 \(\$\{state\.books\.length\}\)`/, 'VS Code bookshelf section is missing')
@@ -75,16 +76,26 @@ requireMatch(vscodeExtension, /label: `章节 \(\$\{state\.chapters\.length\}\)`
 requireMatch(vscodeExtension, /type: 'content'/, 'VS Code content section is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.openBookFromSidebar'/, 'VS Code direct sidebar book selection is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.openChapterFromSidebar'/, 'VS Code direct sidebar chapter selection is missing')
-requireMatch(vscodeExtension, /const connectOnStartup = async \(\) =>/, 'VS Code automatic reader display is missing')
-requireMatch(vscodeExtension, /attempt < 12[\s\S]*reader\.toggle\(true, true\)/, 'VS Code startup connection retry is missing')
+requireMatch(vscodeExtension, /const scheduleReconnect = \(delay = 0\) =>[\s\S]*reader\.loadLibrary\(\)[\s\S]*scheduleReconnect\(3000\)/, 'VS Code automatic library reconnection is missing')
+requireMatch(vscodeExtension, /onDidChangeVisibility[\s\S]*onDidChangeWindowState/, 'VS Code reconnect triggers are missing')
+requireMatch(vscodeExtension, /setContext', 'novelLibrary\.readerEnabled', state\.enabled/, 'VS Code library sync must preserve the reader visibility preference')
 requireMatch(vscodeExtension, /for \(let attempts = 0;[\s\S]*attempts < 30/, 'VS Code empty-chapter skipping is missing')
 requireMatch(vscodeExtension, /chapter\.kind === 'chapter'/, 'VS Code non-content chapter filtering is missing')
+requireMatch(vscodeExtension, /state\.chapters\.map\(\(chapter, index\)[\s\S]*`第 \$\{index \+ 1\} 章`/, 'VS Code chapter list must show sequential readable chapter numbers')
 requireMatch(vscodeExtension, /storage\.update\('novelLibrary\.readerEnabled'/, 'VS Code reader visibility preference is missing')
+requireMatch(vscodeExtension, /const position = state\.book && state\.chapter[\s\S]*lineStart: state\.lineStart[\s\S]*loadBook\(book, position\?\.bookId === book\.id \? position : undefined\)/, 'VS Code bookshelf refresh must preserve the current reading position')
 requireValue(!/moveLines = async direction => \{\s*if \(!state\.enabled\) await toggle\(true\)/.test(vscodeExtension), 'VS Code line shortcuts must not force hidden reading back on')
+requireValue(vscode.contributes?.commands?.some(item => item.command === 'novelLibrary.showShortcuts' && item.icon === '$(keyboard)'), 'VS Code shortcut-help button is missing')
+requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.showShortcuts'[\s\S]*小说书库快捷键[\s\S]*Ctrl\+Alt\+D/, 'VS Code shortcut-help dialog is incomplete')
+requireMatch(vscodeExtension, /request\('\/v1\/show', \{ method: 'POST' \}\)[\s\S]*openDesktopApp\(\)/, 'VS Code desktop launch must use Bridge with a local process fallback')
 const vscodeBridge = source('plugins/vscode/bridge.js')
 requireMatch(vscodeBridge, /AbortSignal\.timeout\(5000\)/, 'VS Code Bridge timeout must be five seconds')
 requireMatch(vscodeBridge, /Connection: 'close'/, 'VS Code Bridge must close each local HTTP connection')
 requireMatch(vscodeBridge, /novel-library-desktop/, 'VS Code Bridge must resolve the running desktop installation')
+requireMatch(vscodeBridge, /ShowWindowAsync[\s\S]*SetForegroundWindow[\s\S]*Start-Process/, 'VS Code desktop fallback must restore or launch the installed desktop app')
+requireValue(!vscodeExtension.includes('novellibrary://'), 'VS Code must not use an unregistered desktop URL scheme')
+const desktopBridge = source('apps/desktop/src-tauri/src/bridge.rs')
+requireMatch(desktopBridge, /method == "POST" && path == "\/v1\/show"[\s\S]*show_main_window/, 'Desktop Bridge show-window endpoint is missing')
 
 const intellijBuild = source('plugins/intellij/build.gradle.kts')
 const intellijXml = source('plugins/intellij/src/main/resources/META-INF/plugin.xml')
@@ -100,6 +111,8 @@ requireMatch(intellijXml, /<postStartupActivity/, 'JetBrains automatic startup a
 for (const shortcut of ['ctrl alt N', 'ctrl alt UP', 'ctrl alt DOWN', 'ctrl alt LEFT', 'ctrl alt RIGHT']) {
   requireValue(intellijXml.includes(`first-keystroke="${shortcut}"`), `JetBrains keybinding is missing: ${shortcut}`)
 }
+requireMatch(intellijXml, /action id="NovelLibrary\.ToggleReaderVisibility"[\s\S]*?<keyboard-shortcut first-keystroke="ctrl alt N"/, 'JetBrains Ctrl+Alt+N must toggle code-inline reading')
+requireMatch(intellijXml, /action id="NovelLibrary\.ToggleDisplayMode"[\s\S]*?<keyboard-shortcut first-keystroke="ctrl alt 9"/, 'JetBrains Ctrl+Alt+9 must toggle the reader display mode')
 requireMatch(intellijCode, /take\(5\)/, 'JetBrains five-line reader is missing')
 requireMatch(intellijCode, /addAfterLineEndElement/, 'JetBrains inline editor inlays are missing')
 requireMatch(intellijCode, /addInlineElement/, 'JetBrains paragraph editor inlays are missing')
@@ -108,11 +121,20 @@ requireMatch(intellijCode, /ReaderDisplayMode\.LINE_END/, 'JetBrains original li
 requireMatch(intellijCode, /class WrapLayout[\s\S]*availableWidth/, 'JetBrains reader toolbar must wrap instead of clipping actions')
 requireMatch(intellijCode, /object ReaderVisibilitySettings/, 'JetBrains reader visibility preference is missing')
 requireMatch(intellijCode, /class ToggleReaderVisibilityAction/, 'JetBrains reader visibility action is missing')
+requireMatch(intellijCode, /addMouseWheelListener[\s\S]*wheelRotation[\s\S]*moveLine/, 'JetBrains reader areas must support mouse-wheel line navigation')
+requireMatch(intellijCode, /AWTEventListener[\s\S]*inlays\[editor\][\s\S]*bounds\?\.contains\(point\)/, 'JetBrains editor wheel navigation must only consume events over reader inlays')
+requireMatch(intellijCode, /isDescendingFrom\(event\.component, it\.component\)[\s\S]*convertPoint\(event\.component, event\.point, editor\.contentComponent\)/, 'JetBrains wheel hit testing must accept events from the full editor component tree')
+requireMatch(intellijCode, /if \(overReader\) \{\s*event\.consume\(\)[\s\S]*moveLine/, 'JetBrains reader wheel navigation must consume only inlay hits')
+requireValue(!/contentComponent\.addMouseWheelListener/.test(intellijCode), 'JetBrains reader must not steal wheel events from the editor content component')
 requireMatch(intellijCode, /repeat\(if \(body == null\) 3 else 1\)/, 'JetBrains Bridge GET retry is missing')
 requireMatch(intellijCode, /连接中断，正在重试/, 'JetBrains session reconnect handling is missing')
 requireMatch(intellijCode, /val refresh = JButton\("刷新"\)/, 'JetBrains manual reader refresh is missing')
+requireMatch(intellijCode, /fun reload\(\)[\s\S]*loadBooks\(preservePosition = true\)/, 'JetBrains reader refresh must preserve the current reading position')
+requireMatch(intellijCode, /JButton\("快捷键"\)[\s\S]*showShortcutHelp/, 'JetBrains shortcut-help button is missing')
+requireMatch(intellijCode, /showShortcutHelp[\s\S]*Ctrl\+Alt\+N[\s\S]*Ctrl\+Alt\+9[\s\S]*Ctrl\+Alt\+→/, 'JetBrains shortcut-help dialog is incomplete')
 requireMatch(intellijCode, /while \(resultLines\.isEmpty\(\) && attempts < 30\)/, 'JetBrains empty-chapter skipping is missing')
 requireMatch(intellijCode, /it\.kind == null \|\| it\.kind == "chapter"/, 'JetBrains non-content chapter filtering is missing')
+requireMatch(intellijCode, /mapIndexed \{ index, chapter -> chapter\.copy\(ordinal = index \+ 1\) \}/, 'JetBrains chapter list must assign sequential readable chapter numbers')
 requireMatch(intellijCode, /timeout\(Duration\.ofSeconds\(5\)\)/, 'JetBrains Bridge timeout must be five seconds')
 requireMatch(intellijCode, /ProcessHandle\.allProcesses/, 'JetBrains Bridge must resolve the running desktop installation')
 for (const action of ['PreviousLineAction', 'NextLineAction', 'PreviousChapterAction', 'NextChapterAction']) {
@@ -137,11 +159,20 @@ requireMatch(visualManifest, /Microsoft\.VisualStudio\.MefComponent/, 'Visual St
 for (const key of ['N', 'VK_UP', 'VK_DOWN', 'VK_LEFT', 'VK_RIGHT']) {
   requireValue(visualVsct.includes(`key1="${key}"`), `Visual Studio keybinding is missing: ${key}`)
 }
+requireMatch(visualVsct, /KeyBinding[^>]+id="ToggleReaderVisibility"[^>]+key1="N"[^>]+mod1="CONTROL ALT"/, 'Visual Studio Ctrl+Alt+N must toggle code-inline reading')
+requireMatch(visualVsct, /KeyBinding[^>]+id="ToggleDisplayMode"[^>]+key1="9"[^>]+mod1="CONTROL ALT"/, 'Visual Studio Ctrl+Alt+9 must toggle the reader display mode')
+requireMatch(source('plugins/visual-studio/NovelLibraryCommands.cs'), /0x0105[\s\S]*NovelLibraryReaderSession\.ToggleVisibility|NovelLibraryReaderSession\.ToggleVisibility\(\)[\s\S]*0x0105/, 'Visual Studio reader visibility command is missing')
 requireMatch(visualSession, /Take\(5\)/, 'Visual Studio five-line reader is missing')
 requireMatch(visualSession, /attempts < 30/, 'Visual Studio empty-chapter skipping is missing')
 requireMatch(visualSession, /item\.Kind == "chapter"/, 'Visual Studio non-content chapter filtering is missing')
+requireMatch(visualSession, /Chapters\[index\]\.Ordinal = index \+ 1/, 'Visual Studio chapter list must assign sequential readable chapter numbers')
 requireMatch(visualAdornment, /IAdornmentLayer/, 'Visual Studio inline editor adornments are missing')
 requireMatch(visualAdornment, /ReaderDisplayMode\.Paragraph/, 'Visual Studio paragraph display mode is missing')
+requireMatch(visualAdornment, /PreviewMouseWheel[\s\S]*_readerRegions[\s\S]*MoveLineAsync/, 'Visual Studio inline reader must support hover wheel navigation')
+requireMatch(visualAdornment, /if \(!_readerRegions\.Any\(region => region\.Contains\(point\)\)\) return;\s*args\.Handled = true;/, 'Visual Studio reader must leave wheel events outside reader regions untouched')
+requireMatch(source('plugins/visual-studio/NovelLibraryToolWindow.cs'), /_contentScroll\.PreviewMouseWheel[\s\S]*MoveLineAsync/, 'Visual Studio reader panel must support hover wheel navigation')
+requireMatch(source('plugins/visual-studio/NovelLibraryToolWindow.cs'), /Content = "快捷键"[\s\S]*ShortcutHelp\.Show[\s\S]*Ctrl\+Alt\+N[\s\S]*Ctrl\+Alt\+9[\s\S]*Ctrl\+Alt\+→/, 'Visual Studio shortcut-help button or dialog is incomplete')
+requireMatch(visualVsct, /id="ShowShortcuts"[\s\S]*小说书库：查看快捷键/, 'Visual Studio shortcut-help menu command is missing')
 requireMatch(visualSession, /visual-studio-reader-visible\.txt[\s\S]*IsReaderVisible/, 'Visual Studio reader visibility preference is missing')
 requireMatch(visualAdornment, /if \(!NovelLibraryReaderSession\.IsReaderVisible\) return;/, 'Visual Studio hidden reader must remove editor adornments')
 requireMatch(visualSession, /ReaderDisplayMode\.LineEnd/, 'Visual Studio original line-end display mode is missing')

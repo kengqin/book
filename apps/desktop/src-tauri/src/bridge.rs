@@ -156,6 +156,10 @@ fn handle_request(
     if authorization != Some(&format!("Bearer {token}")) {
         return json_response("401 Unauthorized", json!({ "error": "Bridge token 无效" }));
     }
+    if method == "POST" && path == "/v1/show" {
+        crate::close_behavior::show_main_window(app);
+        return json_response("200 OK", json!({ "ok": true }));
+    }
     let state = app.state::<database::DatabaseState>();
     let connection = match state.connect() {
         Ok(connection) => connection,
@@ -173,7 +177,7 @@ fn handle_request(
                 "appVersion": env!("CARGO_PKG_VERSION"),
                 "port": bridge.as_ref().map(|value| value.port),
                 "sessionId": bridge.as_ref().map(|value| value.session_id.clone()),
-                "capabilities": ["books", "chapters", "progress", "import", "open"]
+                "capabilities": ["books", "chapters", "progress", "import", "open", "show"]
             })
         }
         ("GET", ["v1", "books"]) => match database::list_books(&connection) {

@@ -2,7 +2,7 @@
   "name": "novel-library-reader",
   "displayName": "小说书库阅读器",
   "description": "在 VS Code 和 Cursor 代码行内阅读本地小说，并与小说书库桌面端同步。",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "publisher": "novel-library",
   "license": "MIT",
   "engines": { "vscode": ">=1.85.0" },
@@ -22,6 +22,7 @@
       { "command": "novelLibrary.previousChapter", "title": "上一章", "icon": "$(arrow-left)" },
       { "command": "novelLibrary.refreshLibrary", "title": "刷新书架", "icon": "$(refresh)" },
       { "command": "novelLibrary.toggleDisplayMode", "title": "切换阅读显示模式", "icon": "$(layout)" },
+      { "command": "novelLibrary.showShortcuts", "title": "小说书库: 查看快捷键", "icon": "$(keyboard)" },
       { "command": "novelLibrary.importFile", "title": "小说书库: 导入当前文件", "icon": "$(file-add)" },
       { "command": "novelLibrary.openDesktop", "title": "小说书库: 打开桌面端", "icon": "$(open-preview)" }
     ],
@@ -31,7 +32,8 @@
       { "command": "novelLibrary.previousLine", "key": "ctrl+alt+up", "when": "editorTextFocus" },
       { "command": "novelLibrary.nextChapter", "key": "ctrl+alt+right", "when": "editorTextFocus" },
       { "command": "novelLibrary.previousChapter", "key": "ctrl+alt+left", "when": "editorTextFocus" },
-      { "command": "novelLibrary.openDesktop", "key": "ctrl+alt+o" }
+      { "command": "novelLibrary.toggleDisplayMode", "key": "ctrl+alt+9" },
+      { "command": "novelLibrary.openDesktop", "key": "ctrl+alt+d" }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -53,6 +55,7 @@
         { "command": "novelLibrary.nextChapter", "when": "view == novelLibrary.reader", "group": "navigation@5" },
         { "command": "novelLibrary.refreshLibrary", "when": "view == novelLibrary.reader", "group": "navigation@6" },
         { "command": "novelLibrary.toggleDisplayMode", "when": "view == novelLibrary.reader", "group": "navigation@7" },
+        { "command": "novelLibrary.showShortcuts", "when": "view == novelLibrary.reader", "group": "navigation@8" },
         { "command": "novelLibrary.importFile", "when": "view == novelLibrary.reader", "group": "2_actions@1" },
         { "command": "novelLibrary.openDesktop", "when": "view == novelLibrary.reader", "group": "2_actions@2" }
       ],

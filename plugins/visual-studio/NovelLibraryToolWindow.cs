@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.VisualStudio.Shell;
 
@@ -31,6 +32,7 @@ internal sealed class NovelLibraryReaderControl : UserControl
         Margin = new Thickness(10)
     };
     private readonly TextBlock _status = new TextBlock { Margin = new Thickness(8, 4, 8, 6) };
+    private readonly ScrollViewer _contentScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly Button _displayMode = new Button { Margin = new Thickness(0, 0, 6, 4), Padding = new Thickness(8, 3, 8, 3) };
     private readonly Button _readerVisibility = new Button { Margin = new Thickness(0, 0, 6, 4), Padding = new Thickness(8, 3, 8, 3) };
     private bool _refreshing;
@@ -49,11 +51,21 @@ internal sealed class NovelLibraryReaderControl : UserControl
         toolbar.Children.Add(_displayMode);
         _readerVisibility.Click += (_, __) => NovelLibraryReaderSession.ToggleVisibility();
         toolbar.Children.Add(_readerVisibility);
+        var shortcuts = new Button { Content = "快捷键", Margin = new Thickness(0, 0, 6, 4), Padding = new Thickness(8, 3, 8, 3) };
+        shortcuts.Click += (_, __) => ShortcutHelp.Show();
+        toolbar.Children.Add(shortcuts);
         DockPanel.SetDock(toolbar, Dock.Top);
         DockPanel.SetDock(_status, Dock.Bottom);
         root.Children.Add(toolbar);
         root.Children.Add(_status);
-        root.Children.Add(new ScrollViewer { Content = _content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        _contentScroll.Content = _content;
+        _contentScroll.PreviewMouseWheel += (_, args) =>
+        {
+            if (!NovelLibraryReaderSession.IsReaderVisible || Keyboard.Modifiers != ModifierKeys.None) return;
+            args.Handled = true;
+            _ = RunAsync(() => NovelLibraryReaderSession.MoveLineAsync(args.Delta < 0 ? 1 : -1));
+        };
+        root.Children.Add(_contentScroll);
         Content = root;
 
         _books.SelectionChanged += (_, __) =>
@@ -116,4 +128,21 @@ internal sealed class NovelLibraryReaderControl : UserControl
         _status.Text = NovelLibraryReaderSession.Status;
         _refreshing = false;
     }
+}
+
+internal static class ShortcutHelp
+{
+    private const string Content =
+        "Ctrl+Alt+N    开启或关闭代码内阅读\n" +
+        "Ctrl+Alt+9    切换段落/行尾显示模式\n" +
+        "Ctrl+Alt+↑    上一行\n" +
+        "Ctrl+Alt+↓    下一行\n" +
+        "Ctrl+Alt+←    上一章\n" +
+        "Ctrl+Alt+→    下一章";
+
+    internal static void Show() => MessageBox.Show(
+        Content,
+        "小说书库快捷键",
+        MessageBoxButton.OK,
+        MessageBoxImage.Information);
 }
