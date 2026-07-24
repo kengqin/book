@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{
-    BackupPayload, BackupResult, BookListRecord, BookRecord, ChapterRecord, ChapterSummary,
-    NoteRecord, NoteSummary, NotesExportPayload, NotesTransferResult, SaveImportedBookInput,
-    SaveNoteInput, SearchResult,
+    BackupPayload, BackupResult, BookListRecord, BookRecord, BookSearchResult, ChapterRecord,
+    ChapterSummary, LibrarySearchResults, NoteRecord, NoteSummary, NotesExportPayload,
+    NotesTransferResult, SaveImportedBookInput, SaveNoteInput, SearchResult,
 };
 
 #[derive(Clone)]
@@ -1235,18 +1235,53 @@ pub fn delete_book(connection: &Connection, book_id: &str) -> Result<(), String>
     Ok(())
 }
 
-pub fn search(connection: &Connection, query: &str) -> Result<Vec<SearchResult>, String> {
+pub fn search(connection: &Connection, query: &str) -> Result<LibrarySearchResults, String> {
     let needle = query.trim();
     if needle.is_empty() {
-        return Ok(Vec::new());
+        return Ok(LibrarySearchResults::default());
     }
     let pattern = format!("%{needle}%");
-    let mut statement = connection
+    let mut book_statement = connection
         .prepare(
-            "SELECT c.book_id, b.title, c.number, c.original_label, c.kind, c.title, substr(c.content_text, 1, 180) FROM chapters c JOIN books b ON b.id = c.book_id WHERE b.title LIKE ?1 OR b.author LIKE ?1 OR c.title LIKE ?1 OR c.content_text LIKE ?1 ORDER BY b.last_read_at DESC, c.number LIMIT 100",
+            "SELECT b.id, b.title, b.author, b.description, b.cover_data_url, b.chapter_count, b.current_chapter
+             FROM books b
+             WHERE b.title LIKE ?1 OR b.author LIKE ?1
+             ORDER BY CASE
+               WHEN b.title = ?2 COLLATE NOCASE THEN 0
+               WHEN b.title LIKE ?1 THEN 1
+               ELSE 2
+             END, b.last_read_at DESC
+             LIMIT 20",
         )
         .map_err(|error| error.to_string())?;
-    let results = statement
+    let books = book_statement
+        .query_map(params![pattern, needle], |row| {
+            Ok(BookSearchResult {
+                book_id: row.get(0)?,
+                title: row.get(1)?,
+                author: row.get(2)?,
+                description: row.get(3)?,
+                cover_data_url: row.get(4)?,
+                chapter_count: row.get(5)?,
+                current_chapter: row.get(6)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+
+    let mut chapter_statement = connection
+        .prepare(
+            "SELECT c.book_id, b.title, c.number, c.original_label, c.kind, c.title, substr(c.content_text, 1, 180)
+             FROM chapters c
+             JOIN books b ON b.id = c.book_id
+             WHERE c.title LIKE ?1 OR c.original_label LIKE ?1 OR c.content_text LIKE ?1
+             ORDER BY CASE WHEN c.title LIKE ?1 OR c.original_label LIKE ?1 THEN 0 ELSE 1 END,
+                      b.last_read_at DESC, c.number
+             LIMIT 100",
+        )
+        .map_err(|error| error.to_string())?;
+    let chapters = chapter_statement
         .query_map(params![pattern], |row| {
             Ok(SearchResult {
                 book_id: row.get(0)?,
@@ -1261,7 +1296,7 @@ pub fn search(connection: &Connection, query: &str) -> Result<Vec<SearchResult>,
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
-    Ok(results)
+    Ok(LibrarySearchResults { books, chapters })
 }
 
 pub fn list_notes(connection: &Connection, query: &str) -> Result<Vec<NoteSummary>, String> {
@@ -1987,9 +2022,28 @@ mod tests {
         assert_eq!(updated.progress, 75.0);
         assert_eq!(updated.chapter_progress, 50.0);
 
-        let results = search(&connection, "青石长阶").expect("search library");
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].chapter_number, 2);
+        let search_cover = "data:image/png;base64,c2VhcmNoLWNvdmVy";
+        connection
+            .execute(
+                "UPDATE books SET cover_data_url = ?2 WHERE id = ?1",
+                params![book.id, search_cover],
+            )
+            .expect("set search cover");
+
+        let content_results = search(&connection, "青石长阶").expect("search chapter content");
+        assert!(content_results.books.is_empty());
+        assert_eq!(content_results.chapters.len(), 1);
+        assert_eq!(content_results.chapters[0].chapter_number, 2);
+
+        let book_results = search(&connection, "桌面测试").expect("search book title");
+        assert_eq!(book_results.books.len(), 1);
+        assert_eq!(book_results.books[0].book_id, book.id);
+        assert_eq!(book_results.books[0].author, "测试作者");
+        assert_eq!(
+            book_results.books[0].cover_data_url.as_deref(),
+            Some(search_cover)
+        );
+        assert!(book_results.chapters.is_empty());
 
         delete_book(&connection, &book.id).expect("delete book");
         assert!(get_book(&connection, &book.id)
@@ -2034,6 +2088,7 @@ mod tests {
         assert_eq!(
             search(&target, "青石长阶")
                 .expect("search restored database")
+                .chapters
                 .len(),
             1
         );

@@ -47,6 +47,21 @@ export interface DesktopSearchResult {
   snippet: string
 }
 
+export interface DesktopBookSearchResult {
+  bookId: string
+  title: string
+  author: string
+  description: string
+  coverDataUrl?: string
+  chapterCount: number
+  currentChapter: number
+}
+
+export interface DesktopLibrarySearchResults {
+  books: DesktopBookSearchResult[]
+  chapters: DesktopSearchResult[]
+}
+
 export interface DesktopStorageStatus {
   databaseReady: boolean
   dataDirectory: string
@@ -174,7 +189,7 @@ export function deleteDesktopBook(bookId: string) {
 }
 
 export function searchDesktopLibrary(query: string) {
-  return invoke<DesktopSearchResult[]>('search_library', { query })
+  return invoke<DesktopLibrarySearchResults>('search_library', { query })
 }
 
 export function getDesktopStorageStatus() {

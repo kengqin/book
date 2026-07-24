@@ -124,7 +124,7 @@ a:focus-visible {
 .update-badge { right: 11px; background: var(--ui-warning); box-shadow: 0 0 0 2px var(--ui-sidebar); }
 .app-sidebar--collapsed { min-width: 0; width: 0; overflow: hidden; padding: 0; border: 0; opacity: 0; pointer-events: none; transition: opacity 60ms ease; }
 .app-workspace { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; color: var(--ui-text); background: var(--ui-app); }
-.workspace-sidebar-toggle { position: fixed; top: 38px; left: 14px; z-index: 12; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; color: var(--ui-text-2); border: 0; border-radius: 8px; background: transparent; box-shadow: none; cursor: pointer; }
+.workspace-sidebar-toggle { position: fixed; top: 38px; left: 14px; z-index: 12; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; color: var(--ui-text-2); border: 0; border-radius: 8px; background: transparent; box-shadow: none; cursor: pointer; }
 .workspace-sidebar-toggle:hover { color: var(--ui-text); background: var(--ui-hover); }
 .workspace-sidebar-toggle:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
 .app-shell--sidebar-collapsed .workspace-view { padding-left: 64px; }
@@ -137,17 +137,18 @@ a:focus-visible {
 .primary-command,
 .secondary-command,
 .text-command {
-  min-height: 36px;
+  min-height: 32px;
   border-color: var(--ui-border);
   border-radius: 8px;
   color: var(--ui-text);
   background: var(--ui-surface);
   transition: background-color 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out;
 }
-.icon-button { width: 36px; height: 36px; }
+.icon-button { width: 32px; min-width: 32px; height: 32px; min-height: 32px; flex-basis: 32px; }
 .icon-button:hover:not(:disabled), .secondary-command:hover:not(:disabled) { background: var(--ui-hover); border-color: var(--ui-border-strong); }
 .icon-button:active:not(:disabled), .primary-command:active:not(:disabled), .secondary-command:active:not(:disabled) { transform: translateY(1px); }
-.primary-command { color: var(--ui-accent-contrast); border-color: var(--ui-accent); background: var(--ui-accent); }
+.primary-command { color: var(--ui-accent-contrast); border-color: var(--ui-accent); background: var(--ui-accent); font-weight: 650; }
+.primary-command.primary-command--core { height: 38px; min-height: 38px; gap: 8px; padding-inline: 14px; font-size: 13px; font-weight: 700; }
 .primary-command:hover:not(:disabled) { border-color: var(--ui-accent-hover); background: var(--ui-accent-hover); }
 .primary-command:disabled, .secondary-command:disabled, .icon-button:disabled { opacity: .62; }
 .primary-command:disabled { color: var(--ui-text-3); border-color: var(--ui-border); background: var(--ui-surface-2); }
@@ -205,8 +206,8 @@ a:focus-visible {
 .book-action-panel dt { color: var(--ui-text-3); white-space: nowrap; }
 .book-action-panel dd { margin: 0; overflow: hidden; color: var(--ui-text); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .book-action-buttons { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 16px; }
-.book-action-buttons .primary-command, .book-delete-button { width: 100%; min-width: 0; min-height: 34px; padding-inline: 8px; font-size: 12px; white-space: nowrap; }
-.book-action-buttons .primary-command { height: 34px; }
+.book-action-buttons .primary-command, .book-delete-button { width: 100%; min-width: 0; min-height: 32px; padding-inline: 8px; font-size: 12px; white-space: nowrap; }
+.book-action-buttons .primary-command { height: 32px; }
 .book-delete-button { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--ui-danger); border: 1px solid color-mix(in srgb, var(--ui-danger) 35%, var(--ui-border)); border-radius: 8px; background: transparent; cursor: pointer; }
 .book-delete-button:hover { background: color-mix(in srgb, var(--ui-danger) 8%, transparent); }
 .chapter-catalogue > header, .chapter-group > div, .chapter-group button { border-color: var(--ui-border); }
@@ -224,6 +225,12 @@ a:focus-visible {
 .clear-search { color: var(--ui-text-3); border-radius: 6px; }
 .clear-search:hover { color: var(--ui-text); background: var(--ui-hover); }
 .search-empty { min-height: 132px; display: grid; place-items: center; color: var(--ui-text-3); font-size: 12px; }
+.search-result-heading strong { color: var(--ui-text); }
+.search-result-heading span { color: var(--ui-text-3); }
+.search-book-results > button { color: var(--ui-text); border-color: var(--ui-border); border-radius: 10px; background: var(--ui-surface); transition: background-color 160ms ease-out, border-color 160ms ease-out; }
+.search-book-results > button:hover { border-color: var(--ui-border-strong); background: var(--ui-hover); }
+.search-book-results small, .search-book-results p { color: var(--ui-text-2); }
+.search-book-cover { color: var(--ui-accent); border-radius: 7px; background: var(--ui-selected); }
 .search-results { border-color: var(--ui-border); }
 .search-results > button { color: var(--ui-text); border-color: var(--ui-border); }
 .search-results > button:hover { background: var(--ui-surface); }
@@ -269,7 +276,7 @@ a:focus-visible {
 .settings-list .header-actions { display: flex; flex-wrap: nowrap; width: max-content; min-width: max-content; }
 .ui-select, .settings-select {
   min-width: 150px;
-  height: 38px;
+  height: 32px;
   padding: 0 34px 0 11px;
   appearance: none;
   color: var(--ui-text);
@@ -340,13 +347,13 @@ a:focus-visible {
 
 /* Native selects are replaced by this shared menu so every setting has the same affordance. */
 .ui-select { position: relative; min-width: 158px; height: auto; padding: 0; border: 0; background: transparent; }
-.ui-select-trigger { width: 100%; min-width: 158px; height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 11px 0 13px; color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface-2); cursor: pointer; font-size: 12px; text-align: left; transition: border-color 160ms ease-out, background-color 160ms ease-out, box-shadow 160ms ease-out; }
+.ui-select-trigger { width: 100%; min-width: 158px; height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 10px 0 12px; color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface-2); cursor: pointer; font-size: 12px; text-align: left; transition: border-color 160ms ease-out, background-color 160ms ease-out, box-shadow 160ms ease-out; }
 .ui-select-trigger:hover:not(:disabled) { border-color: var(--ui-border-strong); background: var(--ui-hover); }
 .ui-select-trigger:focus-visible { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-selected); outline: 0; }
 .ui-select.is-open .ui-select-trigger { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-selected); }
 .ui-select-trigger:disabled { color: var(--ui-text-3); opacity: .7; cursor: not-allowed; }
 .ui-select-menu { position: absolute; top: calc(100% + 7px); right: 0; z-index: 30; min-width: 100%; overflow: hidden; padding: 5px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-surface); box-shadow: 0 14px 32px rgba(28, 28, 27, .16); }
-.ui-select-option { width: 100%; min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 9px; color: var(--ui-text-2); border: 0; border-radius: 7px; background: transparent; cursor: pointer; font-size: 12px; text-align: left; }
+.ui-select-option { width: 100%; min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 9px; color: var(--ui-text-2); border: 0; border-radius: 7px; background: transparent; cursor: pointer; font-size: 12px; text-align: left; }
 .ui-select-option:hover { color: var(--ui-text); background: var(--ui-hover); }
 .ui-select-option.selected { color: var(--ui-accent); background: var(--ui-selected); font-weight: 650; }
 .ui-switch { position: relative; width: 42px; height: 24px; flex: 0 0 42px; padding: 0; border: 0; border-radius: 999px; background: var(--ui-border-strong); cursor: pointer; transition: background-color 160ms ease-out, opacity 160ms ease-out; }
@@ -460,15 +467,15 @@ a:focus-visible {
 .book-import-file small { color: var(--ui-text-3); font-size: 10.5px; }
 .book-import-file .secondary-command { white-space: nowrap; }
 .ui-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
-.danger-command-filled { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; color: #fff; border: 1px solid var(--ui-danger); border-radius: 8px; background: var(--ui-danger); cursor: pointer; }
+.danger-command-filled { height: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 11px; color: #fff; border: 1px solid var(--ui-danger); border-radius: 8px; background: var(--ui-danger); cursor: pointer; font-size: 12px; }
 .ui-dialog .primary-command,
 .ui-dialog .secondary-command,
 .ui-dialog .danger-command-filled,
 .close-dialog > footer .primary-command,
 .close-dialog > footer .secondary-command {
-  height: 34px;
-  min-height: 34px;
-  padding-inline: 12px;
+  height: 32px;
+  min-height: 32px;
+  padding-inline: 11px;
   border-radius: 7px;
   font-size: 12px;
 }
@@ -484,11 +491,13 @@ a:focus-visible {
 .close-dialog > p, .remember-close-choice { color: var(--ui-text-2); }
 .remember-close-choice { min-height: 34px; padding: 0 2px; border: 0; background: transparent; }
 .remember-close-choice input { accent-color: var(--ui-accent); }
-.close-dialog > header .icon-button { width: 34px; min-width: 34px; height: 34px; min-height: 34px; flex: 0 0 34px; aspect-ratio: 1; padding: 0; color: var(--ui-text-2); border: 0; border-radius: 8px; background: transparent; }
+.close-dialog > header .icon-button { width: 32px; min-width: 32px; height: 32px; min-height: 32px; flex: 0 0 32px; aspect-ratio: 1; padding: 0; color: var(--ui-text-2); border: 0; border-radius: 8px; background: transparent; }
 .close-dialog > header .icon-button:hover:not(:disabled) { color: var(--ui-text); border-color: transparent; background: var(--ui-hover); }
 
 .global-update-status header, .global-update-status p { color: var(--ui-text); }
-.global-update-status header .icon-button { color: var(--ui-text-2); }
+.global-update-status header .global-update-close { color: var(--ui-text-3); }
+.global-update-status header .global-update-close:hover:not(:disabled) { color: var(--ui-danger); border-color: transparent; background: color-mix(in srgb, var(--ui-danger) 10%, transparent); }
+.global-update-status header .global-update-close:focus-visible { outline-color: var(--ui-danger); }
 .global-update-progress { background: var(--ui-border); }
 .global-update-progress span { background: var(--ui-accent); }
 

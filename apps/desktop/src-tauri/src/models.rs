@@ -177,6 +177,18 @@ pub struct SaveProgressInput {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BookSearchResult {
+    pub book_id: String,
+    pub title: String,
+    pub author: String,
+    pub description: String,
+    pub cover_data_url: Option<String>,
+    pub chapter_count: i64,
+    pub current_chapter: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub book_id: String,
     pub book_title: String,
@@ -185,6 +197,13 @@ pub struct SearchResult {
     pub kind: String,
     pub chapter_title: String,
     pub snippet: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibrarySearchResults {
+    pub books: Vec<BookSearchResult>,
+    pub chapters: Vec<SearchResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

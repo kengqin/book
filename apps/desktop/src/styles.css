@@ -32,12 +32,13 @@ button { letter-spacing: 0; }
 .workspace-header p { margin: 0 0 6px; color: #6f7c76; font-size: 10px; font-weight: 800; }
 .workspace-header h1 { margin: 0; color: #1c2825; font-family: "Noto Serif SC", SimSun, serif; font-size: 26px; letter-spacing: 0; }
 .header-actions { display: flex; align-items: center; gap: 8px; }
-.icon-button, .primary-command, .secondary-command, .text-command { height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #c8cec7; background: #fff; color: #2d3a36; cursor: pointer; }
-.icon-button { width: 38px; padding: 0; }
-.primary-command { padding: 0 14px; color: #fff; border-color: #27665d; background: #27665d; font-weight: 700; }
+.icon-button, .primary-command, .secondary-command, .text-command { height: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #2d3a36; border: 1px solid #c8cec7; background: #fff; cursor: pointer; font-size: 12px; line-height: 1; text-decoration: none; }
+.icon-button { width: 32px; min-width: 32px; flex: 0 0 32px; padding: 0; }
+.primary-command { padding: 0 11px; color: #fff; border-color: #27665d; background: #27665d; font-weight: 650; }
 .primary-command:disabled { color: #7e8984; border-color: #d4d8d3; background: #e7e9e5; cursor: not-allowed; }
-.secondary-command { padding: 0 13px; }
+.secondary-command { padding: 0 10px; }
 .text-command { justify-content: flex-start; height: 32px; padding: 0; border: 0; background: transparent; }
+.primary-command.primary-command--core { height: 38px; min-height: 38px; gap: 8px; padding-inline: 14px; font-size: 13px; font-weight: 700; }
 .danger-command, .danger-icon { color: #a43d32; }
 .view-status, .empty-library { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 8px; color: #74817b; }
 .view-status--error { color: #a43d32; }
@@ -64,7 +65,21 @@ button { letter-spacing: 0; }
 .search-control { height: 48px; display: flex; align-items: center; gap: 11px; margin-top: 24px; padding: 0 15px; border: 1px solid #cbd0ca; background: #fff; }
 .search-control input { flex: 1; border: 0; outline: 0; background: transparent; }
 .clear-search { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: #6d7974; border: 0; background: transparent; cursor: pointer; }
-.search-results { display: grid; margin-top: 18px; border-top: 1px solid #d7dbd4; }
+.search-output { display: grid; gap: 28px; margin-top: 22px; }
+.search-result-section { min-width: 0; }
+.search-result-heading { min-height: 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.search-result-heading strong { font-size: 13px; }
+.search-result-heading span { color: #6c7973; font-size: 11px; }
+.search-book-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.search-book-results > button { min-width: 0; min-height: 88px; display: grid; grid-template-columns: 46px minmax(0, 1fr) 20px; align-items: center; gap: 12px; padding: 12px; color: #27332f; text-align: left; border: 1px solid #d7dbd4; background: #fff; cursor: pointer; }
+.search-book-results > button > div { min-width: 0; display: grid; gap: 4px; }
+.search-book-results small, .search-book-results p { color: #6c7973; }
+.search-book-results small { font-size: 10px; }
+.search-book-results strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.search-book-results p { overflow: hidden; margin: 0; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.search-book-cover { width: 46px; height: 60px; display: grid; place-items: center; overflow: hidden; color: #16725b; background: #e4f2ed; }
+.search-book-cover img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.search-results { display: grid; margin-top: 10px; border-top: 1px solid #d7dbd4; }
 .search-results > button { min-height: 92px; display: grid; grid-template-columns: 1fr 24px; align-items: center; gap: 18px; padding: 14px 8px; text-align: left; color: #27332f; border: 0; border-bottom: 1px solid #d7dbd4; background: transparent; cursor: pointer; }
 .search-results > button:hover { background: #fff; }
 .search-results > button div { min-width: 0; display: grid; gap: 5px; }
@@ -77,7 +92,7 @@ button { letter-spacing: 0; }
 .settings-list span { color: #738079; font-size: 11px; overflow-wrap: anywhere; }
 .settings-list .backup-setting, .settings-list .data-directory-setting, .settings-list .database-file-setting, .settings-list .close-behavior-setting, .settings-list .updates-setting { grid-template-columns: 28px minmax(0, 1fr) auto; }
 .settings-list .updates-setting > a { text-decoration: none; }
-.settings-select { min-width: 150px; height: 38px; padding: 0 34px 0 11px; color: #2d3a36; border: 1px solid #c8cec7; border-radius: 0; outline: 0; background: #fff; }
+.settings-select { min-width: 150px; height: 32px; padding: 0 34px 0 11px; color: #2d3a36; border: 1px solid #c8cec7; border-radius: 0; outline: 0; background: #fff; }
 .settings-select:focus { border-color: #27665d; box-shadow: 0 0 0 1px #27665d; }
 .settings-select:disabled { color: #7e8984; background: #e7e9e5; }
 
@@ -121,8 +136,9 @@ button { letter-spacing: 0; }
 .global-update-status { position: fixed; right: 22px; bottom: 22px; z-index: 20; width: min(360px, calc(100vw - 44px)); display: grid; gap: 11px; padding: 15px 16px 16px; color: #eaf0ec; border: 1px solid #101916; background: #22312d; box-shadow: 0 12px 30px rgba(14,24,20,.2); }
 .global-update-status header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .global-update-status header div { display: flex; align-items: center; gap: 8px; }
-.global-update-status .icon-button { width: 28px; height: 28px; color: #c8d2cd; border-color: transparent; background: transparent; }
-.global-update-status .icon-button:hover { color: #fff; border-color: #64736d; }
+.global-update-status .global-update-close { width: 32px; min-width: 32px; height: 32px; min-height: 32px; flex: 0 0 32px; aspect-ratio: 1; padding: 0; color: #6f7c76; border: 0; border-radius: 8px; background: transparent; }
+.global-update-status .global-update-close:hover:not(:disabled) { color: #9b3b31; border-color: transparent; background: #f7e9e7; }
+.global-update-status .global-update-close:active:not(:disabled) { transform: scale(.96); }
 .global-update-status p { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; font-size: 12px; }
 .global-update-status p strong { color: #f3dfac; }
 .global-update-status small { color: #aab7b1; font-size: 10px; }
@@ -233,11 +249,11 @@ button { letter-spacing: 0; }
 .note-editor-commandbar > span.saving { color: #8b671f; }
 .note-editor-commandbar > span.error { color: #9b3b31; }
 .note-editor-commandbar > div { display: flex; align-items: center; gap: 6px; }
-.note-editor-commandbar .icon-button { width: 34px; height: 34px; }
-.note-editor-commandbar .secondary-command { height: 34px; padding-inline: 10px; }
+.note-editor-commandbar .icon-button { width: 32px; height: 32px; }
+.note-editor-commandbar .secondary-command { height: 32px; min-height: 32px; padding-inline: 10px; }
 .note-export-control { position: relative; }
 .note-export-menu { position: absolute; z-index: 12; top: 39px; right: 0; width: 142px; padding: 5px; border: 1px solid #c8cec7; background: #fff; box-shadow: 0 10px 24px rgba(26,38,33,.16); }
-.note-export-menu button { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 9px; color: #2d3a36; text-align: left; border: 0; background: transparent; cursor: pointer; }
+.note-export-menu button { width: 100%; height: 32px; display: flex; align-items: center; gap: 9px; padding: 0 9px; color: #2d3a36; text-align: left; border: 0; background: transparent; cursor: pointer; font-size: 12px; }
 .note-export-menu button:hover { background: #eef2ed; }
 .note-title-block { flex: 0 0 auto; width: min(840px, 100%); margin: 0 auto; padding: 28px 42px 18px; }
 .note-title-input { width: 100%; padding: 0; color: #1f2b27; border: 0; outline: 0; background: transparent; font-family: "Noto Serif SC", SimSun, serif; font-size: 27px; font-weight: 700; letter-spacing: 0; }

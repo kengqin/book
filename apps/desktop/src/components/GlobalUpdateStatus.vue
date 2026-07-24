@@ -53,7 +53,7 @@ function close() {
   <aside v-if="visible" class="global-update-status" aria-live="polite">
     <header>
       <div><Download :size="17" /><strong>应用更新</strong></div>
-      <button v-if="updateStage === 'downloading'" type="button" class="icon-button" title="取消下载" @click="close"><X :size="15" /></button>
+      <button v-if="updateStage === 'downloading'" type="button" class="icon-button global-update-close" title="取消下载" aria-label="取消下载" @click="close"><X :size="16" /></button>
     </header>
     <p v-if="updateStage === 'available'">发现新版本 v{{ availableUpdate?.version }}</p>
     <p v-else-if="updateStage === 'downloading'">正在下载 v{{ availableUpdate?.version }} <strong>{{ updateProgress }}%</strong></p>

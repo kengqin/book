@@ -1,8 +1,41 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.8",
+  "latest": "0.6.9",
   "releases": [
+    {
+      "version": "0.6.9",
+      "date": "2026-07-24",
+      "title": "搜索与桌面交互优化",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.8",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.9",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.9/NovelLibrary_0.6.9_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "全文搜索新增独立的小说匹配分区，书名或作者命中时展示真实封面、书名、作者、章节数和简介，并可直接进入小说详情"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "书名与作者搜索从章节查询中拆分，避免整本小说的章节占满结果上限，章名和正文结果继续直达阅读位置",
+            "小说搜索卡片重新整理信息层级，无封面时使用书本图标占位",
+            "桌面端普通命令、图标、弹窗和设置控件统一为紧凑规格，书架导入操作保留核心按钮尺寸",
+            "应用更新浮层的取消下载按钮改为固定正方形，并优化悬浮、按下和键盘焦点反馈"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.8",
       "date": "2026-07-24",
