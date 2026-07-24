@@ -1,14 +1,15 @@
 {
   "name": "novel-library-reader",
   "displayName": "小说书库阅读器",
-  "description": "在 VS Code 和 Cursor 代码行内阅读本地小说，并与小说书库桌面端同步。",
-  "version": "0.4.7",
+  "description": "小说书库桌面端的 Code OSS 阅读扩展，支持书架与章节浏览、五行只读正文、自动跨章、阅读进度同步及段落/行尾显示模式。",
+  "version": "0.4.15",
   "publisher": "novel-library",
   "license": "MIT",
   "engines": { "vscode": ">=1.85.0" },
   "categories": ["Other"],
   "main": "extension.js",
-  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onView:novelLibrary.wheelReader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.selectBook", "onCommand:novelLibrary.selectChapter", "onCommand:novelLibrary.importFile", "onCommand:novelLibrary.toggleDisplayMode", "onCommand:novelLibrary.configureShortcuts"],
+  "icon": "media/novel-library.png",
+  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.selectBook", "onCommand:novelLibrary.selectChapter", "onCommand:novelLibrary.importFile", "onCommand:novelLibrary.toggleDisplayMode", "onCommand:novelLibrary.configureShortcuts"],
   "contributes": {
     "commands": [
       { "command": "novelLibrary.openReader", "title": "小说书库: 显示或隐藏代码内阅读", "icon": "$(eye)" },
@@ -18,8 +19,8 @@
       { "command": "novelLibrary.selectChapter", "title": "小说书库: 选择章节" },
       { "command": "novelLibrary.nextLine", "title": "下一行", "icon": "$(arrow-down)" },
       { "command": "novelLibrary.previousLine", "title": "上一行", "icon": "$(arrow-up)" },
-      { "command": "novelLibrary.nextChapter", "title": "下一章", "icon": "$(arrow-right)" },
-      { "command": "novelLibrary.previousChapter", "title": "上一章", "icon": "$(arrow-left)" },
+      { "command": "novelLibrary.nextChapter", "title": "下一章", "icon": "$(arrow-right)", "enablement": "novelLibrary.hasNextChapter" },
+      { "command": "novelLibrary.previousChapter", "title": "上一章", "icon": "$(arrow-left)", "enablement": "novelLibrary.hasPreviousChapter" },
       { "command": "novelLibrary.refreshLibrary", "title": "刷新书架", "icon": "$(refresh)" },
       { "command": "novelLibrary.toggleDisplayMode", "title": "切换阅读显示模式", "icon": "$(layout)" },
       { "command": "novelLibrary.showShortcuts", "title": "小说书库: 查看快捷键", "icon": "$(keyboard)" },
@@ -43,8 +44,7 @@
     },
     "views": {
       "novelLibrary": [
-        { "id": "novelLibrary.reader", "name": "小说阅读器", "visibility": "visible" },
-        { "id": "novelLibrary.wheelReader", "name": "滚轮阅读区", "type": "webview", "visibility": "visible" }
+        { "id": "novelLibrary.reader", "name": "小说阅读器", "visibility": "visible" }
       ]
     },
     "menus": {
@@ -67,5 +67,5 @@
       ]
     }
   },
-  "scripts": { "validate": "node --check extension.js && node --check bridge.js && node --check reader-utils.js" }
+  "scripts": { "validate": "node --check extension.js && node --check bridge.js && node --check reader-utils.js && node --check wheel-bridge.js && node --test wheel-bridge.test.mjs" }
 }

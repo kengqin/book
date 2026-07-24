@@ -30,7 +30,9 @@ try {
     'extension.vsixmanifest',
     'NovelLibrary.VisualStudio.dll',
     'NovelLibrary.VisualStudio.pkgdef',
-    'LICENSE'
+    'LICENSE',
+    'Icon.png',
+    'README.md'
   )
   foreach ($entry in $requiredEntries) {
     if ($entries -notcontains $entry) { throw "Official VSIX is missing required entry: $entry" }

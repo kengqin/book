@@ -3,36 +3,36 @@
   "plugins": [
     {
       "id": "vscode",
-      "label": "小说书库 · VS Code / Cursor 阅读器",
+      "label": "小说书库 · VS Code 阅读器",
       "kind": "vscode",
-      "version": "0.4.7",
+      "version": "0.4.15",
       "identifier": "novel-library.novel-library-reader",
-      "description": "在 VS Code 和 Cursor 代码行内阅读小说，固定显示 5 行，可切换段落或行尾模式并同步桌面端进度。",
+      "description": "面向 VS Code、Cursor、Trae、Qoder、Windsurf、Kiro 等 Code OSS 编辑器的配套扩展，支持书架与章节浏览、五行只读正文、自动跨章、固定进度栏及桌面端进度同步。",
       "packageType": "VSIX",
-      "supportedIdes": ["Visual Studio Code", "Cursor"],
-      "file": "novel-library-reader-0.4.7.vsix"
+      "supportedIdes": ["Visual Studio Code", "VS Code Insiders", "Cursor", "Trae", "Qoder", "Windsurf", "Kiro", "VSCodium", "Void", "Code - OSS", "Positron", "PearAI"],
+      "file": "novel-library-reader-0.4.15.vsix"
     },
     {
       "id": "intellij",
       "label": "小说书库 · JetBrains 阅读器",
       "kind": "jetbrains",
-      "version": "0.4.7",
+      "version": "0.4.15",
       "identifier": "com.kengqin.novellibrary.reader",
-      "description": "在 IntelliJ IDEA、PyCharm、WebStorm 等 JetBrains IDE 中固定阅读 5 行小说，可切换段落或行尾模式并同步桌面端进度。",
+      "description": "面向 IntelliJ IDEA、PyCharm、WebStorm、Android Studio 等 JetBrains IDE 的配套插件，支持五行只读正文、自动跨章、固定进度栏、悬停滚轮及桌面端进度同步。",
       "packageType": "ZIP",
       "supportedIdes": ["IntelliJ IDEA", "PyCharm", "WebStorm", "Android Studio", "Rider", "CLion", "GoLand", "RubyMine"],
-      "file": "novel-library-intellij-0.4.7.zip"
+      "file": "novel-library-intellij-0.4.15.zip"
     },
     {
       "id": "visual-studio",
       "label": "小说书库 · Visual Studio 阅读器",
       "kind": "visual-studio",
-      "version": "0.4.7",
+      "version": "0.4.15",
       "identifier": "NovelLibrary.VisualStudio",
-      "description": "在 Visual Studio 2022 中打开小说阅读面板，可切换段落或行尾模式，并与桌面端书库同步。",
+      "description": "面向 Visual Studio 2022 的配套扩展，支持书架与章节浏览、五行只读正文、自动跨章、固定进度栏、段落/行尾模式、悬停滚轮及桌面端进度同步。",
       "packageType": "VSIX",
       "supportedIdes": ["Visual Studio 2022"],
-      "file": "novel-library-visual-studio-0.4.7.vsix"
+      "file": "novel-library-visual-studio-0.4.15.vsix"
     }
   ]
 }

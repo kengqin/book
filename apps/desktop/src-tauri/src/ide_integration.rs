@@ -11,7 +11,9 @@ use std::{
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
+use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager};
 
 fn decode_process_output(bytes: &[u8]) -> String {
@@ -86,6 +88,9 @@ pub struct IdeTarget {
     installed: bool,
     installed_version: Option<String>,
     can_uninstall: bool,
+    wheel_injection_available: bool,
+    wheel_injection_enabled: bool,
+    wheel_injection_needs_repair: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -109,6 +114,23 @@ pub struct InstallIdePluginInput {
 pub struct UninstallIdePluginInput {
     target_id: String,
     plugin_id: String,
+    #[serde(default)]
+    close_running_ide: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetCodeOssWheelInjectionInput {
+    target_id: String,
+    enabled: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeOssWheelInjectionResult {
+    target: String,
+    enabled: bool,
+    message: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,6 +146,28 @@ pub struct IdeInstallResult {
 
 const JETBRAINS_CDS_WARNING: &str =
     "Sharing is only supported for boot loader classes because bootstrap classpath has been appended";
+const WHEEL_INJECTION_SCRIPT_NAME: &str = "novel-library-wheel-injection.js";
+const WHEEL_INJECTION_START: &str = "<!-- novel-library-wheel-injection:start -->";
+const WHEEL_INJECTION_END: &str = "<!-- novel-library-wheel-injection:end -->";
+const WHEEL_INJECTION_SCRIPT: &str =
+    include_str!("../resources/ide-plugins/code-oss-wheel-injection.js");
+const WORKBENCH_CHECKSUM_KEY: &str = "vs/code/electron-browser/workbench/workbench.html";
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WheelInjectionMetadata {
+    schema_version: u32,
+    original_html_sha256: String,
+    injected_html_sha256: String,
+}
+
+struct CodeOssWorkbench {
+    html: PathBuf,
+    product: PathBuf,
+    script: PathBuf,
+    backup: PathBuf,
+    metadata: PathBuf,
+}
 
 fn clean_installer_diagnostic(kind: &str, output: &[u8]) -> String {
     let decoded = decode_process_output(output);
@@ -197,14 +241,16 @@ fn target_executable_is_running(target: &IdeTarget) -> bool {
     }
 }
 
-fn jetbrains_running_error(target: &IdeTarget) -> String {
+fn jetbrains_running_error(target: &IdeTarget, action: &str) -> String {
     format!(
-        "IDE_RUNNING: {} 正在运行，Windows 无法替换正在使用的插件文件。请保存工作并完全关闭该 IDE（包括后台进程），然后再次点击更新；现有插件不会被改动。",
-        target.label
+        "IDE_RUNNING: {} 正在运行，Windows 无法{}正在使用的插件文件。请保存工作并完全关闭该 IDE（包括后台进程），然后再次点击{}；现有插件不会被改动。",
+        target.label,
+        if action == "卸载" { "删除" } else { "替换" },
+        action
     )
 }
 
-fn close_target_ide_gracefully(target: &IdeTarget) -> Result<(), String> {
+fn close_target_ide_gracefully(target: &IdeTarget, action: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
         let process_name = Path::new(&target.path)
@@ -233,8 +279,8 @@ fn close_target_ide_gracefully(target: &IdeTarget) -> Result<(), String> {
             .map_err(|error| format!("无法请求关闭 {}：{error}", target.label))?;
         if output.status.code() == Some(2) {
             return Err(format!(
-                "IDE_CLOSE_PENDING: 已向 {} 发送正常关闭请求，但它仍在运行。请在 IDE 中处理未保存文件或确认框，完全退出后再次点击更新；不会强制结束进程。",
-                target.label
+                "IDE_CLOSE_PENDING: 已向 {} 发送正常关闭请求，但它仍在运行。请在 IDE 中处理未保存文件或确认框，完全退出后再次点击{}；不会强制结束进程。",
+                target.label, action
             ));
         }
         if !output.status.success() {
@@ -265,13 +311,20 @@ fn plugin_directory(app: &AppHandle) -> Result<PathBuf, String> {
         .path()
         .resource_dir()
         .map_err(|error| error.to_string())?;
-    let candidates = [
-        resource_dir.join("resources").join("ide-plugins"),
-        resource_dir.join("ide-plugins"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("ide-plugins"),
-    ];
+    let bundled_nested = resource_dir.join("resources").join("ide-plugins");
+    let bundled_direct = resource_dir.join("ide-plugins");
+    let development = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("resources")
+        .join("ide-plugins");
+    // Tauri copies resources into target/debug, but that cache is not always
+    // refreshed while `tauri dev` is running. Prefer the source resource in a
+    // debug build so labels, versions and artifacts cannot be shadowed by a
+    // stale copied manifest. Release builds still prefer bundled resources.
+    let candidates = if cfg!(debug_assertions) {
+        [development, bundled_nested, bundled_direct]
+    } else {
+        [bundled_nested, bundled_direct, development]
+    };
     let manifest_candidates = candidates
         .into_iter()
         .filter(|path| path.join("manifest.json").is_file())
@@ -319,6 +372,102 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+struct CodeOssTargetSpec {
+    command: &'static str,
+    label: &'static str,
+    extension_directories: &'static [&'static str],
+}
+
+const CODE_OSS_TARGETS: &[CodeOssTargetSpec] = &[
+    CodeOssTargetSpec {
+        command: "code.cmd",
+        label: "Visual Studio Code",
+        extension_directories: &[".vscode"],
+    },
+    CodeOssTargetSpec {
+        command: "code-insiders.cmd",
+        label: "Visual Studio Code Insiders",
+        extension_directories: &[".vscode-insiders"],
+    },
+    CodeOssTargetSpec {
+        command: "cursor.cmd",
+        label: "Cursor",
+        extension_directories: &[".cursor"],
+    },
+    CodeOssTargetSpec {
+        command: "trae.cmd",
+        label: "Trae",
+        extension_directories: &[".trae-cn", ".trae"],
+    },
+    CodeOssTargetSpec {
+        command: "qoder.cmd",
+        label: "Qoder",
+        extension_directories: &[".qoder"],
+    },
+    CodeOssTargetSpec {
+        command: "windsurf.cmd",
+        label: "Windsurf",
+        extension_directories: &[".windsurf"],
+    },
+    CodeOssTargetSpec {
+        command: "kiro.cmd",
+        label: "Kiro",
+        extension_directories: &[".kiro"],
+    },
+    CodeOssTargetSpec {
+        command: "codium.cmd",
+        label: "VSCodium",
+        extension_directories: &[".vscode-oss"],
+    },
+    CodeOssTargetSpec {
+        command: "void.cmd",
+        label: "Void",
+        extension_directories: &[".void"],
+    },
+    CodeOssTargetSpec {
+        command: "code-oss.cmd",
+        label: "Code - OSS",
+        extension_directories: &[".vscode-oss"],
+    },
+    CodeOssTargetSpec {
+        command: "positron.cmd",
+        label: "Positron",
+        extension_directories: &[".positron"],
+    },
+    CodeOssTargetSpec {
+        command: "pearai.cmd",
+        label: "PearAI",
+        extension_directories: &[".pearai"],
+    },
+];
+
+fn code_oss_spec_for_command(command: &str) -> Option<&'static CodeOssTargetSpec> {
+    CODE_OSS_TARGETS
+        .iter()
+        .find(|spec| spec.command.eq_ignore_ascii_case(command))
+}
+
+fn code_oss_spec_for_target(target: &IdeTarget) -> Option<&'static CodeOssTargetSpec> {
+    CODE_OSS_TARGETS
+        .iter()
+        .find(|spec| spec.label == target.label)
+}
+
+fn code_oss_extension_directories_for_target(target: &IdeTarget) -> Vec<&'static str> {
+    let Some(spec) = code_oss_spec_for_target(target) else {
+        return Vec::new();
+    };
+    if spec.command.eq_ignore_ascii_case("trae.cmd") {
+        let path = target.path.to_ascii_lowercase().replace('\\', "/");
+        return if path.contains("trae-cn") || path.contains("trae cn") {
+            vec![".trae-cn"]
+        } else {
+            vec![".trae"]
+        };
+    }
+    spec.extension_directories.to_vec()
+}
+
 fn vscode_script_process(target: &IdeTarget, arguments: &[&str]) -> Result<Command, String> {
     let launcher = PathBuf::from(target.path.trim().trim_matches('"'));
     let is_script = launcher
@@ -357,6 +506,253 @@ fn scan_executables(root: &Path, names: &[&str], depth: usize, output: &mut Vec<
             output.push(path);
         }
     }
+}
+
+fn sha256_hex(payload: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(payload))
+}
+
+fn workbench_integrity_checksum(payload: &[u8]) -> String {
+    STANDARD_NO_PAD.encode(Sha256::digest(payload))
+}
+
+fn code_oss_workbench(target: &IdeTarget) -> Option<CodeOssWorkbench> {
+    let launcher = PathBuf::from(target.path.trim().trim_matches('"'));
+    let install_root = launcher.parent()?.parent()?;
+    let relative = Path::new("out")
+        .join("vs")
+        .join("code")
+        .join("electron-browser")
+        .join("workbench")
+        .join("workbench.html");
+    let launcher_payload = fs::read_to_string(&launcher).ok()?;
+    let normalized_launcher = launcher_payload.replace('/', "\\");
+    let lower_launcher = normalized_launcher.to_ascii_lowercase();
+    let launcher_root_marker = "%~dp0..\\";
+    let app_out_marker = "resources\\app\\out\\";
+    let active_app_root = lower_launcher
+        .find(launcher_root_marker)
+        .map(|start| start + launcher_root_marker.len())
+        .and_then(|start| {
+            lower_launcher[start..]
+                .find(app_out_marker)
+                .map(|end| (start, start + end))
+        })
+        .map(|(start, end)| normalized_launcher[start..end].trim_matches('\\'))
+        .map(|relative| {
+            if relative.is_empty() {
+                install_root.join("resources").join("app")
+            } else {
+                install_root.join(relative).join("resources").join("app")
+            }
+        });
+    if let Some(app_root) = active_app_root {
+        let html = app_root.join(&relative);
+        if html.is_file() {
+            return code_oss_workbench_from_html(html);
+        }
+    }
+    let mut app_roots = vec![install_root.join("resources").join("app")];
+    app_roots.extend(
+        fs::read_dir(install_root)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+            .map(|entry| entry.path().join("resources").join("app")),
+    );
+    let candidates = app_roots
+        .into_iter()
+        .map(|app| app.join(&relative))
+        .filter(|path| path.is_file());
+    let html = candidates.max_by_key(|path| {
+        fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .ok()
+    })?;
+    code_oss_workbench_from_html(html)
+}
+
+fn code_oss_workbench_from_html(html: PathBuf) -> Option<CodeOssWorkbench> {
+    let app_root = html.ancestors().nth(6)?;
+    let product = app_root.join("product.json");
+    if !product.is_file() {
+        return None;
+    }
+    let directory = html.parent()?;
+    Some(CodeOssWorkbench {
+        html: html.clone(),
+        product,
+        script: directory.join(WHEEL_INJECTION_SCRIPT_NAME),
+        backup: directory.join("workbench.html.novel-library-reader.backup"),
+        metadata: directory.join("novel-library-wheel-injection.json"),
+    })
+}
+
+fn remove_wheel_injection(payload: &str) -> Result<String, String> {
+    let start = payload.find(WHEEL_INJECTION_START);
+    let end = payload.find(WHEEL_INJECTION_END);
+    match (start, end) {
+        (None, None) => Ok(payload.to_string()),
+        (Some(start), Some(end)) if end >= start => {
+            let end = end + WHEEL_INJECTION_END.len();
+            let mut restored = payload.to_string();
+            restored.replace_range(start..end, "");
+            Ok(restored)
+        }
+        _ => Err("检测到不完整的增强滚轮注入标记，未修改编辑器文件".to_string()),
+    }
+}
+
+fn add_wheel_injection(payload: &str) -> Result<String, String> {
+    let clean = remove_wheel_injection(payload)?;
+    let closing = clean
+        .rfind("</html>")
+        .ok_or_else(|| "目标工作台 HTML 结构不受支持".to_string())?;
+    let block = format!(
+        "\n\t{WHEEL_INJECTION_START}\n\t<script src=\"./{WHEEL_INJECTION_SCRIPT_NAME}\" type=\"module\"></script>\n\t{WHEEL_INJECTION_END}\n"
+    );
+    let mut injected = clean;
+    injected.insert_str(closing, &block);
+    Ok(injected)
+}
+
+fn update_workbench_checksum(product: &Path, html_payload: &[u8]) -> Result<(), String> {
+    let payload = fs::read_to_string(product)
+        .map_err(|error| format!("无法读取编辑器完整性清单：{error}"))?;
+    let pattern = regex::Regex::new(&format!(
+        r#"("{}"\s*:\s*")[^"]*(")"#,
+        regex::escape(WORKBENCH_CHECKSUM_KEY)
+    ))
+    .map_err(|error| error.to_string())?;
+    if !pattern.is_match(&payload) {
+        return Ok(());
+    }
+    let checksum = workbench_integrity_checksum(html_payload);
+    let updated = pattern.replace(&payload, |captures: &regex::Captures<'_>| {
+        format!("{}{}{}", &captures[1], checksum, &captures[2])
+    });
+    fs::write(product, updated.as_bytes())
+        .map_err(|error| format!("无法更新编辑器完整性清单：{error}"))
+}
+
+fn code_oss_wheel_injection_state(target: &IdeTarget) -> (bool, bool, bool) {
+    let Some(workbench) = code_oss_workbench(target) else {
+        return (false, false, false);
+    };
+    let html = fs::read_to_string(&workbench.html).unwrap_or_default();
+    let has_start = html.contains(WHEEL_INJECTION_START);
+    let has_end = html.contains(WHEEL_INJECTION_END);
+    let script_matches = fs::read_to_string(&workbench.script)
+        .is_ok_and(|payload| payload == WHEEL_INJECTION_SCRIPT);
+    let enabled = has_start && has_end && script_matches;
+    let needs_repair = (has_start || has_end || workbench.script.is_file()) && !enabled;
+    (true, enabled, needs_repair)
+}
+
+fn apply_code_oss_wheel_state(target: &mut IdeTarget) {
+    if target.kind != "vscode" {
+        return;
+    }
+    let (available, enabled, needs_repair) = code_oss_wheel_injection_state(target);
+    target.wheel_injection_available = available;
+    target.wheel_injection_enabled = enabled;
+    target.wheel_injection_needs_repair = needs_repair;
+}
+
+fn restore_optional_file(path: &Path, original: &Option<Vec<u8>>) {
+    match original {
+        Some(payload) => {
+            let _ = fs::write(path, payload);
+        }
+        None => {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn enable_code_oss_wheel_injection(workbench: &CodeOssWorkbench) -> Result<(), String> {
+    let original_html =
+        fs::read(&workbench.html).map_err(|error| format!("无法读取编辑器工作台：{error}"))?;
+    let original_product = fs::read(&workbench.product)
+        .map_err(|error| format!("无法读取编辑器完整性清单：{error}"))?;
+    let original_script = fs::read(&workbench.script).ok();
+    let original_backup = fs::read(&workbench.backup).ok();
+    let original_metadata = fs::read(&workbench.metadata).ok();
+    let clean_html = remove_wheel_injection(&String::from_utf8_lossy(&original_html))?;
+    let injected_html = add_wheel_injection(&clean_html)?;
+    let metadata = WheelInjectionMetadata {
+        schema_version: 1,
+        original_html_sha256: sha256_hex(clean_html.as_bytes()),
+        injected_html_sha256: sha256_hex(injected_html.as_bytes()),
+    };
+    let operation = (|| -> Result<(), String> {
+        fs::write(&workbench.backup, clean_html.as_bytes())
+            .map_err(|error| format!("无法创建工作台备份：{error}"))?;
+        fs::write(&workbench.script, WHEEL_INJECTION_SCRIPT.as_bytes())
+            .map_err(|error| format!("无法写入增强滚轮脚本：{error}"))?;
+        fs::write(&workbench.html, injected_html.as_bytes())
+            .map_err(|error| format!("无法写入编辑器工作台：{error}"))?;
+        update_workbench_checksum(&workbench.product, injected_html.as_bytes())?;
+        fs::write(
+            &workbench.metadata,
+            serde_json::to_vec_pretty(&metadata).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| format!("无法写入增强滚轮状态：{error}"))?;
+        Ok(())
+    })();
+    if let Err(error) = operation {
+        let _ = fs::write(&workbench.html, &original_html);
+        let _ = fs::write(&workbench.product, &original_product);
+        restore_optional_file(&workbench.script, &original_script);
+        restore_optional_file(&workbench.backup, &original_backup);
+        restore_optional_file(&workbench.metadata, &original_metadata);
+        return Err(format!("{error}；已自动回滚，编辑器文件未保持修改"));
+    }
+    Ok(())
+}
+
+fn disable_code_oss_wheel_injection(workbench: &CodeOssWorkbench) -> Result<(), String> {
+    let original_html =
+        fs::read(&workbench.html).map_err(|error| format!("无法读取编辑器工作台：{error}"))?;
+    let original_product = fs::read(&workbench.product)
+        .map_err(|error| format!("无法读取编辑器完整性清单：{error}"))?;
+    let original_script = fs::read(&workbench.script).ok();
+    let current_html = String::from_utf8_lossy(&original_html);
+    let metadata = fs::read(&workbench.metadata)
+        .ok()
+        .and_then(|payload| serde_json::from_slice::<WheelInjectionMetadata>(&payload).ok());
+    let backup = fs::read(&workbench.backup).ok();
+    let restored = match (metadata, backup) {
+        (Some(metadata), Some(backup))
+            if metadata.schema_version == 1
+                && sha256_hex(&original_html) == metadata.injected_html_sha256
+                && sha256_hex(&backup) == metadata.original_html_sha256 =>
+        {
+            backup
+        }
+        _ => remove_wheel_injection(&current_html)?.into_bytes(),
+    };
+    let operation = (|| -> Result<(), String> {
+        fs::write(&workbench.html, &restored)
+            .map_err(|error| format!("无法恢复编辑器工作台：{error}"))?;
+        update_workbench_checksum(&workbench.product, &restored)?;
+        if workbench.script.is_file() {
+            fs::remove_file(&workbench.script)
+                .map_err(|error| format!("无法删除增强滚轮脚本：{error}"))?;
+        }
+        let _ = fs::remove_file(&workbench.backup);
+        let _ = fs::remove_file(&workbench.metadata);
+        Ok(())
+    })();
+    if let Err(error) = operation {
+        let _ = fs::write(&workbench.html, &original_html);
+        let _ = fs::write(&workbench.product, &original_product);
+        restore_optional_file(&workbench.script, &original_script);
+        return Err(format!("{error}；已自动回滚，编辑器文件未保持修改"));
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -413,6 +809,73 @@ fn jetbrains_registry_roots() -> Vec<PathBuf> {
     Vec::new()
 }
 
+#[cfg(windows)]
+fn code_oss_registry_roots() -> Vec<PathBuf> {
+    use winreg::{enums::*, RegKey};
+
+    let uninstall_path = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+    let products = [
+        "visual studio code",
+        "cursor",
+        "trae",
+        "qoder",
+        "windsurf",
+        "kiro",
+        "vscodium",
+        "void",
+        "code - oss",
+        "positron",
+        "pearai",
+    ];
+    let mut roots = Vec::new();
+    for hive in [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
+        for access in [KEY_READ | KEY_WOW64_64KEY, KEY_READ | KEY_WOW64_32KEY] {
+            let Ok(uninstall) = RegKey::predef(hive).open_subkey_with_flags(uninstall_path, access)
+            else {
+                continue;
+            };
+            for key_name in uninstall.enum_keys().flatten() {
+                let Ok(app) = uninstall.open_subkey_with_flags(&key_name, access) else {
+                    continue;
+                };
+                let display_name = app
+                    .get_value::<String, _>("DisplayName")
+                    .unwrap_or_default()
+                    .to_ascii_lowercase();
+                if !products
+                    .iter()
+                    .any(|product| display_name.contains(product))
+                {
+                    continue;
+                }
+                if let Ok(install_location) = app.get_value::<String, _>("InstallLocation") {
+                    let path = PathBuf::from(install_location.trim_matches(['"', ' ']));
+                    if path.is_dir() {
+                        roots.push(path);
+                    }
+                }
+                if let Ok(display_icon) = app.get_value::<String, _>("DisplayIcon") {
+                    let value = display_icon
+                        .trim()
+                        .trim_matches('"')
+                        .trim_end_matches(",0")
+                        .trim_matches('"');
+                    let path = PathBuf::from(value);
+                    if let Some(parent) = path.parent().filter(|parent| parent.is_dir()) {
+                        roots.push(parent.to_path_buf());
+                    }
+                }
+            }
+        }
+    }
+    roots
+}
+
+#[cfg(not(windows))]
+fn code_oss_registry_roots() -> Vec<PathBuf> {
+    Vec::new()
+}
+
 fn jetbrains_label(path: &Path) -> String {
     let install_name = path
         .parent()
@@ -445,17 +908,60 @@ fn jetbrains_label(path: &Path) -> String {
 
 fn detect_targets() -> Vec<IdeTarget> {
     let mut targets = Vec::new();
-    for (command, label) in [("code.cmd", "Visual Studio Code"), ("cursor.cmd", "Cursor")] {
-        if let Some(path) = find_on_path(command) {
-            targets.push(IdeTarget {
+    let mut code_oss_launchers = CODE_OSS_TARGETS
+        .iter()
+        .filter_map(|spec| find_on_path(spec.command))
+        .collect::<Vec<_>>();
+    if let Some(programs) = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .map(|path| path.join("Programs"))
+    {
+        scan_executables(
+            &programs,
+            &CODE_OSS_TARGETS
+                .iter()
+                .map(|spec| spec.command)
+                .collect::<Vec<_>>(),
+            5,
+            &mut code_oss_launchers,
+        );
+    }
+    for root in code_oss_registry_roots() {
+        scan_executables(
+            &root,
+            &CODE_OSS_TARGETS
+                .iter()
+                .map(|spec| spec.command)
+                .collect::<Vec<_>>(),
+            5,
+            &mut code_oss_launchers,
+        );
+    }
+    code_oss_launchers.sort();
+    code_oss_launchers.dedup();
+    for path in code_oss_launchers {
+        let Some(spec) = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .and_then(code_oss_spec_for_command)
+        else {
+            continue;
+        };
+        if path.is_file() {
+            let mut target = IdeTarget {
                 id: target_id("vscode", &path),
-                label: label.to_string(),
+                label: spec.label.to_string(),
                 kind: "vscode".to_string(),
                 path: path.display().to_string(),
                 installed: false,
                 installed_version: None,
                 can_uninstall: true,
-            });
+                wheel_injection_available: false,
+                wheel_injection_enabled: false,
+                wheel_injection_needs_repair: false,
+            };
+            apply_code_oss_wheel_state(&mut target);
+            targets.push(target);
         }
     }
 
@@ -504,6 +1010,9 @@ fn detect_targets() -> Vec<IdeTarget> {
             installed: false,
             installed_version: None,
             can_uninstall: false,
+            wheel_injection_available: false,
+            wheel_injection_enabled: false,
+            wheel_injection_needs_repair: false,
         });
     }
 
@@ -527,6 +1036,9 @@ fn detect_targets() -> Vec<IdeTarget> {
                 installed: false,
                 installed_version: None,
                 can_uninstall: false,
+                wheel_injection_available: false,
+                wheel_injection_enabled: false,
+                wheel_injection_needs_repair: false,
             });
         }
     }
@@ -554,28 +1066,81 @@ fn parse_vscode_extension_state(output: &str, identifier: &str) -> (bool, Option
     (false, None)
 }
 
+fn vscode_extension_directories(target: &IdeTarget, identifier: &str) -> Vec<PathBuf> {
+    let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else {
+        return Vec::new();
+    };
+    vscode_extension_directories_in_home(&home, target, identifier)
+}
+
+fn vscode_extension_directories_in_home(
+    home: &Path,
+    target: &IdeTarget,
+    identifier: &str,
+) -> Vec<PathBuf> {
+    let folder_prefix = format!("{identifier}-");
+    code_oss_extension_directories_for_target(target)
+        .into_iter()
+        .flat_map(|directory| fs::read_dir(home.join(directory).join("extensions")).ok())
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_type()
+                .is_ok_and(|kind| kind.is_dir() && !kind.is_symlink())
+        })
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.starts_with(&folder_prefix))
+        })
+        .map(|entry| entry.path())
+        .collect()
+}
+
 fn vscode_extension_directory_state(
     target: &IdeTarget,
     identifier: &str,
 ) -> (bool, Option<String>) {
-    let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else {
-        return (false, None);
-    };
-    let extension_root = if target.label == "Cursor" {
-        home.join(".cursor").join("extensions")
-    } else {
-        home.join(".vscode").join("extensions")
-    };
     let folder_prefix = format!("{identifier}-");
-    let version = fs::read_dir(extension_root)
-        .ok()
+    let version = vscode_extension_directories(target, identifier)
         .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| entry.file_name().into_string().ok())
-        .filter_map(|name| name.strip_prefix(&folder_prefix).map(str::to_string))
+        .filter_map(|path| {
+            path.file_name()?
+                .to_str()?
+                .strip_prefix(&folder_prefix)
+                .map(str::to_string)
+        })
         .max_by(|left, right| compare_versions(left, right));
     (version.is_some(), version)
+}
+
+fn remove_vscode_extension_directories(
+    target: &IdeTarget,
+    identifier: &str,
+) -> Result<usize, String> {
+    let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) else {
+        return Ok(0);
+    };
+    remove_vscode_extension_directories_in_home(&home, target, identifier)
+}
+
+fn remove_vscode_extension_directories_in_home(
+    home: &Path,
+    target: &IdeTarget,
+    identifier: &str,
+) -> Result<usize, String> {
+    let directories = vscode_extension_directories_in_home(home, target, identifier);
+    for directory in &directories {
+        fs::remove_dir_all(directory).map_err(|error| {
+            format!(
+                "IDE 卸载器不可用，且无法删除本地插件目录 {}：{error}",
+                directory.display()
+            )
+        })?;
+    }
+    Ok(directories.len())
 }
 
 fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
@@ -589,7 +1154,12 @@ fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option
     if !output.status.success() {
         return vscode_extension_directory_state(target, identifier);
     }
-    parse_vscode_extension_state(&decode_process_output(&output.stdout), identifier)
+    let cli_state =
+        parse_vscode_extension_state(&decode_process_output(&output.stdout), identifier);
+    if cli_state.0 && !vscode_extension_directory_state(target, identifier).0 {
+        return (false, None);
+    }
+    cli_state
 }
 
 fn compare_versions(left: &str, right: &str) -> std::cmp::Ordering {
@@ -1140,11 +1710,12 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
         return Err(format!("桌面安装包未包含插件文件：{}", plugin.file));
     }
     if target.kind == "jetbrains" {
+        let action = if target.installed { "更新" } else { "安装" };
         if target_executable_is_running(&target) {
             if input.close_running_ide {
-                close_target_ide_gracefully(&target)?;
+                close_target_ide_gracefully(&target, action)?;
             } else {
-                return Err(jetbrains_running_error(&target));
+                return Err(jetbrains_running_error(&target, action));
             }
         }
         let message =
@@ -1226,10 +1797,11 @@ pub fn uninstall(
         resolve_target_plugin(app, &input.target_id, &input.plugin_id)?;
     if target.kind == "jetbrains" {
         if target_executable_is_running(&target) {
-            return Err(format!(
-                "IDE_RUNNING: {} 正在运行，Windows 无法删除正在使用的插件文件。请保存工作并完全关闭该 IDE（包括后台进程），然后再次点击卸载；现有插件不会被改动。",
-                target.label
-            ));
+            if input.close_running_ide {
+                close_target_ide_gracefully(&target, "卸载")?;
+            } else {
+                return Err(jetbrains_running_error(&target, "卸载"));
+            }
         }
         let _mutation_guard = lock_jetbrains_plugin_mutation()?;
         let root = jetbrains_plugin_root(&target)?;
@@ -1256,22 +1828,32 @@ pub fn uninstall(
     if !target.can_uninstall {
         return Err("此 IDE 请在其内置插件管理器中卸载".to_string());
     }
+    let was_installed_in_directory =
+        vscode_extension_directory_state(&target, &plugin.identifier).0;
     let output = vscode_script_process(
         &target,
         &["--uninstall-extension", plugin.identifier.as_str()],
     )?
     .output()
     .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        return Err(installer_failure("vscode", &output, "VS Code 卸载器"));
+    let fallback_used = if output.status.success() {
+        false
+    } else {
+        let removed = remove_vscode_extension_directories(&target, &plugin.identifier)?;
+        if removed == 0 && !was_installed_in_directory {
+            return Err(installer_failure(
+                "vscode",
+                &output,
+                "Code OSS 编辑器卸载器",
+            ));
+        }
+        true
+    };
+    if vscode_extension_directory_state(&target, &plugin.identifier).0 {
+        return Err("本地插件目录仍存在，请完全关闭 IDE 后重试卸载".to_string());
     }
-    let (installed, _) = vscode_extension_state(&target, &plugin.identifier);
-    if installed {
-        return Err(if output.status.success() {
-            "IDE 仍报告插件已安装，请关闭 IDE 后重试".to_string()
-        } else {
-            installer_failure("vscode", &output, "VS Code 卸载器")
-        });
+    if !fallback_used && vscode_extension_state(&target, &plugin.identifier).0 {
+        return Err("IDE 仍报告插件已安装，请关闭 IDE 后重试".to_string());
     }
     Ok(IdeInstallResult {
         target: target.label,
@@ -1279,18 +1861,60 @@ pub fn uninstall(
         installed: false,
         verified: true,
         installed_version: None,
-        message: "已从 IDE 扩展清单移除；重载或重启 IDE 后，活动栏和扩展页面会同步消失".to_string(),
+        message: if fallback_used {
+            "IDE 自带卸载器不兼容，已安全移除本地插件目录；重启 IDE 后生效".to_string()
+        } else {
+            "已从 IDE 扩展清单移除；重载或重启 IDE 后，活动栏和扩展页面会同步消失".to_string()
+        },
+    })
+}
+
+pub fn set_code_oss_wheel_injection(
+    input: SetCodeOssWheelInjectionInput,
+) -> Result<CodeOssWheelInjectionResult, String> {
+    let target = detect_targets()
+        .into_iter()
+        .find(|target| target.id == input.target_id)
+        .ok_or_else(|| "未找到指定编辑器，请重新检测".to_string())?;
+    if target.kind != "vscode" {
+        return Err("增强滚轮只适用于 Code OSS 类编辑器".to_string());
+    }
+    let workbench = code_oss_workbench(&target)
+        .ok_or_else(|| "未找到该编辑器的 Monaco 工作台文件，当前版本暂不支持注入".to_string())?;
+    if input.enabled {
+        enable_code_oss_wheel_injection(&workbench)?;
+    } else {
+        disable_code_oss_wheel_injection(&workbench)?;
+    }
+    let (_, enabled, needs_repair) = code_oss_wheel_injection_state(&target);
+    if enabled != input.enabled || needs_repair {
+        return Err("工作台文件已处理，但复检状态不一致；已停止继续操作，请重新检测".to_string());
+    }
+    Ok(CodeOssWheelInjectionResult {
+        target: target.label,
+        enabled,
+        message: if enabled {
+            "实验性增强滚轮已启用。请完全退出并重新打开编辑器；编辑器升级后可能需要重新启用。"
+                .to_string()
+        } else {
+            "实验性增强滚轮已关闭，工作台和完整性校验已恢复。请完全退出并重新打开编辑器。"
+                .to_string()
+        },
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        clean_installer_diagnostic, compare_versions, detect_targets, install_jetbrains_plugin_at,
-        installed_version_matches, is_jetbrains_cds_warning_only,
+        clean_installer_diagnostic, code_oss_wheel_injection_state, compare_versions,
+        detect_targets, disable_code_oss_wheel_injection, enable_code_oss_wheel_injection,
+        install_jetbrains_plugin_at, installed_version_matches, is_jetbrains_cds_warning_only,
         jetbrains_plugin_location_in_root, parse_vscode_extension_state, read_plugin_xml_from_jar,
-        target_id, vscode_extension_state, vscode_script_process, xml_tag_value, IdeTarget,
-        InstallIdePluginInput, JETBRAINS_CDS_WARNING,
+        remove_vscode_extension_directories_in_home, target_id,
+        vscode_extension_directories_in_home, vscode_extension_state, vscode_script_process,
+        workbench_integrity_checksum, xml_tag_value, IdeTarget, InstallIdePluginInput,
+        UninstallIdePluginInput, CODE_OSS_TARGETS, JETBRAINS_CDS_WARNING, WHEEL_INJECTION_END,
+        WHEEL_INJECTION_SCRIPT_NAME, WHEEL_INJECTION_START,
     };
     use std::{
         collections::HashSet,
@@ -1319,6 +1943,16 @@ mod tests {
         )
         .expect("deserialize automatic close input");
         assert!(automatic.close_running_ide);
+
+        let manual_uninstall: UninstallIdePluginInput =
+            serde_json::from_str(r#"{"targetId":"jetbrains-a","pluginId":"intellij"}"#)
+                .expect("deserialize manual uninstall input");
+        assert!(!manual_uninstall.close_running_ide);
+        let automatic_uninstall: UninstallIdePluginInput = serde_json::from_str(
+            r#"{"targetId":"jetbrains-a","pluginId":"intellij","closeRunningIde":true}"#,
+        )
+        .expect("deserialize automatic uninstall input");
+        assert!(automatic_uninstall.close_running_ide);
     }
 
     #[test]
@@ -1337,6 +1971,59 @@ mod tests {
             ),
             (false, None)
         );
+    }
+
+    #[test]
+    fn removes_only_the_requested_code_oss_extension_directories() {
+        let home = std::env::temp_dir().join(format!(
+            "novel-library-code-oss-uninstall-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let extension_root = home.join(".trae").join("extensions");
+        let identifier = "novel-library.novel-library-reader";
+        let first = extension_root.join(format!("{identifier}-0.4.8"));
+        let second = extension_root.join(format!("{identifier}-0.4.10"));
+        let unrelated = extension_root.join("publisher.other-1.0.0");
+        for directory in [&first, &second, &unrelated] {
+            fs::create_dir_all(directory).expect("create extension fixture");
+        }
+        let mut target = IdeTarget {
+            id: "trae-uninstall-test".to_string(),
+            label: "Trae".to_string(),
+            kind: "vscode".to_string(),
+            path: "C:/Trae/bin/trae.cmd".to_string(),
+            installed: true,
+            installed_version: Some("0.4.10".to_string()),
+            can_uninstall: true,
+            wheel_injection_available: false,
+            wheel_injection_enabled: false,
+            wheel_injection_needs_repair: false,
+        };
+        assert_eq!(
+            vscode_extension_directories_in_home(&home, &target, identifier).len(),
+            2
+        );
+        assert_eq!(
+            remove_vscode_extension_directories_in_home(&home, &target, identifier)
+                .expect("remove extension directories"),
+            2
+        );
+        assert!(!first.exists());
+        assert!(!second.exists());
+        assert!(unrelated.is_dir());
+
+        let cn = home
+            .join(".trae-cn")
+            .join("extensions")
+            .join(format!("{identifier}-0.4.10"));
+        fs::create_dir_all(&cn).expect("create Trae CN extension fixture");
+        target.path = "C:/Trae-CN/Trae CN/bin/trae.cmd".to_string();
+        assert_eq!(
+            vscode_extension_directories_in_home(&home, &target, identifier),
+            vec![cn.clone()]
+        );
+        assert!(unrelated.is_dir());
+        fs::remove_dir_all(home).expect("remove extension fixture root");
     }
 
     #[test]
@@ -1576,7 +2263,7 @@ mod tests {
         let archive_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
             .join("ide-plugins")
-            .join("novel-library-intellij-0.4.7.zip");
+            .join("novel-library-intellij-0.4.10.zip");
         if !archive_path.is_file() {
             eprintln!(
                 "skipping bundled JetBrains artifact check; release ZIP is not present: {}",
@@ -1591,11 +2278,11 @@ mod tests {
             &plugin_root,
             &archive_path,
             "com.kengqin.novellibrary.reader",
-            "0.4.7",
+            "0.4.10",
         )
         .expect("deploy bundled JetBrains plugin");
         assert!(plugin_root
-            .join("novel-library-intellij/lib/novel-library-intellij-0.4.7.jar")
+            .join("novel-library-intellij/lib/novel-library-intellij-0.4.10.jar")
             .is_file());
         fs::remove_dir_all(root).expect("remove real plugin fixture");
     }
@@ -1662,7 +2349,143 @@ mod tests {
     }
 
     #[test]
-    fn vscode_and_cursor_installation_never_constructs_a_cli_js_file_argument() {
+    fn code_oss_wheel_injection_is_opt_in_and_restores_the_workbench() {
+        let root = std::env::temp_dir().join(format!(
+            "novel-library-wheel-injection-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let launcher = root.join("bin/code.cmd");
+        let app = root.join("current/resources/app");
+        let workbench = app.join("out/vs/code/electron-browser/workbench/workbench.html");
+        let product = app.join("product.json");
+        fs::create_dir_all(launcher.parent().expect("launcher parent")).expect("create bin");
+        fs::create_dir_all(workbench.parent().expect("workbench parent"))
+            .expect("create workbench directory");
+        File::create(&launcher).expect("create launcher");
+        let original = b"<!doctype html><html><body></body></html>";
+        fs::write(&workbench, original).expect("write workbench");
+        fs::write(
+            &product,
+            format!(
+                r#"{{"checksums":{{"vs/code/electron-browser/workbench/workbench.html":"{}"}}}}"#,
+                workbench_integrity_checksum(original)
+            ),
+        )
+        .expect("write product");
+        let target = IdeTarget {
+            id: "vscode-wheel-test".to_string(),
+            label: "Visual Studio Code".to_string(),
+            kind: "vscode".to_string(),
+            path: launcher.display().to_string(),
+            installed: false,
+            installed_version: None,
+            can_uninstall: true,
+            wheel_injection_available: false,
+            wheel_injection_enabled: false,
+            wheel_injection_needs_repair: false,
+        };
+        assert_eq!(
+            code_oss_wheel_injection_state(&target),
+            (true, false, false)
+        );
+        let location = super::code_oss_workbench(&target).expect("find workbench");
+        enable_code_oss_wheel_injection(&location).expect("enable injection");
+        let injected = fs::read_to_string(&workbench).expect("read injected workbench");
+        assert!(injected.contains(WHEEL_INJECTION_START));
+        assert!(injected.contains(WHEEL_INJECTION_END));
+        assert!(workbench
+            .parent()
+            .expect("workbench parent")
+            .join(WHEEL_INJECTION_SCRIPT_NAME)
+            .is_file());
+        assert_eq!(code_oss_wheel_injection_state(&target), (true, true, false));
+        disable_code_oss_wheel_injection(&location).expect("disable injection");
+        assert_eq!(
+            fs::read(&workbench).expect("read restored workbench"),
+            original
+        );
+        assert_eq!(
+            code_oss_wheel_injection_state(&target),
+            (true, false, false)
+        );
+        let restored_product = fs::read_to_string(product).expect("read restored product");
+        assert!(restored_product.contains(&workbench_integrity_checksum(original)));
+        fs::remove_dir_all(root).expect("remove wheel injection fixture");
+    }
+
+    #[test]
+    fn code_oss_workbench_follows_the_version_selected_by_the_official_launcher() {
+        let root = std::env::temp_dir().join(format!(
+            "novel-library-active-workbench-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let launcher = root.join("bin/code.cmd");
+        fs::create_dir_all(launcher.parent().expect("launcher parent")).expect("create bin");
+        fs::write(
+            &launcher,
+            r#"@echo off
+"%~dp0..\Code.exe" "%~dp0..\current-version\resources\app\out\entry.js" %*
+"#,
+        )
+        .expect("write launcher");
+        for version in ["old-version", "current-version"] {
+            let app = root.join(version).join("resources/app");
+            let html = app.join("out/vs/code/electron-browser/workbench/workbench.html");
+            fs::create_dir_all(html.parent().expect("workbench parent"))
+                .expect("create workbench directory");
+            fs::write(&html, format!("<html>{version}</html>")).expect("write workbench");
+            fs::write(app.join("product.json"), "{}").expect("write product");
+        }
+        let target = IdeTarget {
+            id: "vscode-active-version-test".to_string(),
+            label: "Visual Studio Code".to_string(),
+            kind: "vscode".to_string(),
+            path: launcher.display().to_string(),
+            installed: false,
+            installed_version: None,
+            can_uninstall: true,
+            wheel_injection_available: false,
+            wheel_injection_enabled: false,
+            wheel_injection_needs_repair: false,
+        };
+        let selected = super::code_oss_workbench(&target).expect("select active workbench");
+        assert!(selected.html.starts_with(root.join("current-version")));
+        fs::remove_dir_all(root).expect("remove active workbench fixture");
+    }
+
+    #[test]
+    fn code_oss_target_table_covers_named_and_common_forks() {
+        let targets = CODE_OSS_TARGETS
+            .iter()
+            .map(|spec| (spec.command, spec.label, spec.extension_directories))
+            .collect::<Vec<_>>();
+        for expected in [
+            ("code.cmd", "Visual Studio Code", ".vscode"),
+            ("cursor.cmd", "Cursor", ".cursor"),
+            ("trae.cmd", "Trae", ".trae-cn"),
+            ("qoder.cmd", "Qoder", ".qoder"),
+            ("windsurf.cmd", "Windsurf", ".windsurf"),
+            ("kiro.cmd", "Kiro", ".kiro"),
+            ("codium.cmd", "VSCodium", ".vscode-oss"),
+            ("void.cmd", "Void", ".void"),
+            ("code-oss.cmd", "Code - OSS", ".vscode-oss"),
+            ("positron.cmd", "Positron", ".positron"),
+            ("pearai.cmd", "PearAI", ".pearai"),
+        ] {
+            assert!(
+                targets.iter().any(|(command, label, directories)| {
+                    *command == expected.0
+                        && *label == expected.1
+                        && directories.contains(&expected.2)
+                }),
+                "missing Code OSS target: {}",
+                expected.1
+            );
+        }
+    }
+
+    #[test]
+    fn code_oss_installation_never_constructs_a_cli_js_file_argument() {
         let forbidden = concat!("cli", ".js");
         assert!(!include_str!("ide_integration.rs").contains(forbidden));
         let launcher =
@@ -1676,6 +2499,9 @@ mod tests {
             installed: false,
             installed_version: None,
             can_uninstall: true,
+            wheel_injection_available: false,
+            wheel_injection_enabled: false,
+            wheel_injection_needs_repair: false,
         };
         let command =
             vscode_script_process(&target, &["--install-extension", "fixture.vsix", "--force"])

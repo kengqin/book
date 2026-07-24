@@ -167,7 +167,8 @@ button { letter-spacing: 0; }
 .ide-plugin-card > header strong { font-size: 13px; }
 .ide-plugin-card > header small { color: #78847e; font-size: 9px; overflow-wrap: anywhere; }
 .ide-plugin-heading { min-width: 0; }
-.ide-plugin-heading > span { color: #52615a; font-size: 9px; overflow-wrap: anywhere; }
+.ide-plugin-title { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.ide-plugin-title > span { color: #52615a; font-size: 10px; white-space: nowrap; }
 .ide-package-state { color: #9b3b31; font-size: 10px; }
 .ide-package-state.ready { color: #27665d; }
 .ide-plugin-supported { padding: 9px 14px 10px 68px; color: #52615a; font-size: 10px; border-top: 1px solid #eef0ec; }
@@ -179,6 +180,10 @@ button { letter-spacing: 0; }
 .ide-target-row strong { font-size: 12px; }
 .ide-target-row small { color: #78847e; font-size: 9px; overflow-wrap: anywhere; }
 .ide-target-row span { color: #52615a; font-size: 10px; }
+.ide-target-row > .ide-target-actions { min-width: auto; display: flex; align-items: center; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+.ide-wheel-switch { height: 32px; padding-inline: 10px; font-size: 10px; }
+.ide-wheel-switch.active { color: #17634d; border-color: #78b8a3; background: #edf8f4; }
+.ide-wheel-switch.warning { color: #8b5a18; border-color: #d5ae70; background: #fff8e9; }
 .ide-plugin-empty { padding: 15px 18px; color: #7a8780; font-size: 10px; border-top: 1px solid #d5dad3; }
 .ide-integration-view .spinning { animation: spin 1s linear infinite; }
 .ide-plugin-summary { min-height: 64px; display: flex; align-items: center; gap: 13px; margin-top: 18px; padding: 0 16px; border-top: 1px solid #d3d8d2; border-bottom: 1px solid #d3d8d2; }
@@ -191,7 +196,6 @@ button { letter-spacing: 0; }
 .ide-target-list strong { font-size: 13px; }
 .ide-target-list small { color: #78847e; font-size: 9px; overflow-wrap: anywhere; }
 .ide-target-list article > div > span { color: #52615a; font-size: 10px; }
-.ide-integration-view .settings-message { display: flex; align-items: center; gap: 7px; }
 
 .notes-workspace { min-width: 620px; height: 100%; min-height: 560px; display: grid; grid-template-columns: 300px minmax(360px, 1fr); overflow: hidden; background: #f7f8f5; }
 

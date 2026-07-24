@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <UseWPF>true</UseWPF>
-    <Version>0.4.7</Version>
+    <Version>0.4.15</Version>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
     <UseCodebase>true</UseCodebase>
     <TemplateOutputDirectory>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\</TemplateOutputDirectory>
@@ -33,6 +33,8 @@
     <VSIXSourceItem Include="source.extension.vsixmanifest" />
     <VSCTCompile Include="NovelLibrary.vsct" />
     <Content Include="LICENSE"><IncludeInVSIX>true</IncludeInVSIX></Content>
+    <Content Include="Icon.png"><IncludeInVSIX>true</IncludeInVSIX></Content>
+    <Content Include="README.md"><IncludeInVSIX>true</IncludeInVSIX></Content>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets" Condition="Exists('$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets')" />
   <Target Name="SetCreatePkgDefAssemblyToProcess" BeforeTargets="GeneratePkgDef">
