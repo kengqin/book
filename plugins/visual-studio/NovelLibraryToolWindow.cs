@@ -31,6 +31,15 @@ internal sealed class NovelLibraryReaderControl : UserControl
         FontSize = 14,
         Margin = new Thickness(10)
     };
+    private readonly TextBlock _chapterInfo = new TextBlock
+    {
+        Margin = new Thickness(8, 5, 8, 5),
+        FontWeight = FontWeights.SemiBold,
+        VerticalAlignment = VerticalAlignment.Center,
+        TextTrimming = TextTrimming.CharacterEllipsis
+    };
+    private readonly Button _previousChapter = new Button { Content = "上一章", Margin = new Thickness(0, 2, 6, 2), Padding = new Thickness(8, 3, 8, 3) };
+    private readonly Button _nextChapter = new Button { Content = "下一章", Margin = new Thickness(0, 2, 0, 2), Padding = new Thickness(8, 3, 8, 3) };
     private readonly TextBlock _status = new TextBlock { Margin = new Thickness(8, 4, 8, 6) };
     private readonly ScrollViewer _contentScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly Button _displayMode = new Button { Margin = new Thickness(0, 0, 6, 4), Padding = new Thickness(8, 3, 8, 3) };
@@ -43,8 +52,6 @@ internal sealed class NovelLibraryReaderControl : UserControl
         var toolbar = new WrapPanel { Margin = new Thickness(8, 8, 8, 4) };
         toolbar.Children.Add(_books);
         toolbar.Children.Add(_chapters);
-        AddButton(toolbar, "上一章", () => NovelLibraryReaderSession.MoveChapterAsync(-1));
-        AddButton(toolbar, "下一章", () => NovelLibraryReaderSession.MoveChapterAsync(1));
         AddButton(toolbar, "上一行", () => NovelLibraryReaderSession.MoveLineAsync(-1));
         AddButton(toolbar, "下一行", () => NovelLibraryReaderSession.MoveLineAsync(1));
         _displayMode.Click += (_, __) => NovelLibraryReaderSession.ToggleDisplayMode();
@@ -61,8 +68,21 @@ internal sealed class NovelLibraryReaderControl : UserControl
             ShortcutHelp.OpenKeyboardSettings();
         };
         toolbar.Children.Add(configureShortcuts);
+        _previousChapter.Click += (_, __) => _ = RunAsync(() => NovelLibraryReaderSession.MoveChapterAsync(-1));
+        _nextChapter.Click += (_, __) => _ = RunAsync(() => NovelLibraryReaderSession.MoveChapterAsync(1));
+        _previousChapter.IsEnabled = false;
+        _nextChapter.IsEnabled = false;
+        var chapterNavigation = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 8, 0) };
+        chapterNavigation.Children.Add(_previousChapter);
+        chapterNavigation.Children.Add(_nextChapter);
+        var chapterHeader = new DockPanel();
+        DockPanel.SetDock(chapterNavigation, Dock.Right);
+        chapterHeader.Children.Add(chapterNavigation);
+        chapterHeader.Children.Add(_chapterInfo);
+        DockPanel.SetDock(chapterHeader, Dock.Top);
         DockPanel.SetDock(toolbar, Dock.Top);
         DockPanel.SetDock(_status, Dock.Bottom);
+        root.Children.Add(chapterHeader);
         root.Children.Add(toolbar);
         root.Children.Add(_status);
         _contentScroll.Content = _content;
@@ -130,6 +150,9 @@ internal sealed class NovelLibraryReaderControl : UserControl
             }
         }
         _content.Text = string.Join(Environment.NewLine, NovelLibraryReaderSession.VisibleLines);
+        _chapterInfo.Text = NovelLibraryReaderSession.Header;
+        _previousChapter.IsEnabled = NovelLibraryReaderSession.HasPreviousChapter;
+        _nextChapter.IsEnabled = NovelLibraryReaderSession.HasNextChapter;
         _displayMode.Content = NovelLibraryReaderSession.DisplayModeLabel;
         _readerVisibility.Content = NovelLibraryReaderSession.VisibilityLabel;
         _status.Text = NovelLibraryReaderSession.Status;

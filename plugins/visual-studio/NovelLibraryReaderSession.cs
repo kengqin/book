@@ -65,9 +65,28 @@ internal static class NovelLibraryReaderSession
     public static bool IsReaderVisible { get; private set; } = LoadVisibility();
     public static string DisplayModeLabel => DisplayMode == ReaderDisplayMode.Paragraph ? "段落模式" : "行尾模式";
     public static string VisibilityLabel => IsReaderVisible ? "关闭阅读" : "开启阅读";
+    public static int CurrentChapterOrdinal => CurrentChapterIndex + 1;
+    public static bool HasPreviousChapter => CurrentChapterIndex > 0;
+    public static bool HasNextChapter => CurrentChapterIndex >= 0 && CurrentChapterIndex < Chapters.Count - 1;
+    public static double OverallProgress => CurrentChapterIndex < 0 || Chapters.Count == 0
+        ? 0d
+        : Math.Max(0d, Math.Min(100d, (CurrentChapterIndex + ChapterProgress / 100d) / Chapters.Count * 100d));
+    public static string Header => CurrentChapter == null
+        ? "尚未加载章节 · 总进度 0.0%"
+        : $"第 {CurrentChapterOrdinal}/{Chapters.Count} 章 · {CurrentChapter.Title} · 总进度 {OverallProgress:F1}%";
     public static string Status => CurrentChapter == null
         ? "正在连接小说书库桌面端"
+        : _lines.Count == 0
+            ? $"{CurrentChapter.Title} · 当前章节没有可阅读的正文 · {DisplayModeLabel}"
         : $"{CurrentChapter.Title} · {_lineStart + 1}-{Math.Min(_lines.Count, _lineStart + 5)} / {_lines.Count} 行 · {DisplayModeLabel}";
+
+    private static int CurrentChapterIndex => CurrentChapter == null
+        ? -1
+        : Chapters.ToList().FindIndex(item => item.Number == CurrentChapter.Number);
+
+    private static double ChapterProgress => _lines.Count == 0
+        ? 0d
+        : _lines.Count <= 5 ? 100d : _lineStart * 100d / (_lines.Count - 5);
 
     public static void ToggleDisplayMode()
     {
@@ -137,6 +156,7 @@ internal static class NovelLibraryReaderSession
         await Gate.WaitAsync().ConfigureAwait(false);
         try
         {
+            await SaveProgressAsync().ConfigureAwait(false);
             CurrentBook = book;
             await LoadBookCoreAsync(book).ConfigureAwait(false);
             _loaded = true;
@@ -150,34 +170,83 @@ internal static class NovelLibraryReaderSession
 
     public static async Task SelectChapterAsync(ChapterItem chapter)
     {
-        if (chapter == null || CurrentBook == null) return;
-        await LoadReadableChapterAsync(chapter.Number, 1).ConfigureAwait(false);
+        if (chapter == null) return;
+        await EnsureLoadedAsync().ConfigureAwait(false);
+        await Gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (CurrentBook == null) return;
+            await LoadReadableChapterAsync(chapter.Number, 1).ConfigureAwait(false);
+        }
+        finally
+        {
+            Gate.Release();
+        }
         RaiseChanged();
     }
 
     public static async Task MoveLineAsync(int direction)
     {
         await EnsureLoadedAsync().ConfigureAwait(false);
-        _lineStart = Math.Max(0, Math.Min(Math.Max(0, _lines.Count - 5), _lineStart + direction));
-        RaiseChanged();
-        await SaveProgressAsync().ConfigureAwait(false);
+        await Gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (direction == 0 || CurrentChapter == null || _lines.Count == 0) return;
+            var maximumStart = Math.Max(0, _lines.Count - 5);
+            var nextLineStart = _lineStart + direction;
+            if (nextLineStart < 0 || nextLineStart > maximumStart)
+            {
+                var nextChapterIndex = CurrentChapterIndex + (direction > 0 ? 1 : -1);
+                if (nextChapterIndex < 0 || nextChapterIndex >= Chapters.Count) return;
+                var changed = await LoadReadableChapterAsync(
+                    Chapters[nextChapterIndex].Number,
+                    direction,
+                    startAtEnd: direction < 0,
+                    keepCurrentOnEmpty: true).ConfigureAwait(false);
+                if (changed) RaiseChanged();
+                return;
+            }
+            _lineStart = nextLineStart;
+            RaiseChanged();
+            await SaveProgressAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            Gate.Release();
+        }
     }
 
     public static async Task MoveChapterAsync(int direction)
     {
         await EnsureLoadedAsync().ConfigureAwait(false);
-        if (CurrentChapter == null) return;
-        var index = Chapters.ToList().FindIndex(item => item.Number == CurrentChapter.Number);
-        var next = Math.Max(0, Math.Min(Chapters.Count - 1, index + direction));
-        if (next != index)
+        await Gate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            await LoadReadableChapterAsync(Chapters[next].Number, direction).ConfigureAwait(false);
-            RaiseChanged();
+            if (CurrentChapter == null) return;
+            var index = Chapters.ToList().FindIndex(item => item.Number == CurrentChapter.Number);
+            var next = Math.Max(0, Math.Min(Chapters.Count - 1, index + direction));
+            if (next != index)
+            {
+                await LoadReadableChapterAsync(Chapters[next].Number, direction).ConfigureAwait(false);
+                RaiseChanged();
+            }
+        }
+        finally
+        {
+            Gate.Release();
         }
     }
 
     private static async Task LoadBookCoreAsync(BookItem book)
     {
+        var latestBook = await Bridge.GetAsync<BookItem>(
+            $"/v1/books/{Uri.EscapeDataString(book.Id)}").ConfigureAwait(false);
+        if (latestBook != null)
+        {
+            book.CurrentChapter = latestBook.CurrentChapter;
+            book.ChapterProgress = latestBook.ChapterProgress;
+        }
+        CurrentBook = book;
         var allChapters = await Bridge.GetAsync<List<ChapterItem>>(
             $"/v1/books/{Uri.EscapeDataString(book.Id)}/chapters").ConfigureAwait(false);
         var readableChapters = allChapters.Where(item => string.IsNullOrEmpty(item.Kind) || item.Kind == "chapter").ToList();
@@ -189,9 +258,14 @@ internal static class NovelLibraryReaderSession
         await LoadReadableChapterAsync(preferred.Number, 1, book.ChapterProgress).ConfigureAwait(false);
     }
 
-    private static async Task LoadReadableChapterAsync(int chapterNumber, int direction, double? restoredProgress = null)
+    private static async Task<bool> LoadReadableChapterAsync(
+        int chapterNumber,
+        int direction,
+        double? restoredProgress = null,
+        bool startAtEnd = false,
+        bool keepCurrentOnEmpty = false)
     {
-        if (CurrentBook == null) return;
+        if (CurrentBook == null) return false;
         var index = Chapters.ToList().FindIndex(item => item.Number == chapterNumber);
         for (var attempts = 0; index >= 0 && index < Chapters.Count && attempts < 30; attempts++, index += direction)
         {
@@ -201,12 +275,14 @@ internal static class NovelLibraryReaderSession
             if (lines.Count == 0) continue;
             CurrentChapter = chapter;
             _lines = lines;
+            var maximumStart = Math.Max(0, lines.Count - 5);
             _lineStart = chapter.Number == chapterNumber && restoredProgress.HasValue
                 ? LineStartFromProgress(lines.Count, restoredProgress.Value)
-                : 0;
+                : startAtEnd ? maximumStart : 0;
             await SaveProgressAsync().ConfigureAwait(false);
-            return;
+            return true;
         }
+        if (keepCurrentOnEmpty) return false;
         throw new InvalidOperationException("附近没有可阅读的正文章节");
     }
 
@@ -220,12 +296,15 @@ internal static class NovelLibraryReaderSession
     private static async Task SaveProgressAsync()
     {
         if (CurrentBook == null || CurrentChapter == null || _lines.Count == 0) return;
-        var progress = _lines.Count <= 5 ? 100d : _lineStart * 100d / (_lines.Count - 5);
+        var chapterNumber = CurrentChapter.Number;
+        var chapterProgress = ChapterProgress;
+        CurrentBook.CurrentChapter = chapterNumber;
+        CurrentBook.ChapterProgress = chapterProgress;
         await Bridge.PostAsync("/v1/progress", new
         {
             bookId = CurrentBook.Id,
-            chapterNumber = CurrentChapter.Number,
-            chapterProgress = progress
+            chapterNumber,
+            chapterProgress
         }).ConfigureAwait(false);
     }
 

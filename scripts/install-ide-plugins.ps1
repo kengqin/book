@@ -62,7 +62,7 @@ function Select-InstallGroup {
   if ($Only) { return $Only }
   Write-Host ''
   Write-Host 'Select the IDE plugin to install:'
-  Write-Host '  1. VS Code / Cursor'
+  Write-Host '  1. Code OSS editors (VS Code, Cursor, Trae, Qoder, Windsurf, Kiro, etc.)'
   Write-Host '  2. JetBrains IDEs'
   Write-Host '  3. Visual Studio'
   Write-Host '  4. All detected IDEs'
@@ -81,7 +81,7 @@ function Package-VSCode {
   $output = Join-Path $artifactRoot (Get-PluginDefinition 'vscode').file
   New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
   $npx = Find-Executable @('npx.cmd', 'npx')
-  if (-not $npx) { throw 'npx was not found; cannot package the VS Code/Cursor extension' }
+  if (-not $npx) { throw 'npx was not found; cannot package the Code OSS extension' }
   Invoke-External $npx @('--yes', '@vscode/vsce@3.6.0', 'package', '--allow-missing-repository', '--allow-star-activation', '--out', $output) $source
   return $output
 }
@@ -229,9 +229,10 @@ function Build-VisualStudioPlugin {
 }
 
 function Install-VSCode([string]$PluginPath) {
-  $executables = @('code', 'cursor') | ForEach-Object { Find-Executable @($_, "$_.cmd") } | Where-Object { $_ } | Sort-Object -Unique
-  if (-not $executables.Count) { throw 'No VS Code or Cursor command-line tool was detected' }
-  Write-Host 'Detected VS Code-compatible IDEs:'
+  $commands = @('code', 'code-insiders', 'cursor', 'trae', 'qoder', 'windsurf', 'kiro', 'codium', 'void', 'code-oss', 'positron', 'pearai')
+  $executables = $commands | ForEach-Object { Find-Executable @($_, "$_.cmd") } | Where-Object { $_ } | Sort-Object -Unique
+  if (-not $executables.Count) { throw 'No Code OSS-compatible command-line tool was detected' }
+  Write-Host 'Detected Code OSS-compatible editors:'
   for ($index = 0; $index -lt $executables.Count; $index++) { Write-Host "  $($index + 1). $($executables[$index])" }
   Write-Host '  A. All'
   $selection = if ($WhatIf -or $AllTargets) { 'A' } else { Read-Host 'Enter comma-separated numbers, or A for all' }
@@ -243,9 +244,9 @@ function Install-VSCode([string]$PluginPath) {
       if ([int]::TryParse($_.Trim(), [ref]$number) -and $number -ge 1 -and $number -le $executables.Count) { $executables[$number - 1] }
     })
   }
-  if (-not $targets.Count) { throw 'No VS Code-compatible IDE was selected' }
+  if (-not $targets.Count) { throw 'No Code OSS-compatible editor was selected' }
   foreach ($executable in $targets) { Invoke-External $executable @('--install-extension', $PluginPath, '--force') $Root }
-  return "$($targets.Count) VS Code/Cursor CLI(s)"
+  return "$($targets.Count) Code OSS editor CLI(s)"
 }
 
 function Install-VisualStudio([string]$PluginPath) {
@@ -261,9 +262,9 @@ $Only = Select-InstallGroup
 if ($Only -in @('All', 'VSCode')) {
   try {
     $plugin = if ($SkipBuild) { Join-Path $artifactRoot (Get-PluginDefinition 'vscode').file } else { Package-VSCode }
-    if (-not (Test-Path $plugin)) { throw "VS Code VSIX does not exist: $plugin" }
-    Add-Result 'VS Code / Cursor' 'installed' (Install-VSCode $plugin)
-  } catch { Add-Result 'VS Code / Cursor' 'failed' $_.Exception.Message }
+    if (-not (Test-Path $plugin)) { throw "Code OSS VSIX does not exist: $plugin" }
+    Add-Result 'Code OSS editors' 'installed' (Install-VSCode $plugin)
+  } catch { Add-Result 'Code OSS editors' 'failed' $_.Exception.Message }
 }
 
 if ($Only -in @('All', 'JetBrains')) {

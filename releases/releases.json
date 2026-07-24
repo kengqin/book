@@ -1,8 +1,49 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.4",
+  "latest": "0.6.5",
   "releases": [
+    {
+      "version": "0.6.5",
+      "date": "2026-07-24",
+      "title": "IDE 阅读体验、进度同步与插件管理增强",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.4",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.5",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.5/NovelLibrary_0.6.5_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "三套 IDE 插件新增固定章节信息行，展示当前章序、章名和全书总进度，并支持滚动越过边界时自动衔接相邻章节的多行正文",
+            "桌面端扩展 Code OSS 类编辑器支持范围，并提供默认关闭、可恢复且失败自动回滚的增强滚轮实验开关"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "三套 IDE 插件统一升级为 0.4.15，统一品牌图标，并完善插件市场说明、快捷键、兼容范围、隐私边界和故障排查文档",
+            "插件安装、更新、卸载和异常结果统一使用质感更清晰的全局 Message 提示",
+            "Code OSS 类编辑器统一使用官方 CLI 管理同一个 VSIX，并移除遮挡正文的小说装饰悬浮提示"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "修复切换小说、重开插件或快速连续滚动时阅读位置回到开头的问题，三套插件统一串行写入并重新读取最新进度",
+            "修复 JetBrains 自定义快捷键入口、运行中 IDE 更新与卸载提示，以及 Code OSS 分支编辑器卸载复检问题",
+            "修复桌面端调试运行被旧资源清单覆盖、导致本地插件中心仍显示旧版本的问题"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.4",
       "date": "2026-07-23",

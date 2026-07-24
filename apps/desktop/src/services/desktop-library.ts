@@ -87,6 +87,9 @@ export interface IdeTarget {
   installed: boolean
   installedVersion?: string
   canUninstall: boolean
+  wheelInjectionAvailable: boolean
+  wheelInjectionEnabled: boolean
+  wheelInjectionNeedsRepair: boolean
 }
 
 export interface IdeIntegrationStatus {
@@ -100,6 +103,12 @@ export interface IdeInstallResult {
   installed: boolean
   verified: boolean
   installedVersion?: string
+  message: string
+}
+
+export interface CodeOssWheelInjectionResult {
+  target: string
+  enabled: boolean
   message: string
 }
 
@@ -232,6 +241,10 @@ export function installIdePlugin(targetId: string, pluginId: string, closeRunnin
   return invoke<IdeInstallResult>('install_ide_plugin', { input: { targetId, pluginId, closeRunningIde } })
 }
 
-export function uninstallIdePlugin(targetId: string, pluginId: string) {
-  return invoke<IdeInstallResult>('uninstall_ide_plugin', { input: { targetId, pluginId } })
+export function uninstallIdePlugin(targetId: string, pluginId: string, closeRunningIde = false) {
+  return invoke<IdeInstallResult>('uninstall_ide_plugin', { input: { targetId, pluginId, closeRunningIde } })
+}
+
+export function setCodeOssWheelInjection(targetId: string, enabled: boolean) {
+  return invoke<CodeOssWheelInjectionResult>('set_code_oss_wheel_injection', { input: { targetId, enabled } })
 }

@@ -15,6 +15,7 @@ plugins/intellij/.intellijPlatform/
 plugins/*/build/
 plugins/*/bin/
 plugins/*/obj/
+plugins/vscode/*.vsix
 apps/desktop/src-tauri/resources/ide-plugins/*.vsix
 apps/desktop/src-tauri/resources/ide-plugins/*.zip
 .release-local/

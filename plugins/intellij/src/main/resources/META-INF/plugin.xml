@@ -2,14 +2,26 @@
   <id>com.kengqin.novellibrary.reader</id>
   <name>小说书库阅读器</name>
   <vendor email="support@novellibrary.local">Novel Library</vendor>
-  <description>在 JetBrains IDE 中显示 5 行小说内容，通过快捷键滚动、切章并与小说书库桌面端同步。</description>
+  <description><![CDATA[
+    <p><strong>小说书库阅读器</strong>是小说书库桌面端的 JetBrains IDE 配套插件，用于在开发环境中以只读方式浏览本地书库。插件不会修改项目文件，也不会将小说正文写入源代码。</p>
+    <h3>核心能力</h3>
+    <ul>
+      <li>在独立工具窗口中浏览书架、章节与当前五行正文。</li>
+      <li>在代码编辑器中使用段落模式或紧凑的行尾模式显示正文。</li>
+      <li>滚动到章节边界时自动衔接上一章或下一章，并一次展示新章节的多行内容。</li>
+      <li>固定显示当前章序、章名与全书阅读进度，支持鼠标滚轮和快捷键导航。</li>
+      <li>通过本机 Bridge 与小说书库桌面端同步书架、章节和阅读位置，重新打开 IDE 后可继续阅读。</li>
+    </ul>
+    <p><strong>使用要求：</strong>请先安装并运行小说书库桌面端，导入 TXT 或 EPUB 书籍后再使用本插件。所有通信仅在本机完成。</p>
+    <p><strong>兼容范围：</strong>IntelliJ IDEA、PyCharm、WebStorm、Android Studio、Rider、CLion、GoLand、RubyMine，以及基于 IntelliJ Platform 2024.1 或更高版本的兼容 IDE。</p>
+  ]]></description>
   <depends>com.intellij.modules.platform</depends>
   <extensions defaultExtensionNs="com.intellij">
     <toolWindow id="小说书库" anchor="right" icon="/icons/novelLibrary.svg" factoryClass="com.kengqin.novellibrary.NovelToolWindowFactory" />
     <postStartupActivity implementation="com.kengqin.novellibrary.NovelStartupActivity" />
   </extensions>
   <actions>
-    <action id="NovelLibrary.OpenReader" class="com.kengqin.novellibrary.OpenReaderAction" text="小说书库: 打开阅读面板" description="Open the Novel Library reader" />
+    <action id="NovelLibrary.OpenReader" class="com.kengqin.novellibrary.OpenReaderAction" text="小说书库: 打开阅读面板" description="打开小说书库阅读面板" />
     <action id="NovelLibrary.PreviousLine" class="com.kengqin.novellibrary.PreviousLineAction" text="小说书库: 上一行">
       <keyboard-shortcut first-keystroke="ctrl alt UP" keymap="$default" />
     </action>

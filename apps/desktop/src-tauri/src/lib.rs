@@ -318,6 +318,17 @@ async fn uninstall_ide_plugin(
         .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+async fn set_code_oss_wheel_injection(
+    input: ide_integration::SetCodeOssWheelInjectionInput,
+) -> Result<ide_integration::CodeOssWheelInjectionResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        ide_integration::set_code_oss_wheel_injection(input)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -391,6 +402,7 @@ pub fn run() {
             get_ide_integration_status,
             install_ide_plugin,
             uninstall_ide_plugin,
+            set_code_oss_wheel_injection,
             updater::check_application_update,
             updater::download_application_update,
             updater::cancel_application_update_download,

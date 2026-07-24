@@ -17,7 +17,7 @@ java {
 }
 
 group = "com.kengqin.novellibrary"
-version = "0.4.7"
+version = "0.4.15"
 
 repositories {
     maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies")
@@ -35,6 +35,6 @@ intellijPlatform {
             sinceBuild = "241"
             untilBuild = provider { null }
         }
-        changeNotes = "Novel Library IDE reader and local Bridge sync."
+        changeNotes = "修复切换小说或重新打开插件后从头开始的问题；进度写入改为串行，并在切书时刷新桌面端的最新章节与行位置。"
     }
 }

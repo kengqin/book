@@ -4,6 +4,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useRoute, useRouter } from 'vue-router'
 import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
+import GlobalMessage from './components/GlobalMessage.vue'
 import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
 import AppSidebar from './components/ui/AppSidebar.vue'
 import { useAppearance } from './composables/useAppearance'
@@ -46,5 +47,6 @@ onBeforeUnmount(() => {
     </main>
   </div>
   <GlobalUpdateStatus />
+  <GlobalMessage />
   <CloseBehaviorDialog />
 </template>
