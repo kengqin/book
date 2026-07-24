@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookOpen } from 'lucide-vue-next'
+import { BookOpen, Trash2 } from 'lucide-vue-next'
 import type { DesktopBookSummary } from '../../services/desktop-library'
 
 defineProps<{
@@ -9,16 +9,20 @@ defineProps<{
 defineEmits<{
   open: []
   read: []
+  requestDelete: []
 }>()
 </script>
 
 <template>
   <article class="book-card">
-    <button type="button" class="book-card-cover" :class="{ 'book-card-cover--image': book.coverDataUrl }" @click="$emit('open')">
-      <img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" />
-      <span v-else>{{ book.title.slice(0, 1) }}</span>
-      <i class="format-badge">{{ book.sourceFormat.toUpperCase() }}</i>
-    </button>
+    <div class="book-card-cover-wrap">
+      <button type="button" class="book-card-cover" :class="{ 'book-card-cover--image': book.coverDataUrl }" @click="$emit('open')">
+        <img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" />
+        <span v-else>{{ book.title.slice(0, 1) }}</span>
+        <i class="format-badge">{{ book.sourceFormat.toUpperCase() }}</i>
+      </button>
+      <button type="button" class="book-card-delete" :aria-label="`删除《${book.title}》`" title="删除书籍" @click="$emit('requestDelete')"><Trash2 :size="15" /></button>
+    </div>
     <div class="book-card-copy">
       <button type="button" @click="$emit('open')"><strong>{{ book.title }}</strong><span>{{ book.author || '佚名' }}</span></button>
       <button type="button" class="book-card-read" :title="book.progress ? '继续阅读' : '开始阅读'" @click="$emit('read')"><BookOpen :size="16" /></button>

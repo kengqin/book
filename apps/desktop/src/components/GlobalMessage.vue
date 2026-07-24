@@ -56,12 +56,11 @@ import { dismissGlobalMessage, globalMessage } from '../services/global-message'
 .global-message__icon {
   flex: 0 0 auto;
   display: grid;
-  width: 29px;
-  height: 29px;
+  width: 20px;
+  height: 20px;
   color: var(--message-accent);
-  border: 1px solid color-mix(in srgb, var(--message-accent) 18%, transparent);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--message-accent) 10%, transparent);
+  border: 0;
+  background: transparent;
   place-items: center;
 }
 
