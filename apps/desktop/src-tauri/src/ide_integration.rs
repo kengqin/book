@@ -299,6 +299,21 @@ fn close_target_ide_gracefully(target: &IdeTarget, action: &str) -> Result<(), S
     }
 }
 
+fn reopen_target_ide(target: &IdeTarget) -> Result<(), String> {
+    let executable = PathBuf::from(target.path.trim().trim_matches('"'));
+    if !executable.is_file() {
+        return Err("IDE 启动文件已被移动或删除".to_string());
+    }
+    let mut command = Command::new(&executable);
+    if let Some(directory) = executable.parent() {
+        command.current_dir(directory);
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("无法启动 {}：{error}", target.label))
+}
+
 fn target_id(kind: &str, path: &Path) -> String {
     let mut hasher = DefaultHasher::new();
     kind.hash(&mut hasher);
@@ -753,6 +768,22 @@ fn disable_code_oss_wheel_injection(workbench: &CodeOssWorkbench) -> Result<(), 
         return Err(format!("{error}；已自动回滚，编辑器文件未保持修改"));
     }
     Ok(())
+}
+
+fn disable_code_oss_wheel_injection_for_uninstall(target: &IdeTarget) -> Result<bool, String> {
+    let (available, enabled, needs_repair) = code_oss_wheel_injection_state(target);
+    if !available || (!enabled && !needs_repair) {
+        return Ok(false);
+    }
+    let workbench = code_oss_workbench(target)
+        .ok_or_else(|| "无法定位增强滚轮工作台，已停止卸载".to_string())?;
+    disable_code_oss_wheel_injection(&workbench)
+        .map_err(|error| format!("无法同步关闭增强滚轮，已停止卸载：{error}"))?;
+    let (_, enabled, needs_repair) = code_oss_wheel_injection_state(target);
+    if enabled || needs_repair {
+        return Err("增强滚轮关闭后复检状态不一致，已停止卸载".to_string());
+    }
+    Ok(true)
 }
 
 #[cfg(windows)]
@@ -1711,6 +1742,7 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
     }
     if target.kind == "jetbrains" {
         let action = if target.installed { "更新" } else { "安装" };
+        let reopen_after_install = input.close_running_ide;
         if target_executable_is_running(&target) {
             if input.close_running_ide {
                 close_target_ide_gracefully(&target, action)?;
@@ -1718,26 +1750,59 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
                 return Err(jetbrains_running_error(&target, action));
             }
         }
-        let message =
-            install_jetbrains_plugin(&target, &plugin_path, &plugin.identifier, &plugin.version)?;
-        let (verified, installed_version) = jetbrains_plugin_location(&target, &plugin.identifier)
-            .map(|(_, version)| (true, version))
-            .unwrap_or((false, None));
-        if !verified {
-            return Err("本地插件已部署，但复检未发现插件；请重启 IDE 后重试".to_string());
-        }
-        if !installed_version_matches(&plugin.version, &installed_version) {
-            return Err(format!(
-                "插件已发现，但版本为 {}，预期安装版本为 {}；请重试安装",
-                installed_version.as_deref().unwrap_or("未知"),
-                plugin.version
-            ));
-        }
+        let installation = (|| -> Result<(String, Option<String>), String> {
+            let message = install_jetbrains_plugin(
+                &target,
+                &plugin_path,
+                &plugin.identifier,
+                &plugin.version,
+            )?;
+            let (verified, installed_version) =
+                jetbrains_plugin_location(&target, &plugin.identifier)
+                    .map(|(_, version)| (true, version))
+                    .unwrap_or((false, None));
+            if !verified {
+                return Err("本地插件已部署，但复检未发现插件；请重启 IDE 后重试".to_string());
+            }
+            if !installed_version_matches(&plugin.version, &installed_version) {
+                return Err(format!(
+                    "插件已发现，但版本为 {}，预期安装版本为 {}；请重试安装",
+                    installed_version.as_deref().unwrap_or("未知"),
+                    plugin.version
+                ));
+            }
+            Ok((message, installed_version))
+        })();
+        let reopen_result = reopen_after_install.then(|| reopen_target_ide(&target));
+        let (message, installed_version) = match installation {
+            Ok((message, installed_version)) => {
+                let message = match reopen_result {
+                    Some(Ok(())) => {
+                        message.replace("重启 IDE 后生效", "已自动重新打开 IDE，插件将在启动后生效")
+                    }
+                    Some(Err(error)) => format!(
+                        "{message}；插件已安装，但自动重新打开 {} 失败：{error}。请手动打开 IDE",
+                        target.label
+                    ),
+                    None => message,
+                };
+                (message, installed_version)
+            }
+            Err(error) => {
+                if let Some(Err(reopen_error)) = reopen_result {
+                    return Err(format!(
+                        "{error}；同时无法重新打开 {}：{reopen_error}",
+                        target.label
+                    ));
+                }
+                return Err(error);
+            }
+        };
         return Ok(IdeInstallResult {
             target: target.label,
             plugin: plugin.label,
             installed: true,
-            verified,
+            verified: true,
             installed_version,
             message,
         });
@@ -1781,7 +1846,9 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
         installed: true,
         verified,
         installed_version,
-        message: if output_message.is_empty() {
+        message: if output_message.is_empty() && target.kind == "vscode" {
+            "安装命令已完成；如果编辑器已打开，请执行 Developer: Reload Window（重新加载窗口）以加载插件新版本。增强滚轮状态不受插件版本更新影响。".to_string()
+        } else if output_message.is_empty() {
             "安装命令已完成，重启 IDE 后生效".to_string()
         } else {
             output_message
@@ -1828,6 +1895,7 @@ pub fn uninstall(
     if !target.can_uninstall {
         return Err("此 IDE 请在其内置插件管理器中卸载".to_string());
     }
+    let wheel_injection_closed = disable_code_oss_wheel_injection_for_uninstall(&target)?;
     let was_installed_in_directory =
         vscode_extension_directory_state(&target, &plugin.identifier).0;
     let output = vscode_script_process(
@@ -1844,7 +1912,7 @@ pub fn uninstall(
             return Err(installer_failure(
                 "vscode",
                 &output,
-                "Code OSS 编辑器卸载器",
+                "VS Code 系列编辑器卸载工具",
             ));
         }
         true
@@ -1855,16 +1923,21 @@ pub fn uninstall(
     if !fallback_used && vscode_extension_state(&target, &plugin.identifier).0 {
         return Err("IDE 仍报告插件已安装，请关闭 IDE 后重试".to_string());
     }
+    let uninstall_message = if fallback_used {
+        "IDE 自带卸载器不兼容，已安全移除本地插件目录；重启 IDE 后生效"
+    } else {
+        "已从 IDE 扩展清单移除；重载或重启 IDE 后，活动栏和扩展页面会同步消失"
+    };
     Ok(IdeInstallResult {
         target: target.label,
         plugin: plugin.label,
         installed: false,
         verified: true,
         installed_version: None,
-        message: if fallback_used {
-            "IDE 自带卸载器不兼容，已安全移除本地插件目录；重启 IDE 后生效".to_string()
+        message: if wheel_injection_closed {
+            format!("增强滚轮已同步关闭并恢复编辑器工作台；{uninstall_message}")
         } else {
-            "已从 IDE 扩展清单移除；重载或重启 IDE 后，活动栏和扩展页面会同步消失".to_string()
+            uninstall_message.to_string()
         },
     })
 }
@@ -1877,7 +1950,7 @@ pub fn set_code_oss_wheel_injection(
         .find(|target| target.id == input.target_id)
         .ok_or_else(|| "未找到指定编辑器，请重新检测".to_string())?;
     if target.kind != "vscode" {
-        return Err("增强滚轮只适用于 Code OSS 类编辑器".to_string());
+        return Err("增强滚轮只适用于 VS Code 系列编辑器".to_string());
     }
     let workbench = code_oss_workbench(&target)
         .ok_or_else(|| "未找到该编辑器的 Monaco 工作台文件，当前版本暂不支持注入".to_string())?;
@@ -1907,9 +1980,10 @@ pub fn set_code_oss_wheel_injection(
 mod tests {
     use super::{
         clean_installer_diagnostic, code_oss_wheel_injection_state, compare_versions,
-        detect_targets, disable_code_oss_wheel_injection, enable_code_oss_wheel_injection,
-        install_jetbrains_plugin_at, installed_version_matches, is_jetbrains_cds_warning_only,
-        jetbrains_plugin_location_in_root, parse_vscode_extension_state, read_plugin_xml_from_jar,
+        detect_targets, disable_code_oss_wheel_injection_for_uninstall,
+        enable_code_oss_wheel_injection, install_jetbrains_plugin_at, installed_version_matches,
+        is_jetbrains_cds_warning_only, jetbrains_plugin_location_in_root,
+        parse_vscode_extension_state, read_plugin_xml_from_jar,
         remove_vscode_extension_directories_in_home, target_id,
         vscode_extension_directories_in_home, vscode_extension_state, vscode_script_process,
         workbench_integrity_checksum, xml_tag_value, IdeTarget, InstallIdePluginInput,
@@ -2399,7 +2473,8 @@ mod tests {
             .join(WHEEL_INJECTION_SCRIPT_NAME)
             .is_file());
         assert_eq!(code_oss_wheel_injection_state(&target), (true, true, false));
-        disable_code_oss_wheel_injection(&location).expect("disable injection");
+        assert!(disable_code_oss_wheel_injection_for_uninstall(&target)
+            .expect("disable injection before uninstall"));
         assert_eq!(
             fs::read(&workbench).expect("read restored workbench"),
             original
@@ -2408,6 +2483,8 @@ mod tests {
             code_oss_wheel_injection_state(&target),
             (true, false, false)
         );
+        assert!(!disable_code_oss_wheel_injection_for_uninstall(&target)
+            .expect("skip inactive injection before uninstall"));
         let restored_product = fs::read_to_string(product).expect("read restored product");
         assert!(restored_product.contains(&workbench_integrity_checksum(original)));
         fs::remove_dir_all(root).expect("remove wheel injection fixture");

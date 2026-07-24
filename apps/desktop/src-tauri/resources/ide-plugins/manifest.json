@@ -7,7 +7,7 @@
       "kind": "vscode",
       "version": "0.4.15",
       "identifier": "novel-library.novel-library-reader",
-      "description": "面向 VS Code、Cursor、Trae、Qoder、Windsurf、Kiro 等 Code OSS 编辑器的配套扩展，支持书架与章节浏览、五行只读正文、自动跨章、固定进度栏及桌面端进度同步。",
+      "description": "面向 VS Code、Cursor、Trae、Qoder、Windsurf、Kiro 等编辑器的配套扩展，支持书架与章节浏览、五行只读正文、自动跨章、固定进度栏及桌面端进度同步。",
       "packageType": "VSIX",
       "supportedIdes": ["Visual Studio Code", "VS Code Insiders", "Cursor", "Trae", "Qoder", "Windsurf", "Kiro", "VSCodium", "Void", "Code - OSS", "Positron", "PearAI"],
       "file": "novel-library-reader-0.4.15.vsix"

@@ -1,18 +1,24 @@
 <script setup lang="ts">
-import { BookOpen, LibraryBig, Search, Settings, Wrench } from 'lucide-vue-next'
+import { BookOpen, LibraryBig, PanelLeftClose, Search, Settings, Wrench } from 'lucide-vue-next'
 
 defineProps<{
   hasUpdate?: boolean
+  collapsed?: boolean
+}>()
+
+defineEmits<{
+  toggle: []
 }>()
 </script>
 
 <template>
-  <aside class="app-sidebar">
+  <aside class="app-sidebar" :class="{ 'app-sidebar--collapsed': collapsed }">
     <header class="sidebar-brand">
       <span class="app-mark"><BookOpen :size="18" /></span>
-      <div>
+      <div class="sidebar-brand-copy">
         <strong>小说书库</strong>
       </div>
+      <button type="button" class="sidebar-toggle" title="收起侧栏" aria-label="收起侧栏" @click="$emit('toggle')"><PanelLeftClose :size="18" /></button>
     </header>
 
     <nav class="sidebar-primary" aria-label="主导航">

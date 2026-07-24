@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ArrowLeft, CheckCircle2, Code2, Download, MousePointer2, RefreshCw, RotateCcw, Search, Trash2 } from 'lucide-vue-next'
+import { ArrowLeft, CheckCircle2, ChevronDown, Code2, Download, MousePointer2, RefreshCw, RotateCcw, Search, Trash2 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { getIdeIntegrationStatus, installIdePlugin, setCodeOssWheelInjection, uninstallIdePlugin, type BundledIdePlugin, type IdeIntegrationStatus, type IdeTarget } from '../services/desktop-library'
 import { idePluginUpdateAvailable } from '../services/ide-plugin-update'
@@ -10,7 +10,7 @@ import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 
 const router = useRouter()
 const fallbackPlugins: BundledIdePlugin[] = [
-  { id: 'vscode', label: '小说书库 · VS Code 阅读器', kind: 'vscode', version: '0.4.15', identifier: 'novel-library.novel-library-reader', description: '面向 VS Code、Cursor、Trae、Qoder、Windsurf、Kiro 等 Code OSS 编辑器的配套扩展，支持书架与章节浏览、五行只读正文、自动跨章、固定进度栏及桌面端进度同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'VS Code Insiders', 'Cursor', 'Trae', 'Qoder', 'Windsurf', 'Kiro', 'VSCodium', 'Void', 'Code - OSS', 'Positron', 'PearAI'], available: false },
+  { id: 'vscode', label: '小说书库 · VS Code 阅读器', kind: 'vscode', version: '0.4.15', identifier: 'novel-library.novel-library-reader', description: '面向 VS Code、Cursor、Trae、Qoder、Windsurf、Kiro 等编辑器的配套扩展，支持书架与章节浏览、五行只读正文、自动跨章、固定进度栏及桌面端进度同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'VS Code Insiders', 'Cursor', 'Trae', 'Qoder', 'Windsurf', 'Kiro', 'VSCodium', 'Void', 'Code - OSS', 'Positron', 'PearAI'], available: false },
   { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.15', identifier: 'com.kengqin.novellibrary.reader', description: '面向 IntelliJ IDEA、PyCharm、WebStorm、Android Studio 等 JetBrains IDE 的配套插件，支持五行只读正文、自动跨章、固定进度栏、悬停滚轮及桌面端进度同步。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
   { id: 'visual-studio', label: '小说书库 · Visual Studio 阅读器', kind: 'visual-studio', version: '0.4.15', identifier: 'NovelLibrary.VisualStudio', description: '面向 Visual Studio 2022 的配套扩展，支持书架与章节浏览、五行只读正文、自动跨章、固定进度栏、段落/行尾模式、悬停滚轮及桌面端进度同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio 2022'], available: false }
 ]
@@ -24,7 +24,9 @@ type RunningIdeAction = 'install' | 'update' | 'uninstall'
 const runningIdeOperation = ref<{ target: IdeTarget, plugin: BundledIdePlugin, action: RunningIdeAction }>()
 const ideActionLabel = (action: RunningIdeAction) => ({ install: '安装', update: '更新', uninstall: '卸载' })[action]
 const runningIdeActionLabel = computed(() => ideActionLabel(runningIdeOperation.value?.action || 'update'))
+const runningIdeWillReopen = computed(() => runningIdeOperation.value?.action !== 'uninstall')
 const pendingWheelTarget = ref<IdeTarget>()
+const collapsedPluginIds = ref(new Set<string>())
 let refreshGeneration = 0
 const visiblePlugins = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
@@ -34,6 +36,17 @@ const visiblePlugins = computed(() => {
 
 function targetsFor(plugin: BundledIdePlugin) {
   return status.value.targets.filter(target => target.kind === plugin.kind)
+}
+
+function pluginIsCollapsed(pluginId: string) {
+  return collapsedPluginIds.value.has(pluginId)
+}
+
+function togglePlugin(pluginId: string) {
+  const next = new Set(collapsedPluginIds.value)
+  if (next.has(pluginId)) next.delete(pluginId)
+  else next.add(pluginId)
+  collapsedPluginIds.value = next
 }
 
 async function refresh() {
@@ -103,6 +116,10 @@ async function uninstall(target: IdeTarget, plugin: BundledIdePlugin, closeRunni
   try {
     const result = await uninstallIdePlugin(target.id, plugin.id, closeRunningIde)
     if (result.installed || !result.verified) throw new Error(`${result.plugin} 卸载命令已返回，但复检未确认卸载完成`)
+    target.installed = false
+    target.installedVersion = undefined
+    target.wheelInjectionEnabled = false
+    target.wheelInjectionNeedsRepair = false
     showGlobalMessage(`${result.plugin} 已从 ${result.target} 卸载。${result.message}`)
     await refresh()
   } catch (cause) {
@@ -172,27 +189,30 @@ onMounted(refresh)
           <div class="ide-plugin-heading"><div class="ide-plugin-title"><strong>{{ plugin.label }}</strong><span>v{{ plugin.version }}</span></div><small>{{ plugin.description }}</small></div>
           <span class="ide-package-state" :class="{ ready: plugin.available }">{{ plugin.available ? `安装包已内置 · ${plugin.packageType}` : detecting ? '正在校验安装包' : '安装包缺失' }}</span>
         </header>
-        <div class="ide-plugin-supported"><span>支持：</span>{{ plugin.supportedIdes.join('、') }}</div>
-        <div v-if="targetsFor(plugin).length" class="ide-target-list">
+        <div class="ide-plugin-supported">
+          <div class="ide-plugin-supported-copy"><span>支持：</span>{{ plugin.supportedIdes.join('、') }}</div>
+          <button v-if="targetsFor(plugin).length" type="button" class="ide-plugin-collapse" :aria-expanded="!pluginIsCollapsed(plugin.id)" :aria-controls="`ide-targets-${plugin.id}`" @click="togglePlugin(plugin.id)"><ChevronDown :size="15" :class="{ collapsed: pluginIsCollapsed(plugin.id) }" />{{ pluginIsCollapsed(plugin.id) ? '展开' : '收起' }} · {{ targetsFor(plugin).length }} 个实例</button>
+        </div>
+        <div v-if="targetsFor(plugin).length && !pluginIsCollapsed(plugin.id)" :id="`ide-targets-${plugin.id}`" class="ide-target-list">
           <div v-for="target in targetsFor(plugin)" :key="target.id" class="ide-target-row">
-            <div><strong>{{ target.label }}</strong><small>安装位置：{{ target.path }}</small><span v-if="idePluginUpdateAvailable(target, plugin)">插件已安装 · v{{ target.installedVersion }}，可更新至 v{{ plugin.version }}</span><span v-else-if="target.installed">插件已安装{{ target.installedVersion ? ` · v${target.installedVersion}` : '' }}</span><span v-else>插件未安装</span><span v-if="target.wheelInjectionNeedsRepair">增强滚轮状态不完整，可关闭并恢复</span><span v-else-if="target.wheelInjectionEnabled">实验性增强滚轮已启用 · 重启编辑器后生效</span></div>
+            <div><strong>{{ target.label }}</strong><small>安装位置：{{ target.path }}</small><span v-if="idePluginUpdateAvailable(target, plugin)">插件已安装 · v{{ target.installedVersion }}，可更新至 v{{ plugin.version }}</span><span v-else-if="target.installed">插件已安装{{ target.installedVersion ? ` · v${target.installedVersion}` : '' }}</span><span v-else>插件未安装</span><span v-if="target.installed && target.wheelInjectionNeedsRepair">增强滚轮状态不完整，可关闭并恢复</span><span v-else-if="target.installed && target.wheelInjectionEnabled">实验性增强滚轮已启用</span></div>
             <div class="ide-target-actions">
               <button v-if="busyTarget === target.id && busyAction !== 'wheel'" type="button" class="secondary-command" disabled><RotateCcw :size="15" class="spinning" />{{ busyAction === 'uninstall' ? '卸载中' : busyAction === 'update' ? '更新中' : '安装中' }}</button>
               <button v-else-if="idePluginUpdateAvailable(target, plugin)" type="button" class="primary-command" :disabled="!plugin.available" @click="install(target, plugin)"><RefreshCw :size="15" />更新</button>
               <button v-else-if="target.installed && target.canUninstall" type="button" class="secondary-command" @click="uninstall(target, plugin)"><Trash2 :size="15" />卸载</button>
               <button v-else-if="target.installed" type="button" class="secondary-command" disabled><CheckCircle2 :size="15" />已安装</button>
               <button v-else type="button" class="primary-command" :disabled="!plugin.available" @click="install(target, plugin)"><Download :size="15" />安装</button>
-              <button v-if="target.kind === 'vscode' && target.wheelInjectionAvailable" type="button" role="switch" class="secondary-command ide-wheel-switch" :class="{ active: target.wheelInjectionEnabled, warning: target.wheelInjectionNeedsRepair }" :aria-checked="target.wheelInjectionEnabled" :disabled="busyTarget === target.id || (!target.installed && !target.wheelInjectionEnabled && !target.wheelInjectionNeedsRepair)" @click="requestWheelToggle(target)"><RotateCcw v-if="busyTarget === target.id && busyAction === 'wheel'" :size="14" class="spinning" /><MousePointer2 v-else :size="14" />增强滚轮：{{ target.wheelInjectionNeedsRepair ? '恢复' : target.wheelInjectionEnabled ? '开' : '关' }}</button>
+              <button v-if="target.installed && target.kind === 'vscode' && target.wheelInjectionAvailable" type="button" role="switch" class="secondary-command ide-wheel-switch" :class="{ active: target.wheelInjectionEnabled, warning: target.wheelInjectionNeedsRepair }" :aria-checked="target.wheelInjectionEnabled" :disabled="busyTarget === target.id" @click="requestWheelToggle(target)"><RotateCcw v-if="busyTarget === target.id && busyAction === 'wheel'" :size="14" class="spinning" /><MousePointer2 v-else :size="14" />增强滚轮：{{ target.wheelInjectionNeedsRepair ? '恢复' : target.wheelInjectionEnabled ? '开' : '关' }}</button>
             </div>
           </div>
         </div>
-        <div v-else class="ide-plugin-empty">{{ detecting ? '正在检测本机实例...' : `未检测到 ${plugin.supportedIdes.join('、')}` }}</div>
+        <div v-else-if="!targetsFor(plugin).length" class="ide-plugin-empty">{{ detecting ? '正在检测本机实例...' : `未检测到 ${plugin.supportedIdes.join('、')}` }}</div>
       </article>
     </div>
     <UiConfirmDialog
       :open="Boolean(runningIdeOperation)"
       :title="`需要关闭 JetBrains IDE 才能${runningIdeActionLabel}`"
-      :description="`${runningIdeOperation?.target.label || 'JetBrains IDE'} 正在使用插件文件。可以由桌面端发送正常关闭请求（IDE 仍会询问是否保存未保存内容），也可以自行关闭后再次${runningIdeActionLabel}；不会强制结束进程。`"
+      :description="`${runningIdeOperation?.target.label || 'JetBrains IDE'} 正在使用插件文件。可以由桌面端发送正常关闭请求（IDE 仍会询问是否保存未保存内容），也可以自行关闭后再次${runningIdeActionLabel}；不会强制结束进程。${runningIdeWillReopen ? `${runningIdeActionLabel}完成后，桌面端会自动重新打开该 IDE。` : ''}`"
       :confirm-label="`帮我关闭并${runningIdeActionLabel}`"
       cancel-label="我自己关闭"
       @close="chooseManualIdeClose"
@@ -201,7 +221,7 @@ onMounted(refresh)
     <UiConfirmDialog
       :open="Boolean(pendingWheelTarget)"
       title="启用实验性增强滚轮？"
-      :description="`这会修改 ${pendingWheelTarget?.label || 'Code OSS 编辑器'} 的 Monaco 工作台文件，并同步更新完整性校验。桌面端会保留备份并支持关闭恢复，但编辑器升级后可能需要重新启用。功能默认关闭，启用后请完全退出并重新打开编辑器。`"
+      :description="`这会修改 ${pendingWheelTarget?.label || 'VS Code 系列编辑器'} 的 Monaco 工作台文件，并同步更新完整性校验。桌面端会保留备份并支持关闭恢复，但编辑器升级后可能需要重新启用。功能默认关闭，启用后请完全退出并重新打开编辑器。`"
       confirm-label="启用并安装注入"
       cancel-label="保持关闭"
       @close="pendingWheelTarget = undefined"

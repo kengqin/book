@@ -1,8 +1,43 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.5",
+  "latest": "0.6.6",
   "releases": [
+    {
+      "version": "0.6.6",
+      "date": "2026-07-24",
+      "title": "书架交互与桌面界面体验优化",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.5",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.6",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.6/NovelLibrary_0.6.6_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "优化",
+          "items": [
+            "书架导入增加确认弹框和多文件选择，确认后按顺序批量解析，单个文件失败不会中断其余文件",
+            "书卡新增悬浮删除入口和二次确认，默认窗口加宽以稳定展示四列书籍",
+            "左侧导航支持完全收起并记住状态，插件实例列表支持按插件包展开或收起",
+            "统一精简弹框、工具卡片、笔记操作和全局消息样式，减少边框、分隔线与多余图标底块",
+            "JetBrains 插件安装或更新时，桌面端自动关闭 IDE 后会在操作完成后重新打开对应 IDE"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "VS Code 系列编辑器卸载阅读插件时同步关闭增强滚轮，未安装插件的实例不再显示增强滚轮入口",
+            "插件更新不再重置增强滚轮状态，已启用状态也不再长期提示必须重启编辑器"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.5",
       "date": "2026-07-24",

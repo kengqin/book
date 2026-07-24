@@ -1,7 +1,7 @@
 {
   "name": "novel-library-reader",
   "displayName": "小说书库阅读器",
-  "description": "小说书库桌面端的 Code OSS 阅读扩展，支持书架与章节浏览、五行只读正文、自动跨章、阅读进度同步及段落/行尾显示模式。",
+  "description": "小说书库桌面端的 VS Code 系列编辑器阅读扩展，支持书架与章节浏览、五行只读正文、自动跨章、阅读进度同步及段落/行尾显示模式。",
   "version": "0.4.15",
   "publisher": "novel-library",
   "license": "MIT",

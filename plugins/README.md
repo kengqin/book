@@ -4,7 +4,7 @@
 
 ## 插件包
 
-- `vscode`：适用于 Visual Studio Code、Cursor、Trae、Qoder、Windsurf、Kiro 及其他兼容 Code OSS 编辑器的 VSIX。
+- `vscode`：适用于 Visual Studio Code、Cursor、Trae、Qoder、Windsurf、Kiro 及其他 VS Code 系列编辑器的 VSIX。
 - `intellij`：适用于 IntelliJ IDEA、PyCharm、WebStorm、Android Studio、Rider、CLion、GoLand、RubyMine 等 IntelliJ Platform IDE 的 ZIP 插件。
 - `visual-studio`：适用于 Visual Studio 2022 Community、Professional 和 Enterprise 的 VSIX。
 
@@ -17,9 +17,9 @@
 - `Ctrl+Alt+↑ / ↓`：上一行或下一行。
 - `Ctrl+Alt+← / →`：上一章或下一章。
 
-默认快捷键可在 Code OSS Keyboard Shortcuts、JetBrains Keymap 或 Visual Studio Environment/Keyboard 设置中覆盖。插件阅读界面均提供快捷键说明与自定义入口。
+默认快捷键可在 VS Code 系列编辑器的 Keyboard Shortcuts、JetBrains Keymap 或 Visual Studio Environment/Keyboard 设置中覆盖。插件阅读界面均提供快捷键说明与自定义入口。
 
-JetBrains IDE 和 Visual Studio 原生支持在五行阅读区域内悬停滚轮切行，并保持区域外的代码滚动不受影响。Code OSS 扩展 API 不提供装饰区域滚轮事件，因此对应能力由桌面端的“增强滚轮”实验开关提供；该功能默认关闭，启用前备份工作台文件，关闭时可恢复，写入失败会自动回滚。
+JetBrains IDE 和 Visual Studio 原生支持在五行阅读区域内悬停滚轮切行，并保持区域外的代码滚动不受影响。VS Code 扩展 API 不提供装饰区域滚轮事件，因此对应能力由桌面端的“增强滚轮”实验开关提供；该功能默认关闭，启用前备份工作台文件，关闭时可恢复，写入失败会自动回滚。
 
 ## 本机连接与数据边界
 

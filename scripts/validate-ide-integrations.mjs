@@ -254,6 +254,7 @@ requireValue(!desktopIdeIntegration.includes('cli' + '.js'), 'Desktop plugin ins
 requireMatch(desktopIdeIntegration, /--list-extensions/, 'VS Code installed state must use the IDE CLI')
 requireMatch(desktopIdeIntegration, /parse_vscode_extension_state/, 'VS Code CLI installed-state parser is missing')
 requireMatch(desktopIdeIntegration, /remove_vscode_extension_directories[\s\S]*fallback_used/, 'Code OSS uninstall must fall back when a fork CLI is incompatible')
+requireMatch(desktopIdeIntegration, /reopen_after_install[\s\S]*reopen_target_ide/, 'JetBrains automatic close flow must reopen the IDE after install or update')
 requireMatch(desktopIdeIntegration, /clean_installer_diagnostic/, 'IDE installer diagnostic filtering is missing')
 requireMatch(desktopIdeIntegration, /cfg!\(debug_assertions\)[\s\S]*\[development, bundled_nested, bundled_direct\]/, 'Desktop debug plugin manifest must not be shadowed by a stale bundled copy')
 requireMatch(desktopIdeIntegration, /WHEEL_INJECTION_START[\s\S]*workbench\.html\.novel-library-reader\.backup/, 'Code OSS wheel injection backup contract is missing')

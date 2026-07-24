@@ -9,11 +9,13 @@ const props = withDefaults(defineProps<{
   cancelLabel?: string
   danger?: boolean
   busy?: boolean
+  confirmDisabled?: boolean
 }>(), {
   confirmLabel: '确认',
   cancelLabel: '取消',
   danger: false,
-  busy: false
+  busy: false,
+  confirmDisabled: false
 })
 
 const emit = defineEmits<{
@@ -44,9 +46,10 @@ function cancel(event: Event) {
     <dialog ref="dialog" class="ui-dialog" @cancel="cancel" @close="open && close()">
       <h2>{{ title }}</h2>
       <p>{{ description }}</p>
+      <slot />
       <div class="ui-dialog-actions">
         <button type="button" class="secondary-command" :disabled="busy" @click="close">{{ cancelLabel }}</button>
-        <button type="button" :class="danger ? 'danger-command-filled' : 'primary-command'" :disabled="busy" @click="emit('confirm')">
+        <button type="button" :class="danger ? 'danger-command-filled' : 'primary-command'" :disabled="busy || confirmDisabled" @click="emit('confirm')">
           {{ busy ? '正在处理' : confirmLabel }}
         </button>
       </div>
