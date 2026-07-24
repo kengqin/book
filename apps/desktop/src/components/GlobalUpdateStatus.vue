@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Download, RefreshCw, RotateCw, X } from 'lucide-vue-next'
 import {
   availableUpdate,
@@ -9,15 +9,25 @@ import {
   installDownloadedUpdate,
   publishedUpdateVersion,
   updateError,
+  updateCompatibilityNote,
   updateProgress,
   updateRequiresBackup,
   updateStage
 } from '../services/release-center'
 import UiConfirmDialog from './ui/UiConfirmDialog.vue'
+import { showGlobalMessage } from '../services/global-message'
 
 const visible = computed(() => (availableUpdate.value || publishedUpdateVersion.value) && updateStage.value !== 'idle')
 const isError = computed(() => ['manifest-error', 'version-mismatch', 'signature-error', 'download-error', 'install-error', 'relaunch-error'].includes(updateStage.value))
 const backupDialogOpen = ref(false)
+
+watch(updateError, value => {
+  if (value) showGlobalMessage(value, 'error', 6000)
+})
+
+watch(updateCompatibilityNote, value => {
+  if (value) showGlobalMessage(value, 'warning', 6000)
+})
 
 function requestDownload() {
   if (updateRequiresBackup.value) {
@@ -51,7 +61,7 @@ function close() {
     <p v-else-if="updateStage === 'downloaded'">v{{ availableUpdate?.version }} 已下载完成</p>
     <p v-else-if="updateStage === 'installing'">正在安装更新...</p>
     <p v-else-if="updateStage === 'published-but-not-ready'">v{{ publishedUpdateVersion }} 已发布，更新组件正在同步</p>
-    <p v-else-if="isError" class="update-error">{{ updateError }}</p>
+    <p v-else-if="isError">更新操作未完成</p>
     <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="global-update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
     <button v-if="updateStage === 'available'" type="button" class="primary-command" @click="requestDownload"><Download :size="15" />下载更新</button>
     <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate"><RotateCw :size="15" />安装并重启</button>

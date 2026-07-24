@@ -5,6 +5,7 @@ import { AlignJustify, ArrowLeft, ChevronLeft, ChevronRight, Minus, Plus, Sun, T
 import { formatChapterLabel, getCompactReaderWindow, isNumberedChapter } from '@novel-library/reader-core'
 import { getDesktopBook, getDesktopChapter, listDesktopChapters, saveDesktopProgress, type DesktopBook, type DesktopChapter, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
+import { showGlobalError } from '../services/global-message'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,7 +13,6 @@ const book = ref<DesktopBook>()
 const chapter = ref<DesktopChapter>()
 const chapters = ref<DesktopChapterSummary[]>([])
 const loading = ref(true)
-const error = ref('')
 const fontSize = ref(18)
 const lineHeight = ref(2.05)
 const palette = ref<'light' | 'paper' | 'night'>('paper')
@@ -22,6 +22,7 @@ const compactColumns = ref(36)
 const compactAnchor = ref(0)
 let scrollRoot: HTMLElement | null = null
 let progressTimer = 0
+let progressSaveFailed = false
 
 const bookId = computed(() => String(route.params.bookId))
 const chapterNumber = computed(() => Number(route.params.chapterNumber))
@@ -68,19 +69,32 @@ function saveSettings() {
   localStorage.setItem('desktop-reader-settings', JSON.stringify({ fontSize: fontSize.value, lineHeight: lineHeight.value, palette: palette.value }))
 }
 
+async function persistProgress(progress: number) {
+  if (!chapter.value) return
+  try {
+    await saveDesktopProgress(bookId.value, chapter.value.number, progress)
+    progressSaveFailed = false
+  } catch (cause) {
+    if (!progressSaveFailed) {
+      showGlobalError(cause, '阅读进度保存失败，请稍后重试')
+    }
+    progressSaveFailed = true
+  }
+}
+
 function updateProgress() {
   if (!scrollRoot || !chapter.value) return
   const scrollable = scrollRoot.scrollHeight - scrollRoot.clientHeight
   const progress = scrollable > 0 ? Math.min(100, Math.max(0, scrollRoot.scrollTop / scrollable * 100)) : 0
   window.clearTimeout(progressTimer)
-  progressTimer = window.setTimeout(() => saveDesktopProgress(bookId.value, chapter.value!.number, progress), 450)
+  progressTimer = window.setTimeout(() => void persistProgress(progress), 450)
 }
 
 function saveCompactProgress() {
   if (!chapter.value) return
   const progress = compactText.value.length ? compactAnchor.value / compactText.value.length * 100 : 0
   window.clearTimeout(progressTimer)
-  progressTimer = window.setTimeout(() => saveDesktopProgress(bookId.value, chapter.value!.number, progress), 300)
+  progressTimer = window.setTimeout(() => void persistProgress(progress), 300)
 }
 
 function moveCompactWindow(direction: -1 | 1, page = false) {
@@ -123,7 +137,6 @@ function handleReaderKeydown(event: KeyboardEvent) {
 
 async function load() {
   loading.value = true
-  error.value = ''
   try {
     const [nextBook, nextChapters, nextChapter] = await Promise.all([
       getDesktopBook(bookId.value),
@@ -143,7 +156,7 @@ async function load() {
       scrollRoot.scrollTo({ top: scrollable * restoredProgress / 100 })
     })
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showGlobalError(cause, '章节加载失败，请返回目录后重试')
   } finally {
     loading.value = false
   }
@@ -178,7 +191,6 @@ watch(() => route.params.chapterNumber, load)
   <section class="desktop-reader" :class="[`desktop-reader--${palette}`, { 'desktop-reader--compact': compactMode }]" :style="{ '--reader-font-size': `${fontSize}px`, '--reader-line-height': lineHeight }">
     <header class="desktop-reader-toolbar"><button type="button" class="icon-button" title="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button><div v-if="book && chapter"><strong>{{ book.title }}</strong><span>{{ chapterPositionLabel() }}</span></div><div class="reader-controls"><button type="button" :class="{ active: compactMode }" title="紧凑阅读模式" @click="compactMode = !compactMode">{{ compactMode ? '完整' : '紧凑' }}</button><label v-if="compactMode" class="reader-compact-lines" title="显示行数"><button v-for="value in [4, 5, 8]" :key="value" type="button" :class="{ active: compactLines === value }" @click="compactLines = value">{{ value }} 行</button></label><label class="reader-font-size" title="字号"><Type :size="16" /><button type="button" @click="fontSize = Math.max(15, fontSize - 1)"><Minus :size="14" /></button><output>{{ fontSize }}</output><button type="button" @click="fontSize = Math.min(26, fontSize + 1)"><Plus :size="14" /></button></label><label class="reader-line-height" title="行距"><AlignJustify :size="16" /><button v-for="value in [1.8, 2.05, 2.3]" :key="value" type="button" :class="{ active: lineHeight === value }" @click="lineHeight = value">{{ value === 1.8 ? '紧' : value === 2.05 ? '中' : '松' }}</button></label><label class="reader-palette" title="纸张"><Sun :size="16" /><button v-for="item in ([['light','白'],['paper','纸'],['night','夜']] as const)" :key="item[0]" type="button" :class="{ active: palette === item[0] }" @click="palette = item[0]">{{ item[1] }}</button></label></div></header>
     <div v-if="loading" class="view-status" role="status">正在加载章节...</div>
-    <div v-else-if="error" class="inline-error" role="alert">{{ error }}</div>
     <main v-else-if="book && chapter" :class="compactMode ? 'desktop-reader-compact-content' : 'desktop-reader-content'"><article><p v-if="chapter.kind !== 'volume'" class="reader-volume">{{ chapter.volume || book.title }}</p><h1>{{ chapterHeading() }}</h1><section v-if="compactMode" class="compact-reader-window"><p v-for="line in compactWindow.lines" :key="line.start">{{ line.text || ' ' }}</p><small>{{ compactWindow.startLine + 1 }} - {{ compactWindow.endLine }} / {{ compactWindow.totalLines }} 行</small></section><template v-else><div v-if="isRichContent" class="epub-content" v-html="safeRichContent" /><template v-else><p v-for="(paragraph, index) in paragraphs" :key="index">{{ paragraph }}</p></template></template></article><footer><button type="button" :disabled="!previous" @click="previous && openChapter(previous.number)"><ChevronLeft :size="18" /><span><small>上一章</small>{{ previous?.title || '已经是第一章' }}</span></button><button type="button" :disabled="!next" @click="next && openChapter(next.number)"><span><small>下一章</small>{{ next?.title || '已经是最后一章' }}</span><ChevronRight :size="18" /></button></footer></main>
   </section>
 </template>

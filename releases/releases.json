@@ -1,8 +1,42 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.6",
+  "latest": "0.6.7",
   "releases": [
+    {
+      "version": "0.6.7",
+      "date": "2026-07-24",
+      "title": "全局提示与操作反馈优化",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.6",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.7",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.7/NovelLibrary_0.6.7_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "优化",
+          "items": [
+            "书架、搜索、笔记、阅读器、设置、更新和关闭窗口等操作反馈统一使用顶部全局 Message",
+            "插件操作不再展示 CLI 原始输出，备份与笔记导出不再展示本机完整路径，英文诊断统一转换为中文提示",
+            "精简书籍导入弹框说明及导入结果，只保留文件选择、批量导入和失败文件等必要信息"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "修复设置页保存反馈及其他操作结果仍显示为页内提示的问题",
+            "修复 VS Code 系列插件安装成功后继续拼接英文命令输出的问题",
+            "修复书籍、章节和阅读进度等异步失败未统一提示的问题"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.6",
       "date": "2026-07-24",

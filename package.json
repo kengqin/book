@@ -1,6 +1,6 @@
 {
   "name": "book",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "",
   "main": "index.js",
   "private": true,
@@ -34,7 +34,8 @@
     "release:validate": "node scripts/validate-release.mjs",
     "release:manifest": "node scripts/release/build-target-manifest.mjs",
     "release:verify": "node scripts/release/verify-published-release.mjs",
-    "test": "vitest run",
+    "test": "vitest run && node scripts/validate-desktop-feedback.mjs",
+    "desktop:feedback:validate": "node scripts/validate-desktop-feedback.mjs",
     "plugins:validate": "node scripts/validate-ide-integrations.mjs"
   },
   "repository": {

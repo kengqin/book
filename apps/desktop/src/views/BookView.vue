@@ -6,13 +6,13 @@ import { formatChapterLabel, isNumberedChapter } from '@novel-library/reader-cor
 import { deleteDesktopBook, getDesktopBook, listDesktopChapters, type DesktopBook, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
+import { showGlobalError, showGlobalMessage } from '../services/global-message'
 
 const route = useRoute()
 const router = useRouter()
 const book = ref<DesktopBook>()
 const chapters = ref<DesktopChapterSummary[]>([])
 const loading = ref(true)
-const error = ref('')
 const deleteDialogOpen = ref(false)
 const deleting = ref(false)
 const bookId = computed(() => String(route.params.bookId))
@@ -53,7 +53,7 @@ async function load() {
     book.value = nextBook
     chapters.value = nextChapters
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showGlobalError(cause, '书籍加载失败，请返回书架后重试')
   } finally {
     loading.value = false
   }
@@ -61,11 +61,15 @@ async function load() {
 
 async function removeBook() {
   if (!book.value) return
+  const title = book.value.title
   deleting.value = true
   try {
     await deleteDesktopBook(book.value.id)
     deleteDialogOpen.value = false
     await router.push('/library')
+    showGlobalMessage(`《${title}》已删除`)
+  } catch (cause) {
+    showGlobalError(cause, '书籍删除失败，请稍后重试')
   } finally {
     deleting.value = false
   }
@@ -78,7 +82,6 @@ onMounted(load)
   <section class="workspace-view book-detail-view">
     <button type="button" class="text-command" @click="router.push('/library')"><ArrowLeft :size="16" />返回书架</button>
     <div v-if="loading" class="view-status" role="status">正在读取书籍...</div>
-    <div v-else-if="error" class="inline-error" role="alert">{{ error }}</div>
     <template v-else-if="book">
       <header class="book-detail-header" :style="{ '--book-accent': book.theme.accent }">
         <div class="book-detail-seal" :class="{ 'book-detail-seal--image': book.coverDataUrl }"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></div>

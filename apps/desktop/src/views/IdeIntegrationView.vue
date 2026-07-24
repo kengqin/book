@@ -4,7 +4,7 @@ import { ArrowLeft, CheckCircle2, ChevronDown, Code2, Download, MousePointer2, R
 import { useRouter } from 'vue-router'
 import { getIdeIntegrationStatus, installIdePlugin, setCodeOssWheelInjection, uninstallIdePlugin, type BundledIdePlugin, type IdeIntegrationStatus, type IdeTarget } from '../services/desktop-library'
 import { idePluginUpdateAvailable } from '../services/ide-plugin-update'
-import { showGlobalMessage } from '../services/global-message'
+import { showGlobalError, showGlobalMessage } from '../services/global-message'
 import PageHeader from '../components/ui/PageHeader.vue'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 
@@ -59,7 +59,7 @@ async function refresh() {
   } catch (cause) {
     if (generation === refreshGeneration) {
       error.value = cause instanceof Error ? cause.message : String(cause)
-      showGlobalMessage(`IDE 检测失败：${error.value}`, 'error', 6000)
+      showGlobalError(cause, 'IDE 检测失败，请稍后重试')
     }
   } finally {
     if (generation === refreshGeneration) detecting.value = false
@@ -75,7 +75,7 @@ async function install(target: IdeTarget, plugin: BundledIdePlugin, closeRunning
     const result = await installIdePlugin(target.id, plugin.id, closeRunningIde)
     if (!result.installed || !result.verified) throw new Error(`${result.plugin} 安装命令已返回，但复检未确认安装完成`)
     const version = result.installedVersion ? ` · v${result.installedVersion}` : ''
-    showGlobalMessage(`${result.plugin} 已${updating ? '更新' : '安装'}到 ${result.target}${version}。${result.message}`)
+    showGlobalMessage(`${result.plugin} 已${updating ? '更新' : '安装'}到 ${result.target}${version}`)
     await refresh()
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause)
@@ -83,7 +83,7 @@ async function install(target: IdeTarget, plugin: BundledIdePlugin, closeRunning
       runningIdeOperation.value = { target, plugin, action: updating ? 'update' : 'install' }
     } else {
       error.value = detail.replace(/^IDE_(?:RUNNING|CLOSE_PENDING):\s*/, '')
-      showGlobalMessage(error.value, 'error', 6000)
+      showGlobalError(error.value, `插件${updating ? '更新' : '安装'}失败，请稍后重试`)
     }
   } finally {
     busyTarget.value = ''
@@ -120,7 +120,7 @@ async function uninstall(target: IdeTarget, plugin: BundledIdePlugin, closeRunni
     target.installedVersion = undefined
     target.wheelInjectionEnabled = false
     target.wheelInjectionNeedsRepair = false
-    showGlobalMessage(`${result.plugin} 已从 ${result.target} 卸载。${result.message}`)
+    showGlobalMessage(`${result.plugin} 已从 ${result.target} 卸载`)
     await refresh()
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause)
@@ -128,7 +128,7 @@ async function uninstall(target: IdeTarget, plugin: BundledIdePlugin, closeRunni
       runningIdeOperation.value = { target, plugin, action: 'uninstall' }
     } else {
       error.value = detail.replace(/^IDE_(?:RUNNING|CLOSE_PENDING):\s*/, '')
-      showGlobalMessage(error.value, 'error', 6000)
+      showGlobalError(error.value, '插件卸载失败，请稍后重试')
     }
   } finally {
     busyTarget.value = ''
@@ -142,11 +142,11 @@ async function changeWheelInjection(target: IdeTarget, enabled: boolean) {
   error.value = ''
   try {
     const result = await setCodeOssWheelInjection(target.id, enabled)
-    showGlobalMessage(`${result.target}：${result.message}`)
+    showGlobalMessage(`${result.target} 的增强滚轮已${result.enabled ? '开启' : '关闭'}，重启编辑器后生效`)
     await refresh()
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
-    showGlobalMessage(error.value, 'error', 6000)
+    showGlobalError(cause, '增强滚轮设置失败，请稍后重试')
   } finally {
     busyTarget.value = ''
     busyAction.value = ''

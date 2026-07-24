@@ -4,23 +4,22 @@ import { isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { X } from 'lucide-vue-next'
 import { cancelCloseBehaviorPrompt, resolveCloseBehavior, type CloseBehavior } from '../services/desktop-library'
+import { showGlobalError } from '../services/global-message'
 
 const visible = ref(false)
 const remember = ref(false)
 const busy = ref(false)
-const error = ref('')
 const dialog = ref<HTMLElement>()
 let unlisten: UnlistenFn | undefined
 
 async function choose(behavior: Exclude<CloseBehavior, 'ask'>) {
   if (busy.value) return
   busy.value = true
-  error.value = ''
   try {
     await resolveCloseBehavior(behavior, remember.value)
     visible.value = false
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showGlobalError(cause, '关闭窗口方式保存失败，请稍后重试')
   } finally {
     busy.value = false
   }
@@ -28,8 +27,12 @@ async function choose(behavior: Exclude<CloseBehavior, 'ask'>) {
 
 async function cancel() {
   if (busy.value) return
-  await cancelCloseBehaviorPrompt()
-  visible.value = false
+  try {
+    await cancelCloseBehaviorPrompt()
+    visible.value = false
+  } catch (cause) {
+    showGlobalError(cause, '暂时无法取消关闭，请稍后重试')
+  }
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -40,7 +43,6 @@ onMounted(async () => {
   if (!isTauri()) return
   unlisten = await listen('close-behavior-requested', async () => {
     remember.value = false
-    error.value = ''
     visible.value = true
     await nextTick()
     dialog.value?.focus()
@@ -64,7 +66,6 @@ onBeforeUnmount(() => {
         </header>
         <p>缩小到托盘后，IDE 插件仍可正常同步；直接退出后，需要重新打开小说书库才能继续同步。</p>
         <label class="remember-close-choice"><input v-model="remember" type="checkbox" /><span>记住我的选择，下次不再询问</span></label>
-        <p v-if="error" class="inline-error">{{ error }}</p>
         <footer>
           <button type="button" class="secondary-command danger-command" :disabled="busy" @click="choose('quit')">直接退出</button>
           <button type="button" class="primary-command" :disabled="busy" @click="choose('minimizeToTray')">缩小到托盘</button>

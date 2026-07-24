@@ -9,13 +9,13 @@ import PageHeader from '../components/ui/PageHeader.vue'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 import { parseNovelFile } from '../services/parse-novel-file'
 import { parseEpubFile } from '../services/parse-epub-file'
+import { showGlobalError, showGlobalMessage } from '../services/global-message'
 
 const router = useRouter()
 const cachedBooks = getCachedDesktopBooks()
 const books = ref<DesktopBookSummary[]>(cachedBooks || [])
 const loading = ref(cachedBooks === undefined)
 const refreshing = ref(false)
-const error = ref('')
 const importing = ref(false)
 const importProgress = ref(0)
 const importMessage = ref('')
@@ -25,15 +25,18 @@ const pendingImportFiles = ref<File[]>([])
 const pendingDeleteBook = ref<DesktopBookSummary>()
 const deleting = ref(false)
 
+function showError(cause: unknown, fallback: string) {
+  showGlobalError(cause, fallback)
+}
+
 async function loadBooks() {
   const hasVisibleBooks = books.value.length > 0
   loading.value = !hasVisibleBooks
   refreshing.value = hasVisibleBooks
-  error.value = ''
   try {
     books.value = await listDesktopBooks({ forceRefresh: true })
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showError(cause, '书架加载失败，请稍后重试')
   } finally {
     loading.value = false
     refreshing.value = false
@@ -42,7 +45,6 @@ async function loadBooks() {
 
 function openImportDialog() {
   if (importing.value) return
-  error.value = ''
   pendingImportFiles.value = []
   if (fileInput.value) fileInput.value.value = ''
   importDialogOpen.value = true
@@ -114,9 +116,8 @@ async function importBooks(files: File[], existingId?: string) {
   importing.value = true
   importProgress.value = 0
   importMessage.value = '正在读取文件'
-  error.value = ''
   const importedIds: string[] = []
-  const failures: Array<{ file: File, message: string }> = []
+  const failures: File[] = []
   try {
     for (const [index, file] of files.entries()) {
       const prefix = files.length > 1 ? `${index + 1}/${files.length} · ${file.name} · ` : ''
@@ -130,19 +131,23 @@ async function importBooks(files: File[], existingId?: string) {
           }
         )
         importedIds.push(book.id)
-      } catch (cause) {
-        failures.push({ file, message: cause instanceof Error ? cause.message : String(cause) })
+      } catch {
+        failures.push(file)
       }
       importProgress.value = Math.round((index + 1) / files.length * 100)
     }
     importMessage.value = '正在刷新书架'
     await loadBooks()
     if (failures.length) {
-      const details = failures.slice(0, 3).map(item => `${item.file.name}：${item.message}`).join('；')
-      const remaining = failures.length > 3 ? `；另有 ${failures.length - 3} 个文件失败` : ''
-      error.value = `已导入 ${importedIds.length}/${files.length} 本书。${details}${remaining}`
+      const failedNames = failures.slice(0, 2).map(file => file.name).join('、')
+      const remaining = failures.length > 2 ? `${failedNames} 等 ${failures.length} 个文件` : failedNames
+      const summary = importedIds.length ? `已导入 ${importedIds.length}/${files.length} 本书` : '书籍导入失败'
+      showGlobalMessage(`${summary}，未导入：${remaining}`, 'warning', 6000)
     } else if (files.length === 1 && importedIds[0]) {
+      showGlobalMessage(existingId ? '书籍已重新导入' : '书籍已导入书架')
       await router.push(`/book/${importedIds[0]}`)
+    } else {
+      showGlobalMessage(`已导入 ${importedIds.length} 本书`)
     }
   } finally {
     importing.value = false
@@ -157,7 +162,7 @@ async function importExternalFile(event: Event) {
     const external = await readDesktopExternalFile(detail.path)
     await importBooks([new File([new Uint8Array(external.bytes)], external.name)], detail.existingId)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showError(cause, '书籍导入失败，请检查文件后重试')
   }
 }
 
@@ -165,13 +170,13 @@ async function removeBook() {
   const book = pendingDeleteBook.value
   if (!book) return
   deleting.value = true
-  error.value = ''
   try {
     await deleteDesktopBook(book.id)
     books.value = books.value.filter(item => item.id !== book.id)
     pendingDeleteBook.value = undefined
+    showGlobalMessage(`《${book.title}》已删除`)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showError(cause, '书籍删除失败，请稍后重试')
   } finally {
     deleting.value = false
   }
@@ -195,7 +200,6 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
     </PageHeader>
 
     <div v-if="importing" class="import-status" role="status"><div><span :style="{ width: `${importProgress}%` }" /></div><strong>{{ importMessage }}</strong><small>{{ importProgress }}%</small></div>
-    <div v-if="error" class="inline-error" role="alert">{{ error }}</div>
     <div v-if="loading" class="view-status" role="status">正在读取本地书架...</div>
     <div v-else-if="!books.length && !importing" class="empty-library">
       <BookOpen :size="34" />
@@ -208,7 +212,7 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
     <UiConfirmDialog
       :open="importDialogOpen"
       title="导入书籍"
-      description="选择文件后不会立即解析；确认导入后弹框会关闭，并在书架页继续显示解析和写入进度。"
+      description="选择本地书籍文件，可一次导入多本。"
       :confirm-label="pendingImportFiles.length > 1 ? `确认导入（${pendingImportFiles.length}）` : '确认导入'"
       cancel-label="取消"
       :confirm-disabled="!pendingImportFiles.length"
