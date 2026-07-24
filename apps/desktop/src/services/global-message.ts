@@ -31,3 +31,13 @@ export function showGlobalMessage(text: string, type: GlobalMessageType = 'succe
     dismissTimer = window.setTimeout(() => dismissGlobalMessage(id), duration)
   }
 }
+
+export function userFacingError(cause: unknown, fallback = '操作未完成，请稍后重试') {
+  const raw = (cause instanceof Error ? cause.message : String(cause)).trim()
+  const firstLine = raw.split(/\r?\n/u, 1)[0].replace(/^Error:\s*/iu, '').trim()
+  return /[\u3400-\u9fff]/u.test(firstLine) && firstLine.length <= 160 ? firstLine : fallback
+}
+
+export function showGlobalError(cause: unknown, fallback = '操作未完成，请稍后重试', duration = 6000) {
+  showGlobalMessage(userFacingError(cause, fallback), 'error', duration)
+}

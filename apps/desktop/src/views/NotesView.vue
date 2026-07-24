@@ -10,7 +10,6 @@ import {
   Bold,
   ArrowLeft,
   Braces,
-  Check,
   ChevronDown,
   Code2,
   Copy,
@@ -55,6 +54,7 @@ import {
   type NoteSummary
 } from '../services/notes'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
+import { showGlobalError, showGlobalMessage } from '../services/global-message'
 
 type ExportFormat = 'markdown' | 'html' | 'json'
 
@@ -68,14 +68,11 @@ const loading = ref(true)
 const saving = ref(false)
 const dirty = ref(false)
 const saveStatus = ref('')
-const error = ref('')
-const message = ref('')
 const deleteDialogOpen = ref(false)
 const exportMenuOpen = ref(false)
 let hydrating = false
 let saveTimer = 0
 let searchTimer = 0
-let messageTimer = 0
 let activeSave: Promise<boolean> | null = null
 
 const editor = useEditor({
@@ -101,24 +98,15 @@ const editor = useEditor({
 
 const wordCount = computed(() => contentText.value.replace(/\s/g, '').length)
 
-function showMessage(value: string) {
-  message.value = value
-  window.clearTimeout(messageTimer)
-  messageTimer = window.setTimeout(() => {
-    message.value = ''
-  }, 3200)
-}
-
-function describeError(cause: unknown) {
-  return cause instanceof Error ? cause.message : String(cause)
+function showError(cause: unknown, fallback: string) {
+  showGlobalError(cause, fallback)
 }
 
 async function loadNotes() {
-  error.value = ''
   try {
     notes.value = await listNotes(query.value)
   } catch (cause) {
-    error.value = describeError(cause)
+    showError(cause, '笔记列表加载失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -127,7 +115,6 @@ async function loadNotes() {
 async function selectNote(noteId: string) {
   if (selectedNote.value?.id === noteId) return
   await persistCurrentNote()
-  error.value = ''
   try {
     const note = await getNote(noteId)
     if (!note) throw new Error('笔记不存在或已被删除')
@@ -142,7 +129,7 @@ async function selectNote(noteId: string) {
     hydrating = false
   } catch (cause) {
     hydrating = false
-    error.value = describeError(cause)
+    showError(cause, '笔记打开失败，请稍后重试')
   }
 }
 
@@ -193,7 +180,7 @@ async function persistCurrentNote() {
     } catch (cause) {
       dirty.value = true
       saveStatus.value = '保存失败'
-      error.value = describeError(cause)
+      showError(cause, '笔记保存失败，请稍后重试')
       return false
     } finally {
       saving.value = false
@@ -206,7 +193,6 @@ async function persistCurrentNote() {
 
 async function addNote() {
   await persistCurrentNote()
-  error.value = ''
   try {
     const note = await createNote()
     await loadNotes()
@@ -214,7 +200,7 @@ async function addNote() {
     await nextTick()
     document.querySelector<HTMLInputElement>('.note-title-input')?.select()
   } catch (cause) {
-    error.value = describeError(cause)
+    showError(cause, '新建笔记失败，请稍后重试')
   }
 }
 
@@ -232,9 +218,9 @@ async function removeCurrentNote() {
     editor.value?.commands.clearContent(false)
     await loadNotes()
     if (notes.value[0]) await selectNote(notes.value[0].id)
-    showMessage('笔记已删除')
+    showGlobalMessage('笔记已删除')
   } catch (cause) {
-    error.value = describeError(cause)
+    showError(cause, '笔记删除失败，请稍后重试')
   }
 }
 
@@ -245,9 +231,9 @@ async function copyCurrentNote() {
     const copy = await duplicateNote(selectedNote.value.id)
     await loadNotes()
     await selectNote(copy.id)
-    showMessage('已创建笔记副本')
+    showGlobalMessage('笔记副本已创建')
   } catch (cause) {
-    error.value = describeError(cause)
+    showError(cause, '创建笔记副本失败，请稍后重试')
   }
 }
 
@@ -258,9 +244,9 @@ async function togglePinned() {
     await setNotePinned(selectedNote.value.id, next)
     selectedNote.value = { ...selectedNote.value, isPinned: next }
     await loadNotes()
-    showMessage(next ? '笔记已置顶' : '已取消置顶')
+    showGlobalMessage(next ? '笔记已置顶' : '已取消置顶')
   } catch (cause) {
-    error.value = describeError(cause)
+    showError(cause, '笔记置顶状态修改失败，请稍后重试')
   }
 }
 
@@ -302,9 +288,9 @@ async function exportCurrentNote(format: ExportFormat) {
   if (!targetPath) return
   try {
     await writeNoteExport(targetPath, exportContent(note, format))
-    showMessage(`已导出到 ${targetPath}`)
+    showGlobalMessage('笔记已导出')
   } catch (cause) {
-    error.value = describeError(cause)
+    showError(cause, '笔记导出失败，请稍后重试')
   }
 }
 
@@ -318,9 +304,9 @@ async function exportAllNotes() {
   if (!targetPath) return
   try {
     const result = await exportNotes(targetPath)
-    showMessage(`已导出 ${result.notes} 篇笔记`)
+    showGlobalMessage(`${result.notes} 篇笔记已导出`)
   } catch (cause) {
-    error.value = describeError(cause)
+    showError(cause, '笔记导出失败，请稍后重试')
   }
 }
 
@@ -336,9 +322,9 @@ async function importAllNotes() {
     const result = await importNotes(sourcePath)
     await loadNotes()
     if (!selectedNote.value && notes.value[0]) await selectNote(notes.value[0].id)
-    showMessage(`已导入 ${result.notes} 篇笔记`)
+    showGlobalMessage(`${result.notes} 篇笔记已导入`)
   } catch (cause) {
-    error.value = describeError(cause)
+    showError(cause, '笔记导入失败，请检查文件后重试')
   }
 }
 
@@ -372,7 +358,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.clearTimeout(saveTimer)
   window.clearTimeout(searchTimer)
-  window.clearTimeout(messageTimer)
   void persistCurrentNote()
 })
 </script>
@@ -401,8 +386,6 @@ onBeforeUnmount(() => {
     </section>
 
     <section class="note-editor-pane">
-      <div v-if="error" class="note-editor-alert" role="alert">{{ error }}</div>
-      <div v-if="message" class="note-editor-toast" role="status"><Check :size="15" />{{ message }}</div>
       <div v-if="!selectedNote" class="note-editor-empty">
         <NotebookPen :size="34" />
         <h2>新建一篇本地笔记</h2>

@@ -10,6 +10,7 @@ import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
 import AppSidebar from './components/ui/AppSidebar.vue'
 import { useAppearance } from './composables/useAppearance'
 import { availableUpdate, checkForUpdates, configureBackgroundUpdateChecks, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
+import { showGlobalError } from './services/global-message'
 
 const router = useRouter()
 const route = useRoute()
@@ -26,17 +27,21 @@ function toggleSidebar() {
 
 onMounted(async () => {
   if (!isTauri()) return
-  unlistenImport = await listen<{ path: string; existingId?: string }>('bridge-import-requested', async event => {
-    await router.push('/library')
-    window.setTimeout(() => window.dispatchEvent(new CustomEvent('novel-library-import', { detail: event.payload })), 0)
-  })
-  unlistenOpen = await listen<{ bookId: string; chapterNumber?: number }>('bridge-open-requested', event => {
-    void router.push(`/read/${event.payload.bookId}/${event.payload.chapterNumber || 1}`)
-  })
-  void initializeUpdateEvents().then(() => {
-    if (isAutoCheckEnabled()) void checkForUpdates(true)
-    configureBackgroundUpdateChecks()
-  })
+  try {
+    unlistenImport = await listen<{ path: string; existingId?: string }>('bridge-import-requested', async event => {
+      await router.push('/library')
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent('novel-library-import', { detail: event.payload })), 0)
+    })
+    unlistenOpen = await listen<{ bookId: string; chapterNumber?: number }>('bridge-open-requested', event => {
+      void router.push(`/read/${event.payload.bookId}/${event.payload.chapterNumber || 1}`)
+    })
+    void initializeUpdateEvents().then(() => {
+      if (isAutoCheckEnabled()) void checkForUpdates(true)
+      configureBackgroundUpdateChecks()
+    }).catch(cause => showGlobalError(cause, '更新服务初始化失败，请重启应用后重试'))
+  } catch (cause) {
+    showGlobalError(cause, '应用服务初始化失败，请重启应用后重试')
+  }
 })
 
 onBeforeUnmount(() => {

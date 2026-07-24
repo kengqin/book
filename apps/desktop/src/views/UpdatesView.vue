@@ -21,7 +21,6 @@ import {
   setAutoDownloadEnabled,
   setBackgroundCheckEnabled,
   updateChecking,
-  updateCompatibilityNote,
   updateError,
   updateMessage,
   updateProgress,
@@ -33,6 +32,7 @@ import {
 import PageHeader from '../components/ui/PageHeader.vue'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 import UiSwitch from '../components/ui/UiSwitch.vue'
+import { showGlobalMessage } from '../services/global-message'
 
 const initialManifest = getCachedReleaseManifest()
 const currentVersion = ref('0.0.0')
@@ -56,14 +56,17 @@ const visibleReleases = computed(() => {
 
 function updateAutoCheck() {
   setAutoCheckEnabled(autoCheck.value)
+  showGlobalMessage(`自动检查更新已${autoCheck.value ? '开启' : '关闭'}`)
 }
 
 function updateBackgroundCheck() {
   setBackgroundCheckEnabled(backgroundCheck.value)
+  showGlobalMessage(`后台定时检查已${backgroundCheck.value ? '开启' : '关闭'}`)
 }
 
 function updateAutoDownload() {
   setAutoDownloadEnabled(autoDownload.value)
+  showGlobalMessage(`后台自动下载已${autoDownload.value ? '开启' : '关闭'}`)
 }
 
 async function installHistoricalVersion(release: ReleaseEntry) {
@@ -78,11 +81,10 @@ async function installHistoricalVersion(release: ReleaseEntry) {
 
 async function openHistoricalInstaller(release: ReleaseEntry) {
   historicalInstallVersion.value = release.version
-  updateError.value = ''
   try {
     await openUrl(release.installerUrl)
   } catch {
-    updateError.value = `无法打开 v${release.version} 安装包，请稍后重试`
+    showGlobalMessage(`无法打开 v${release.version} 安装包，请稍后重试`, 'error', 6000)
   } finally {
     historicalInstallVersion.value = null
   }
@@ -108,11 +110,10 @@ function confirmDownload() {
 }
 
 async function openRelease(release: ReleaseEntry) {
-  updateError.value = ''
   try {
     await openUrl(release.releaseUrl)
   } catch {
-    updateError.value = `无法打开 v${release.version} Release 页面，请稍后重试`
+    showGlobalMessage(`无法打开 v${release.version} 版本详情页，请稍后重试`, 'error', 6000)
   }
 }
 
@@ -162,8 +163,6 @@ onMounted(async () => {
         <strong v-else-if="publishedUpdateVersion"><RefreshCw :size="17" />发现新版本 v{{ publishedUpdateVersion }}</strong>
         <strong v-else-if="updateError"><ShieldAlert :size="17" />更新状态暂不可用</strong>
         <strong v-else><CheckCircle2 :size="17" />{{ updateMessage || '版本状态正常' }}</strong>
-        <span v-if="updateError" class="update-error">{{ updateError }}</span>
-        <span v-else-if="updateCompatibilityNote" class="update-error">{{ updateCompatibilityNote }}</span>
         <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
       </div>
       <div class="header-actions">

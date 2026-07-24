@@ -1808,7 +1808,6 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
         });
     }
     let output = run_installer(&target, &plugin_path)?;
-    let output_message = clean_installer_diagnostic(&target.kind, &output.stdout);
     let (verified, installed_version) = match target.kind.as_str() {
         "vscode" => vscode_extension_state(&target, &plugin.identifier),
         "jetbrains" => jetbrains_plugin_location(&target, &plugin.identifier)
@@ -1846,12 +1845,10 @@ pub fn install(app: &AppHandle, input: InstallIdePluginInput) -> Result<IdeInsta
         installed: true,
         verified,
         installed_version,
-        message: if output_message.is_empty() && target.kind == "vscode" {
-            "安装命令已完成；如果编辑器已打开，请执行 Developer: Reload Window（重新加载窗口）以加载插件新版本。增强滚轮状态不受插件版本更新影响。".to_string()
-        } else if output_message.is_empty() {
-            "安装命令已完成，重启 IDE 后生效".to_string()
+        message: if target.kind == "vscode" {
+            "插件安装完成，重载或重启编辑器后生效".to_string()
         } else {
-            output_message
+            "安装命令已完成，重启 IDE 后生效".to_string()
         },
     })
 }

@@ -156,8 +156,6 @@ a:focus-visible {
 .danger-command, .danger-icon { color: var(--ui-danger); }
 
 .view-status { color: var(--ui-text-3); }
-.inline-error { color: var(--ui-danger); border-color: var(--ui-danger); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--ui-danger) 8%, var(--ui-surface)); }
-.settings-message { color: var(--ui-success); border-color: var(--ui-success); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--ui-success) 8%, var(--ui-surface)); }
 .import-status { color: var(--ui-text-2); }
 .import-status > div { background: var(--ui-border); }
 .import-status > div span { background: var(--ui-accent); }
@@ -446,9 +444,6 @@ a:focus-visible {
 .note-prose-editor blockquote { color: var(--ui-text-2); border-color: var(--ui-accent); }
 .note-prose-editor code { color: var(--ui-danger); background: var(--ui-surface-2); }
 .note-prose-editor pre { color: #e7ece9; background: #202b28; }
-.note-editor-alert { color: var(--ui-danger); border-color: color-mix(in srgb, var(--ui-danger) 35%, var(--ui-border)); background: color-mix(in srgb, var(--ui-danger) 8%, var(--ui-surface)); }
-.note-editor-toast { color: var(--ui-success); border-color: color-mix(in srgb, var(--ui-success) 35%, var(--ui-border)); background: color-mix(in srgb, var(--ui-success) 8%, var(--ui-surface)); }
-.note-editor-alert, .note-editor-toast { font-size: 11px; }
 .note-export-menu { overflow: hidden; color: var(--ui-text); border-color: var(--ui-border); border-radius: 9px; background: var(--ui-surface); box-shadow: var(--ui-shadow); }
 .note-export-menu button { color: var(--ui-text); }
 .note-export-menu button:hover { background: var(--ui-hover); }
@@ -496,7 +491,6 @@ a:focus-visible {
 .global-update-status header .icon-button { color: var(--ui-text-2); }
 .global-update-progress { background: var(--ui-border); }
 .global-update-progress span { background: var(--ui-accent); }
-.global-update-status .update-error { color: var(--ui-danger); }
 
 .app-shell--reader .app-workspace { height: 100%; }
 .app-shell--reader .desktop-reader { min-height: 100dvh; }

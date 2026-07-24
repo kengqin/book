@@ -8,6 +8,7 @@ import PageHeader from '../components/ui/PageHeader.vue'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 import UiSelect, { type UiSelectOption } from '../components/ui/UiSelect.vue'
 import { useAppearance } from '../composables/useAppearance'
+import { showGlobalError, showGlobalMessage } from '../services/global-message'
 
 interface PendingSettingAction {
   title: string
@@ -18,8 +19,6 @@ interface PendingSettingAction {
 
 const status = ref<DesktopStorageStatus>()
 const busy = ref(false)
-const message = ref('')
-const error = ref('')
 const currentVersion = ref('')
 const closeBehavior = ref<CloseBehavior>('ask')
 const pendingSettingAction = ref<PendingSettingAction | null>(null)
@@ -42,17 +41,25 @@ function queueSettingAction(action: PendingSettingAction) {
   pendingSettingAction.value = action
 }
 
+function showError(cause: unknown, fallback = '设置修改失败，请稍后重试') {
+  showGlobalError(cause, fallback)
+}
+
+function updateAppearance(value: 'system' | 'light' | 'dark') {
+  setAppearance(value)
+  const label = appearanceOptions.find(option => option.value === value)?.label || '所选外观'
+  showGlobalMessage(`外观已切换为“${label}”`)
+}
+
 async function confirmSettingAction() {
   const action = pendingSettingAction.value
   if (!action || busy.value) return
   busy.value = true
-  message.value = ''
-  error.value = ''
   try {
     await action.run()
     pendingSettingAction.value = null
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showError(cause)
   } finally {
     busy.value = false
   }
@@ -62,7 +69,7 @@ async function refreshStatus() {
   try {
     status.value = await getDesktopStorageStatus()
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showError(cause, '无法读取本地数据库状态')
   }
 }
 
@@ -73,13 +80,11 @@ async function exportBackup() {
   })
   if (!target) return
   busy.value = true
-  message.value = ''
-  error.value = ''
   try {
     const result = await exportDesktopBackup(target)
-    message.value = `已备份 ${result.books} 本书、${result.chapters} 章、${result.notes} 篇笔记：${result.path}`
+    showGlobalMessage(`备份已导出：${result.books} 本书、${result.chapters} 章、${result.notes} 篇笔记`)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showError(cause, '备份导出失败，请稍后重试')
   } finally {
     busy.value = false
   }
@@ -92,13 +97,11 @@ async function importBackup() {
   })
   if (!source || Array.isArray(source)) return
   busy.value = true
-  message.value = ''
-  error.value = ''
   try {
     const result = await importDesktopBackup(source)
-    message.value = `已恢复 ${result.books} 本书、${result.chapters} 章、${result.notes} 篇笔记`
+    showGlobalMessage(`备份已恢复：${result.books} 本书、${result.chapters} 章、${result.notes} 篇笔记`)
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showError(cause, '备份恢复失败，请检查文件后重试')
   } finally {
     busy.value = false
   }
@@ -113,7 +116,7 @@ async function chooseDataDirectory() {
     confirmLabel: '切换目录',
     run: async () => {
       status.value = await changeDesktopDataDirectory(directory)
-      message.value = `数据目录已切换到：${status.value.dataDirectory}`
+      showGlobalMessage('数据目录已切换')
     }
   })
 }
@@ -125,7 +128,7 @@ async function resetDataDirectory() {
     confirmLabel: '恢复默认目录',
     run: async () => {
       status.value = await resetDesktopDataDirectory()
-      message.value = `已恢复默认目录：${status.value.dataDirectory}`
+      showGlobalMessage('已恢复默认数据目录')
     }
   })
 }
@@ -143,20 +146,18 @@ async function chooseDatabaseFile() {
     confirmLabel: '切换数据库',
     run: async () => {
       status.value = await changeDesktopDatabaseFile(databasePath)
-      message.value = `数据库文件已切换到：${status.value.databasePath}`
+      showGlobalMessage('数据库文件已切换')
     }
   })
 }
 
 async function saveCloseBehavior() {
   busy.value = true
-  message.value = ''
-  error.value = ''
   try {
     closeBehavior.value = await setCloseBehavior(closeBehavior.value)
-    message.value = '关闭窗口行为已保存'
+    showGlobalMessage('关闭窗口方式已保存')
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause)
+    showError(cause, '关闭窗口方式保存失败，请稍后重试')
   } finally {
     busy.value = false
   }
@@ -165,8 +166,8 @@ async function saveCloseBehavior() {
 onMounted(async () => {
   await Promise.all([
     refreshStatus(),
-    getCurrentVersion().then(version => { currentVersion.value = version }),
-    getCloseBehavior().then(behavior => { closeBehavior.value = behavior })
+    getCurrentVersion().then(version => { currentVersion.value = version }).catch(cause => showError(cause, '无法读取当前版本')),
+    getCloseBehavior().then(behavior => { closeBehavior.value = behavior }).catch(cause => showError(cause, '无法读取关闭窗口方式'))
   ])
 })
 </script>
@@ -184,7 +185,7 @@ onMounted(async () => {
       <section class="setting-row">
         <div class="setting-icon"><Palette :size="18" /></div>
         <div class="setting-copy"><strong>应用外观</strong></div>
-        <UiSelect :model-value="appearance" :options="appearanceOptions" label="应用外观" @update:model-value="setAppearance($event as 'system' | 'light' | 'dark')" />
+        <UiSelect :model-value="appearance" :options="appearanceOptions" label="应用外观" @update:model-value="updateAppearance($event as 'system' | 'light' | 'dark')" />
       </section>
       <section class="setting-row">
         <div class="setting-icon"><Minimize2 :size="18" /></div>
@@ -223,8 +224,6 @@ onMounted(async () => {
         <RouterLink to="/settings/updates" class="primary-command">打开更新<ArrowRight :size="15" /></RouterLink>
       </section>
     </div>
-    <p v-if="message" class="settings-message" role="status">{{ message }}</p>
-    <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
     <UiConfirmDialog :open="Boolean(pendingSettingAction)" :busy="busy" :title="pendingSettingAction?.title || '确认更改设置？'" :description="pendingSettingAction?.description || ''" :confirm-label="pendingSettingAction?.confirmLabel || '确认'" @close="pendingSettingAction = null" @confirm="confirmSettingAction" />
   </section>
 </template>

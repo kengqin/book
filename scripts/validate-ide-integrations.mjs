@@ -265,7 +265,7 @@ requireMatch(desktopIdeIntegration, /CloseMainWindow[\s\S]*IDE_CLOSE_PENDING/, '
 requireMatch(desktopIdeIntegration, /std::thread::scope/, 'IDE installed-state checks must run concurrently')
 requireValue(!source('apps/desktop/src/views/IdeIntegrationView.vue').includes('detectionTimeoutMs'), 'IDE detection must not have an arbitrary UI timeout')
 requireValue(!source('apps/desktop/src/views/IdeIntegrationView.vue').includes('class="inline-error"'), 'IDE integration feedback must use the global message layer')
-requireMatch(source('apps/desktop/src/views/IdeIntegrationView.vue'), /showGlobalMessage\(error\.value, 'error'/, 'IDE integration errors must use global messages')
+requireMatch(source('apps/desktop/src/views/IdeIntegrationView.vue'), /showGlobalError\(error\.value,/, 'IDE integration errors must use global messages')
 const expectedArtifacts = new Map([
   ['vscode', [vscode.version, `novel-library-reader-${vscode.version}.vsix`]],
   ['intellij', [intellijVersion, `novel-library-intellij-${intellijVersion}.zip`]],

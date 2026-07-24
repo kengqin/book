@@ -42,7 +42,6 @@ button { letter-spacing: 0; }
 .view-status, .empty-library { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 8px; color: #74817b; }
 .view-status--error { color: #a43d32; }
 .view-status span { max-width: 640px; overflow-wrap: anywhere; }
-.inline-error { margin-top: 18px; padding: 12px 14px; color: #8e2f27; border-left: 3px solid #b84638; background: #fff0ed; overflow-wrap: anywhere; }
 .import-status { display: grid; grid-template-columns: minmax(160px, 1fr) auto 42px; align-items: center; gap: 12px; margin-top: 18px; color: #55625d; font-size: 11px; }
 .import-status > div { height: 4px; background: #dde2dc; }
 .import-status > div span { height: 100%; display: block; background: #27665d; transition: width .2s ease; }
@@ -81,7 +80,6 @@ button { letter-spacing: 0; }
 .settings-select { min-width: 150px; height: 38px; padding: 0 34px 0 11px; color: #2d3a36; border: 1px solid #c8cec7; border-radius: 0; outline: 0; background: #fff; }
 .settings-select:focus { border-color: #27665d; box-shadow: 0 0 0 1px #27665d; }
 .settings-select:disabled { color: #7e8984; background: #e7e9e5; }
-.settings-message { margin: 18px 0 0; padding: 11px 14px; color: #245d54; border-left: 3px solid #2f7569; background: #edf7f3; overflow-wrap: anywhere; }
 
 .update-status-panel { min-height: 118px; display: grid; grid-template-columns: 180px minmax(220px, 1fr) auto; align-items: center; gap: 24px; margin-top: 22px; padding: 18px 20px; color: #eaf0ec; background: #23322e; border: 1px solid #18231f; }
 .version-identity { display: grid; gap: 3px; padding-right: 22px; border-right: 1px solid rgba(255,255,255,.16); }
@@ -89,7 +87,6 @@ button { letter-spacing: 0; }
 .version-identity strong { color: #f3dfac; font-family: "Noto Serif SC", SimSun, serif; font-size: 28px; }
 .update-status-copy { min-width: 0; display: grid; gap: 7px; }
 .update-status-copy strong { display: flex; align-items: center; gap: 7px; font-size: 14px; }
-.update-status-copy .update-error { color: #ffb4aa; overflow-wrap: anywhere; }
 .update-progress { width: min(420px, 100%); height: 4px; background: rgba(255,255,255,.15); }
 .update-progress span { display: block; height: 100%; background: #dfbf72; transition: width .2s ease; }
 .auto-update-setting { min-height: 66px; display: flex; align-items: center; gap: 13px; border-bottom: 1px solid #d7dbd4; cursor: pointer; }
@@ -129,7 +126,6 @@ button { letter-spacing: 0; }
 .global-update-status p { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; font-size: 12px; }
 .global-update-status p strong { color: #f3dfac; }
 .global-update-status small { color: #aab7b1; font-size: 10px; }
-.global-update-status .update-error { color: #ffb4aa; }
 .global-update-status > .primary-command, .global-update-status > .secondary-command { justify-self: end; }
 .global-update-progress { height: 4px; background: rgba(255,255,255,.16); }
 .global-update-progress span { display: block; height: 100%; background: #dfbf72; transition: width .18s ease; }
@@ -230,9 +226,6 @@ button { letter-spacing: 0; }
 .note-list-status { min-height: 180px; display: grid; place-items: center; color: #7a8780; font-size: 11px; }
 
 .note-editor-pane { position: relative; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: #fff; }
-.note-editor-alert, .note-editor-toast { flex: 0 0 auto; min-height: 34px; display: flex; align-items: center; gap: 7px; padding: 7px 14px; font-size: 10px; overflow-wrap: anywhere; }
-.note-editor-alert { color: #8e2f27; border-bottom: 1px solid #edc5bf; background: #fff0ed; }
-.note-editor-toast { color: #245d54; border-bottom: 1px solid #bdd9d0; background: #edf7f3; }
 .note-editor-empty { height: 100%; display: grid; place-items: center; align-content: center; gap: 12px; color: #75817b; }
 .note-editor-empty h2 { margin: 0 0 4px; color: #2d3a36; font-family: "Noto Serif SC", SimSun, serif; font-size: 19px; }
 .note-editor-commandbar { flex: 0 0 58px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 16px; border-bottom: 1px solid #d8dcd6; background: #f7f8f5; }
