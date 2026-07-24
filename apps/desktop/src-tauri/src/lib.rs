@@ -9,9 +9,9 @@ use std::{fs, path::PathBuf};
 
 use database::DatabaseState;
 use models::{
-    BackupResult, BookListRecord, BookRecord, ChapterRecord, ChapterSummary, NoteRecord,
-    NoteSummary, NotesTransferResult, SaveImportedBookInput, SaveNoteInput, SaveProgressInput,
-    SavedBookResult, SearchResult, StorageStatus,
+    BackupResult, BookListRecord, BookRecord, ChapterRecord, ChapterSummary, LibrarySearchResults,
+    NoteRecord, NoteSummary, NotesTransferResult, SaveImportedBookInput, SaveNoteInput,
+    SaveProgressInput, SavedBookResult, StorageStatus,
 };
 use tauri::{Manager, State};
 use updater::UpdateDownloadState;
@@ -110,7 +110,7 @@ fn delete_book(state: State<'_, DatabaseState>, book_id: String) -> Result<(), S
 fn search_library(
     state: State<'_, DatabaseState>,
     query: String,
-) -> Result<Vec<SearchResult>, String> {
+) -> Result<LibrarySearchResults, String> {
     database::search(&state.connect()?, &query)
 }
 

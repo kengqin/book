@@ -194,7 +194,7 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
     <PageHeader title="我的书架">
       <template #actions>
         <button type="button" class="icon-button" title="刷新书架" :disabled="loading || refreshing" @click="loadBooks"><RefreshCw :size="18" :class="{ spinning: refreshing }" /></button>
-        <button type="button" class="primary-command" :disabled="importing" @click="openImportDialog"><FilePlus2 :size="18" />{{ importing ? '正在导入' : '导入书籍' }}</button>
+        <button type="button" class="primary-command primary-command--core" :disabled="importing" @click="openImportDialog"><FilePlus2 :size="18" />{{ importing ? '正在导入' : '导入书籍' }}</button>
         <input ref="fileInput" type="file" accept=".txt,.epub,text/plain,application/epub+zip" multiple hidden @change="selectImportFile" />
       </template>
     </PageHeader>
@@ -204,7 +204,7 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
     <div v-else-if="!books.length && !importing" class="empty-library">
       <BookOpen :size="34" />
       <h2>书架为空</h2>
-      <button type="button" class="primary-command" @click="openImportDialog"><FilePlus2 :size="17" />导入第一本书</button>
+      <button type="button" class="primary-command primary-command--core" @click="openImportDialog"><FilePlus2 :size="17" />导入第一本书</button>
     </div>
     <div v-else class="book-grid">
       <BookCard v-for="book in books" :key="book.id" :book="book" @open="router.push(`/book/${book.id}`)" @read="router.push(`/read/${book.id}/${book.currentChapter}`)" @request-delete="pendingDeleteBook = book" />
