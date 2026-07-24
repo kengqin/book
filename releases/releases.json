@@ -1,8 +1,33 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.7",
+  "latest": "0.6.8",
   "releases": [
+    {
+      "version": "0.6.8",
+      "date": "2026-07-24",
+      "title": "IDE 插件卸载复检修复",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.7",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.8",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.8/NovelLibrary_0.6.8_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "修复 VS Code 系列插件已从扩展清单卸载，但待清理目录仍存在时被误报为卸载失败的问题",
+            "卸载复检改为以官方 CLI 扩展清单为准，仅在备用目录删除失败时提示关闭 IDE"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.7",
       "date": "2026-07-24",

@@ -1174,6 +1174,24 @@ fn remove_vscode_extension_directories_in_home(
     Ok(directories.len())
 }
 
+fn verify_vscode_uninstall(
+    fallback_used: bool,
+    directory_still_exists: bool,
+    cli_still_reports_installed: bool,
+) -> Result<(), String> {
+    // A successful Code OSS CLI uninstall can mark the extension directory as
+    // obsolete and delete it later. In that path the CLI extension list is the
+    // source of truth; the directory must only be checked after our fallback
+    // has attempted to remove it synchronously.
+    if fallback_used && directory_still_exists {
+        return Err("本地插件目录仍存在，请完全关闭 IDE 后重试卸载".to_string());
+    }
+    if !fallback_used && cli_still_reports_installed {
+        return Err("IDE 仍报告插件已安装，请关闭 IDE 后重试".to_string());
+    }
+    Ok(())
+}
+
 fn vscode_extension_state(target: &IdeTarget, identifier: &str) -> (bool, Option<String>) {
     let Ok(mut command) = vscode_script_process(target, &["--list-extensions", "--show-versions"])
     else {
@@ -1914,12 +1932,14 @@ pub fn uninstall(
         }
         true
     };
-    if vscode_extension_directory_state(&target, &plugin.identifier).0 {
-        return Err("本地插件目录仍存在，请完全关闭 IDE 后重试卸载".to_string());
-    }
-    if !fallback_used && vscode_extension_state(&target, &plugin.identifier).0 {
-        return Err("IDE 仍报告插件已安装，请关闭 IDE 后重试".to_string());
-    }
+    let directory_still_exists = vscode_extension_directory_state(&target, &plugin.identifier).0;
+    let cli_still_reports_installed =
+        !fallback_used && vscode_extension_state(&target, &plugin.identifier).0;
+    verify_vscode_uninstall(
+        fallback_used,
+        directory_still_exists,
+        cli_still_reports_installed,
+    )?;
     let uninstall_message = if fallback_used {
         "IDE 自带卸载器不兼容，已安全移除本地插件目录；重启 IDE 后生效"
     } else {
@@ -1981,7 +2001,7 @@ mod tests {
         enable_code_oss_wheel_injection, install_jetbrains_plugin_at, installed_version_matches,
         is_jetbrains_cds_warning_only, jetbrains_plugin_location_in_root,
         parse_vscode_extension_state, read_plugin_xml_from_jar,
-        remove_vscode_extension_directories_in_home, target_id,
+        remove_vscode_extension_directories_in_home, target_id, verify_vscode_uninstall,
         vscode_extension_directories_in_home, vscode_extension_state, vscode_script_process,
         workbench_integrity_checksum, xml_tag_value, IdeTarget, InstallIdePluginInput,
         UninstallIdePluginInput, CODE_OSS_TARGETS, JETBRAINS_CDS_WARNING, WHEEL_INJECTION_END,
@@ -2042,6 +2062,14 @@ mod tests {
             ),
             (false, None)
         );
+    }
+
+    #[test]
+    fn accepts_stale_extension_directory_after_successful_cli_uninstall() {
+        assert!(verify_vscode_uninstall(false, true, false).is_ok());
+        assert!(verify_vscode_uninstall(false, true, true).is_err());
+        assert!(verify_vscode_uninstall(true, true, false).is_err());
+        assert!(verify_vscode_uninstall(true, false, false).is_ok());
     }
 
     #[test]
