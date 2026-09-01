@@ -1,8 +1,33 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.9",
+  "latest": "0.6.10",
   "releases": [
+    {
+      "version": "0.6.10",
+      "date": "2026-09-01",
+      "title": "阅读器主题与小窗体验优化",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.9",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.10",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.10/NovelLibrary_0.6.10_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "优化",
+          "items": [
+            "阅读器的白色、纸张和夜读配色同步 Windows 标题栏、工具栏与滚动条，选中按钮改为半透明中性色",
+            "阅读窗口最小尺寸调整为 520 × 360，窄窗口下自动收紧工具栏，离开阅读页时恢复到至少 760 × 560"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.9",
       "date": "2026-07-24",
