@@ -176,13 +176,14 @@ a:focus-visible {
 .book-card-cover > span { font-family: "Noto Serif SC", SimSun, serif; font-size: clamp(38px, 6vw, 66px); }
 .book-card-cover img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .book-card-cover .format-badge { position: absolute; top: 8px; right: 8px; margin: 0; padding: 3px 6px; color: #fff; border: 0; border-radius: 5px; background: rgba(20, 20, 20, .72); font-family: inherit; font-style: normal; font-size: 9px; }
-.book-card-copy { display: grid; grid-template-columns: minmax(0, 1fr) 32px; gap: 8px; align-items: start; padding: 10px 3px 0; }
+.book-card-copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 10px 3px 0; }
 .book-card-copy > button:first-child { min-width: 0; display: grid; gap: 4px; padding: 0; color: var(--ui-text); text-align: left; border: 0; background: transparent; cursor: pointer; }
 .book-card-copy strong, .book-card-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-card-copy strong { font-size: 13px; }
 .book-card-copy span { color: var(--ui-text-3); font-size: 10.5px; }
-.book-card-read { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: var(--ui-accent); border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
-.book-card-read:hover { background: var(--ui-selected); }
+.book-card-quick-actions { display: flex; gap: 2px; }
+.book-card-read, .book-card-privacy { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: var(--ui-accent); border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
+.book-card-read:hover, .book-card-privacy:hover { background: var(--ui-selected); }
 .book-card-meta { display: flex; gap: 7px; padding: 8px 3px 7px; color: var(--ui-text-3); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .book-card-meta strong { margin-left: auto; color: var(--ui-text-2); font-weight: 600; }
 .book-card-progress { height: 3px; margin: 0 3px 3px; overflow: hidden; border-radius: 2px; background: var(--ui-border); }
@@ -206,8 +207,10 @@ a:focus-visible {
 .book-action-panel dt { color: var(--ui-text-3); white-space: nowrap; }
 .book-action-panel dd { margin: 0; overflow: hidden; color: var(--ui-text); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .book-action-buttons { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 16px; }
-.book-action-buttons .primary-command, .book-delete-button { width: 100%; min-width: 0; min-height: 32px; padding-inline: 8px; font-size: 12px; white-space: nowrap; }
-.book-action-buttons .primary-command { height: 32px; }
+.book-action-buttons .primary-command, .book-privacy-button, .book-delete-button { width: 100%; min-width: 0; min-height: 32px; padding-inline: 8px; font-size: 12px; white-space: nowrap; }
+.book-action-buttons .primary-command { grid-column: 1 / -1; height: 32px; }
+.book-privacy-button { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--ui-accent); border: 1px solid color-mix(in srgb, var(--ui-accent) 35%, var(--ui-border)); border-radius: 8px; background: transparent; cursor: pointer; }
+.book-privacy-button:hover { background: var(--ui-selected); }
 .book-delete-button { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--ui-danger); border: 1px solid color-mix(in srgb, var(--ui-danger) 35%, var(--ui-border)); border-radius: 8px; background: transparent; cursor: pointer; }
 .book-delete-button:hover { background: color-mix(in srgb, var(--ui-danger) 8%, transparent); }
 .chapter-catalogue > header, .chapter-group > div, .chapter-group button { border-color: var(--ui-border); }
@@ -600,10 +603,24 @@ html[data-reader-privacy] .app-workspace::-webkit-scrollbar { display: none; }
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-rows: repeat(6, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--privacy-visible-lines), minmax(0, 1fr));
   align-items: center;
+  color: var(--privacy-text-color, inherit);
   overflow: hidden;
 }
+.privacy-resize-handle { position: absolute; z-index: 8; display: block; }
+.privacy-resize-handle--north, .privacy-resize-handle--south { left: 10px; right: 10px; height: 6px; }
+.privacy-resize-handle--north { top: 0; cursor: n-resize; }
+.privacy-resize-handle--south { bottom: 0; cursor: s-resize; }
+.privacy-resize-handle--east, .privacy-resize-handle--west { top: 10px; bottom: 10px; width: 6px; }
+.privacy-resize-handle--east { right: 0; cursor: e-resize; }
+.privacy-resize-handle--west { left: 0; cursor: w-resize; }
+.privacy-resize-handle--north-east, .privacy-resize-handle--north-west,
+.privacy-resize-handle--south-east, .privacy-resize-handle--south-west { width: 12px; height: 12px; }
+.privacy-resize-handle--north-east { top: 0; right: 0; cursor: ne-resize; }
+.privacy-resize-handle--north-west { top: 0; left: 0; cursor: nw-resize; }
+.privacy-resize-handle--south-east { right: 0; bottom: 0; cursor: se-resize; }
+.privacy-resize-handle--south-west { bottom: 0; left: 0; cursor: sw-resize; }
 .privacy-reader-lines p {
   max-width: 100%;
   margin: 0;
@@ -635,6 +652,53 @@ html[data-reader-privacy] .app-workspace::-webkit-scrollbar { display: none; }
   transition: opacity 120ms ease;
 }
 .privacy-reader-chapter-controls .privacy-reader-status { margin-right: 3px; }
+.privacy-reader-settings {
+  position: absolute;
+  z-index: 7;
+  right: 7px;
+  bottom: 31px;
+  width: 174px;
+  display: grid;
+  gap: 5px;
+  padding: 8px 9px;
+  color: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 8px;
+  font-family: Inter, "Microsoft YaHei", sans-serif;
+  box-shadow: 0 7px 22px rgba(0, 0, 0, .13);
+  cursor: default;
+}
+.desktop-reader--light .privacy-reader-settings { background: rgba(255, 255, 255, .97); }
+.desktop-reader--night .privacy-reader-settings { background: rgba(28, 34, 32, .98); }
+.privacy-setting-row { min-height: 22px; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 6px; }
+.privacy-setting-row > span { font-size: 9px; opacity: .58; }
+.privacy-setting-stepper, .privacy-setting-segments, .privacy-setting-color-picker { display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
+.privacy-setting-stepper button, .privacy-setting-segments button, .privacy-setting-color-picker button {
+  min-width: 22px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  color: inherit;
+  border: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  font-size: 9px;
+  cursor: pointer;
+}
+.privacy-setting-stepper button:hover, .privacy-setting-segments button:hover, .privacy-setting-color-picker button:hover,
+.privacy-setting-stepper button.active, .privacy-setting-segments button.active { background: color-mix(in srgb, currentColor 14%, transparent); }
+.privacy-setting-stepper button:disabled, .privacy-setting-color-picker button:disabled { opacity: .3; cursor: default; }
+.privacy-setting-stepper output { min-width: 22px; text-align: center; font-size: 9px; font-variant-numeric: tabular-nums; }
+.privacy-setting-color-picker input {
+  width: 42px;
+  height: 21px;
+  padding: 1px 2px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
 .privacy-reader-actions {
   position: absolute;
   z-index: 3;
@@ -648,8 +712,8 @@ html[data-reader-privacy] .app-workspace::-webkit-scrollbar { display: none; }
 }
 .privacy-reader:hover .privacy-reader-actions,
 .privacy-reader:hover .privacy-reader-chapter-controls,
-.privacy-reader-actions:focus-within,
-.privacy-reader-chapter-controls:focus-within {
+.privacy-reader-actions:has(button:focus-visible),
+.privacy-reader-chapter-controls:has(button:focus-visible) {
   opacity: 1;
   pointer-events: auto;
 }
@@ -673,6 +737,10 @@ html[data-reader-privacy] .app-workspace::-webkit-scrollbar { display: none; }
 .privacy-reader-chapter-controls button:hover {
   background: color-mix(in srgb, currentColor 11%, transparent);
   opacity: 1;
+}
+.privacy-reader-actions button.active {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  opacity: .9;
 }
 .privacy-reader-actions button:disabled,
 .privacy-reader-chapter-controls button:disabled { opacity: .28; cursor: default; }

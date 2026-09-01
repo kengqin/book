@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookOpen, Trash2 } from 'lucide-vue-next'
+import { BookOpen, EyeOff, Trash2 } from 'lucide-vue-next'
 import type { DesktopBookSummary } from '../../services/desktop-library'
 
 defineProps<{
@@ -9,6 +9,7 @@ defineProps<{
 defineEmits<{
   open: []
   read: []
+  privacy: []
   requestDelete: []
 }>()
 </script>
@@ -25,7 +26,10 @@ defineEmits<{
     </div>
     <div class="book-card-copy">
       <button type="button" @click="$emit('open')"><strong>{{ book.title }}</strong><span>{{ book.author || '佚名' }}</span></button>
-      <button type="button" class="book-card-read" :title="book.progress ? '继续阅读' : '开始阅读'" @click="$emit('read')"><BookOpen :size="16" /></button>
+      <div class="book-card-quick-actions">
+        <button type="button" class="book-card-read" :title="book.progress ? '继续阅读' : '开始阅读'" @click="$emit('read')"><BookOpen :size="16" /></button>
+        <button type="button" class="book-card-privacy" title="进入隐私阅读" :aria-label="`隐私阅读《${book.title}》`" @click="$emit('privacy')"><EyeOff :size="16" /></button>
+      </div>
     </div>
     <div class="book-card-meta"><span>{{ book.chapterCount }} 章</span><span>{{ book.totalWords.toLocaleString() }} 字</span><strong>{{ book.progress.toFixed(0) }}%</strong></div>
     <div class="book-card-progress" :aria-label="`阅读进度 ${book.progress.toFixed(1)}%`"><span :style="{ width: `${book.progress}%` }" /></div>
