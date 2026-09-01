@@ -3,6 +3,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AlignJustify, ArrowLeft, ChevronLeft, ChevronRight, Minus, Plus, Sun, Type } from 'lucide-vue-next'
 import { formatChapterLabel, getCompactReaderWindow, isNumberedChapter } from '@novel-library/reader-core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { LogicalSize } from '@tauri-apps/api/dpi'
+import { getCurrentWindow, type Theme } from '@tauri-apps/api/window'
 import { getDesktopBook, getDesktopChapter, listDesktopChapters, saveDesktopProgress, type DesktopBook, type DesktopChapter, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 import { showGlobalError } from '../services/global-message'
@@ -23,6 +26,9 @@ const compactAnchor = ref(0)
 let scrollRoot: HTMLElement | null = null
 let progressTimer = 0
 let progressSaveFailed = false
+
+const READER_MIN_SIZE = new LogicalSize(520, 360)
+const APPLICATION_MIN_SIZE = new LogicalSize(760, 560)
 
 const bookId = computed(() => String(route.params.bookId))
 const chapterNumber = computed(() => Number(route.params.chapterNumber))
@@ -67,6 +73,51 @@ function chapterHeading() {
 
 function saveSettings() {
   localStorage.setItem('desktop-reader-settings', JSON.stringify({ fontSize: fontSize.value, lineHeight: lineHeight.value, palette: palette.value }))
+}
+
+function appearanceWindowTheme(): Theme | null {
+  const appearance = document.documentElement.dataset.appearance
+  return appearance === 'dark' ? 'dark' : appearance === 'light' ? 'light' : null
+}
+
+async function setWindowChrome(theme: Theme | null, readerPalette?: typeof palette.value) {
+  if (!isTauri()) return
+  try {
+    await getCurrentWindow().setTheme(theme)
+    await invoke('set_reader_window_palette', { palette: readerPalette ?? null })
+  } catch (error) {
+    console.warn('window-theme-update-failed', error)
+  }
+}
+
+function syncReaderChrome() {
+  document.documentElement.dataset.readerPalette = palette.value
+  void setWindowChrome(palette.value === 'night' ? 'dark' : 'light', palette.value)
+}
+
+function restoreApplicationChrome() {
+  delete document.documentElement.dataset.readerPalette
+  void setWindowChrome(appearanceWindowTheme())
+}
+
+async function setReaderSizeLimit(reading: boolean) {
+  if (!isTauri()) return
+  const appWindow = getCurrentWindow()
+  try {
+    await appWindow.setMinSize(reading ? READER_MIN_SIZE : APPLICATION_MIN_SIZE)
+    if (!reading) {
+      const [physicalSize, scaleFactor] = await Promise.all([appWindow.innerSize(), appWindow.scaleFactor()])
+      const logicalSize = physicalSize.toLogical(scaleFactor)
+      if (logicalSize.width < APPLICATION_MIN_SIZE.width || logicalSize.height < APPLICATION_MIN_SIZE.height) {
+        await appWindow.setSize(new LogicalSize(
+          Math.max(logicalSize.width, APPLICATION_MIN_SIZE.width),
+          Math.max(logicalSize.height, APPLICATION_MIN_SIZE.height)
+        ))
+      }
+    }
+  } catch (error) {
+    console.warn('window-size-update-failed', error)
+  }
 }
 
 async function persistProgress(progress: number) {
@@ -173,17 +224,22 @@ onMounted(() => {
     if (stored.lineHeight) lineHeight.value = stored.lineHeight
     if (stored.palette) palette.value = stored.palette
   } catch {}
+  syncReaderChrome()
+  void setReaderSizeLimit(true)
   scrollRoot = document.querySelector('.app-workspace')
   scrollRoot?.addEventListener('scroll', updateProgress, { passive: true })
   window.addEventListener('keydown', handleReaderKeydown)
   load()
 })
 onBeforeUnmount(() => {
+  restoreApplicationChrome()
+  void setReaderSizeLimit(false)
   scrollRoot?.removeEventListener('scroll', updateProgress)
   window.removeEventListener('keydown', handleReaderKeydown)
   window.clearTimeout(progressTimer)
 })
 watch([fontSize, lineHeight, palette], saveSettings)
+watch(palette, syncReaderChrome)
 watch(() => route.params.chapterNumber, load)
 </script>
 

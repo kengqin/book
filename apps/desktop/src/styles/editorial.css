@@ -503,13 +503,66 @@ a:focus-visible {
 
 .app-shell--reader .app-workspace { height: 100%; }
 .app-shell--reader .desktop-reader { min-height: 100dvh; }
-.desktop-reader-toolbar { border-color: color-mix(in srgb, currentColor 16%, transparent); box-shadow: 0 1px 0 rgba(0, 0, 0, .03); }
+html[data-reader-palette="light"] {
+  --reader-scrollbar-track: #fff;
+  --reader-scrollbar-thumb: rgba(37, 41, 37, .34);
+  --reader-scrollbar-thumb-hover: rgba(37, 41, 37, .48);
+  color-scheme: light;
+}
+html[data-reader-palette="paper"] {
+  --reader-scrollbar-track: #eee9dc;
+  --reader-scrollbar-thumb: rgba(45, 48, 44, .32);
+  --reader-scrollbar-thumb-hover: rgba(45, 48, 44, .46);
+  color-scheme: light;
+}
+html[data-reader-palette="night"] {
+  --reader-scrollbar-track: #171c1b;
+  --reader-scrollbar-thumb: rgba(214, 218, 214, .42);
+  --reader-scrollbar-thumb-hover: rgba(232, 235, 232, .58);
+  color-scheme: dark;
+}
+html[data-reader-palette] .app-workspace {
+  scrollbar-color: var(--reader-scrollbar-thumb) var(--reader-scrollbar-track);
+  scrollbar-width: thin;
+}
+html[data-reader-palette] .app-workspace::-webkit-scrollbar { width: 11px; background: var(--reader-scrollbar-track); }
+html[data-reader-palette] .app-workspace::-webkit-scrollbar-track { background: var(--reader-scrollbar-track); }
+html[data-reader-palette] .app-workspace::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 3px solid var(--reader-scrollbar-track);
+  border-radius: 999px;
+  background: var(--reader-scrollbar-thumb);
+}
+html[data-reader-palette] .app-workspace::-webkit-scrollbar-thumb:hover { background: var(--reader-scrollbar-thumb-hover); }
+html[data-reader-palette] .app-workspace::-webkit-scrollbar-button { width: 0; height: 0; background: var(--reader-scrollbar-track); }
+.desktop-reader-toolbar { border-color: color-mix(in srgb, currentColor 14%, transparent); box-shadow: none; transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease; }
+.desktop-reader--light .desktop-reader-toolbar {
+  color: #29302c;
+  border-bottom-color: rgba(41, 48, 44, .14);
+  background: #fff;
+}
+.desktop-reader--paper .desktop-reader-toolbar {
+  color: #2d302c;
+  border-bottom-color: rgba(45, 48, 44, .16);
+  background: #eee9dc;
+}
+.desktop-reader--night .desktop-reader-toolbar {
+  color: #e0e4e0;
+  border-bottom-color: rgba(224, 228, 224, .14);
+  background: #171c1b;
+}
 .desktop-reader-toolbar span { font-size: 10.5px; }
 .desktop-reader-toolbar .icon-button { color: inherit; border-color: color-mix(in srgb, currentColor 18%, transparent); background: color-mix(in srgb, white 68%, transparent); }
+.desktop-reader--light .desktop-reader-toolbar .icon-button,
+.desktop-reader--light .reader-controls label { border-color: rgba(41, 48, 44, .16); background: rgba(255, 255, 255, .6); }
 .desktop-reader--night .desktop-reader-toolbar .icon-button { background: rgba(35, 44, 41, .9); }
 .reader-controls label { border-radius: 8px; }
 .reader-controls button { color: inherit; border-radius: 6px; }
-.reader-controls button.active { color: var(--ui-accent-contrast); background: var(--ui-accent); }
+.reader-controls button.active {
+  color: inherit;
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 8%, transparent);
+}
 .desktop-reader-compact-content footer { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 42px; padding-top: 18px; border-top: 1px solid currentColor; opacity: .82; }
 .desktop-reader-compact-content footer button { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; color: inherit; text-align: left; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); background: transparent; cursor: pointer; }
 .desktop-reader-compact-content footer button:last-child { text-align: right; }
@@ -538,6 +591,20 @@ a:focus-visible {
   .setting-row { grid-template-columns: 34px minmax(0, 1fr); }
   .setting-row > .ui-select, .setting-row > .setting-state, .setting-row > .primary-command, .setting-row > .header-actions, .setting-row > a { grid-column: 2; justify-self: start; }
   .setting-row > .ui-select { width: min(100%, 260px); }
+}
+
+@media (max-width: 639px) {
+  html[data-reader-palette],
+  html[data-reader-palette] body,
+  html[data-reader-palette] #app { min-width: 500px; }
+  .desktop-reader-toolbar {
+    grid-template-columns: 38px minmax(72px, 1fr) auto;
+    gap: 8px;
+    padding-inline: 14px;
+  }
+  .reader-controls { gap: 4px !important; }
+  .reader-controls label { height: 32px; padding-inline: 3px; }
+  .reader-controls button { height: 25px; padding-inline: 4px; }
 }
 
 @media (max-width: 560px) {
