@@ -4,6 +4,7 @@ mod database;
 mod ide_integration;
 mod models;
 mod updater;
+mod window_theme;
 
 use std::{fs, path::PathBuf};
 
@@ -329,6 +330,14 @@ async fn set_code_oss_wheel_injection(
     .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+fn set_reader_window_palette(
+    window: tauri::WebviewWindow,
+    palette: Option<String>,
+) -> Result<(), String> {
+    window_theme::set_reader_palette(&window, palette.as_deref())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -403,6 +412,7 @@ pub fn run() {
             install_ide_plugin,
             uninstall_ide_plugin,
             set_code_oss_wheel_injection,
+            set_reader_window_palette,
             updater::check_application_update,
             updater::download_application_update,
             updater::cancel_application_update_download,
