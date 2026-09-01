@@ -1,8 +1,33 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.10",
+  "latest": "0.6.11",
   "releases": [
+    {
+      "version": "0.6.11",
+      "date": "2026-09-01",
+      "title": "更新检查稳定性修复",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.10",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.11",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.11/NovelLibrary_0.6.11_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "更新检查直接读取 Tauri 签名更新清单，不再依赖受频率限制的 GitHub Releases API",
+            "Windows 更新优先使用 NSIS 专用清单并以通用清单兜底，历史版本记录同步失败不再阻断更新"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.10",
       "date": "2026-09-01",
