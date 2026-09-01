@@ -207,7 +207,7 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
       <button type="button" class="primary-command primary-command--core" @click="openImportDialog"><FilePlus2 :size="17" />导入第一本书</button>
     </div>
     <div v-else class="book-grid">
-      <BookCard v-for="book in books" :key="book.id" :book="book" @open="router.push(`/book/${book.id}`)" @read="router.push(`/read/${book.id}/${book.currentChapter}`)" @request-delete="pendingDeleteBook = book" />
+      <BookCard v-for="book in books" :key="book.id" :book="book" @open="router.push(`/book/${book.id}`)" @read="router.push(`/read/${book.id}/${book.currentChapter}`)" @privacy="router.push({ path: `/read/${book.id}/${book.currentChapter}`, query: { privacy: '1' } })" @request-delete="pendingDeleteBook = book" />
     </div>
     <UiConfirmDialog
       :open="importDialogOpen"

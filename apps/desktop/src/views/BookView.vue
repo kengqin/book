@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, BookOpen, ChevronRight, Trash2 } from 'lucide-vue-next'
+import { ArrowLeft, BookOpen, ChevronRight, EyeOff, Trash2 } from 'lucide-vue-next'
 import { formatChapterLabel, isNumberedChapter } from '@novel-library/reader-core'
 import { deleteDesktopBook, getDesktopBook, listDesktopChapters, type DesktopBook, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
@@ -86,7 +86,7 @@ onMounted(load)
       <header class="book-detail-header" :style="{ '--book-accent': book.theme.accent }">
         <div class="book-detail-seal" :class="{ 'book-detail-seal--image': book.coverDataUrl }"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></div>
         <div class="book-detail-copy"><h1>{{ book.title }}</h1><span>{{ book.author || '佚名' }}</span><blockquote v-if="book.description" v-html="safeDescription" /><blockquote v-else>暂无简介</blockquote></div>
-        <aside class="book-detail-side"><div class="book-detail-stats"><span>{{ book.sourceFormat.toUpperCase() }}</span><span>{{ numberedChapterCount }} 章</span><span>{{ book.totalWords.toLocaleString() }} 字</span></div><div class="book-action-panel"><dl><div><dt>阅读进度</dt><dd>{{ book.progress.toFixed(0) }}%</dd></div><div><dt>当前章节</dt><dd>第 {{ book.currentChapter }} 章</dd></div></dl><div class="book-action-buttons"><button type="button" class="primary-command" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" />{{ book.progress ? '继续阅读' : '开始阅读' }}</button><button type="button" class="book-delete-button" @click="deleteDialogOpen = true"><Trash2 :size="15" />删除书籍</button></div></div></aside>
+        <aside class="book-detail-side"><div class="book-detail-stats"><span>{{ book.sourceFormat.toUpperCase() }}</span><span>{{ numberedChapterCount }} 章</span><span>{{ book.totalWords.toLocaleString() }} 字</span></div><div class="book-action-panel"><dl><div><dt>阅读进度</dt><dd>{{ book.progress.toFixed(0) }}%</dd></div><div><dt>当前章节</dt><dd>第 {{ book.currentChapter }} 章</dd></div></dl><div class="book-action-buttons"><button type="button" class="primary-command" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" />{{ book.progress ? '继续阅读' : '开始阅读' }}</button><button type="button" class="book-privacy-button" @click="router.push({ path: `/read/${book.id}/${book.currentChapter}`, query: { privacy: '1' } })"><EyeOff :size="15" />隐私阅读</button><button type="button" class="book-delete-button" @click="deleteDialogOpen = true"><Trash2 :size="15" />删除书籍</button></div></div></aside>
       </header>
 
       <section class="chapter-catalogue">

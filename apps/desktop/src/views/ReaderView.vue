@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlignJustify, ArrowLeft, ChevronLeft, ChevronRight, EyeOff, LogOut, Minus, Moon, Plus, Sun, Type } from 'lucide-vue-next'
+import { AlignJustify, ArrowLeft, ChevronLeft, ChevronRight, EyeOff, LogOut, Minus, Moon, Pin, Plus, RotateCcw, Settings2, Sun, Type } from 'lucide-vue-next'
 import { formatChapterLabel, getCompactReaderWindow, isNumberedChapter } from '@novel-library/reader-core'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { LogicalSize, PhysicalPosition, type PhysicalSize } from '@tauri-apps/api/dpi'
-import { getCurrentWindow, type Theme } from '@tauri-apps/api/window'
+import { availableMonitors, getCurrentWindow, type Theme } from '@tauri-apps/api/window'
 import { getDesktopBook, getDesktopChapter, listDesktopChapters, saveDesktopProgress, type DesktopBook, type DesktopChapter, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 import { showGlobalError } from '../services/global-message'
@@ -26,17 +26,30 @@ const compactAnchor = ref(0)
 const privacyAnchor = ref(0)
 const privacyMode = ref(false)
 const privacyPalette = ref<'light' | 'night'>('light')
+const privacyAlwaysOnTop = ref(false)
+const privacySettingsOpen = ref(false)
+const privacyFontSize = ref(12)
+const privacyLineHeight = ref(1.9)
+const privacyCustomTextColor = ref('')
+const privacyViewportWidth = ref(300)
+const privacyViewportHeight = ref(200)
 let scrollRoot: HTMLElement | null = null
 let progressTimer = 0
+let privacyBoundsTimer = 0
 let progressSaveFailed = false
+let unlistenPrivacyResize: (() => void) | undefined
+let unlistenPrivacyMove: (() => void) | undefined
 
 const READER_MIN_SIZE = new LogicalSize(520, 360)
 const APPLICATION_MIN_SIZE = new LogicalSize(760, 560)
-const PRIVACY_WINDOW_SIZE = new LogicalSize(300, 200)
-const PRIVACY_FONT_SIZE = 12
-const PRIVACY_LINE_HEIGHT = 1.9
-const PRIVACY_COLUMNS = 22
-const PRIVACY_LINES = 6
+const PRIVACY_DEFAULT_SIZE = new LogicalSize(300, 200)
+const PRIVACY_MIN_SIZE = new LogicalSize(240, 160)
+const PRIVACY_BOUNDS_STORAGE_KEY = 'desktop-reader-privacy-window-bounds'
+const PRIVACY_SETTINGS_STORAGE_KEY = 'desktop-reader-privacy-settings'
+const PRIVACY_HORIZONTAL_PADDING = 28
+const PRIVACY_VERTICAL_CHROME = 43
+
+type PrivacyResizeDirection = 'East' | 'North' | 'NorthEast' | 'NorthWest' | 'South' | 'SouthEast' | 'SouthWest' | 'West'
 
 interface ReaderWindowSnapshot {
   innerSize: PhysicalSize
@@ -44,9 +57,17 @@ interface ReaderWindowSnapshot {
   position: PhysicalPosition
   scaleFactor: number
   maximized: boolean
+  alwaysOnTop: boolean
   resizable: boolean
   maximizable: boolean
   minimizable: boolean
+}
+
+interface PrivacyWindowBounds {
+  width: number
+  height: number
+  x: number
+  y: number
 }
 
 let readerWindowSnapshot: ReaderWindowSnapshot | undefined
@@ -90,7 +111,15 @@ const privacyText = computed(() => {
     .join('\n')
 })
 const compactWindow = computed(() => getCompactReaderWindow(compactText.value, compactAnchor.value, compactLines.value, compactColumns.value))
-const privacyWindow = computed(() => getCompactReaderWindow(privacyText.value, privacyAnchor.value, PRIVACY_LINES, PRIVACY_COLUMNS))
+const privacyColumns = computed(() => Math.max(12, Math.floor(
+  (privacyViewportWidth.value - PRIVACY_HORIZONTAL_PADDING) / (privacyFontSize.value * 1.02)
+)))
+const privacyLines = computed(() => Math.max(3, Math.floor(
+  (privacyViewportHeight.value - PRIVACY_VERTICAL_CHROME) / (privacyFontSize.value * privacyLineHeight.value)
+)))
+const privacyWindow = computed(() => getCompactReaderWindow(privacyText.value, privacyAnchor.value, privacyLines.value, privacyColumns.value))
+const privacyDefaultTextColor = computed(() => privacyPalette.value === 'light' ? '#252925' : '#d6dad6')
+const privacyTextColor = computed(() => privacyCustomTextColor.value || privacyDefaultTextColor.value)
 const privacyStatusLabel = computed(() => {
   const position = chapterIndex.value >= 0 ? chapterIndex.value + 1 : 0
   const progress = privacyText.value.length ? Math.round(privacyAnchor.value / privacyText.value.length * 100) : 0
@@ -127,8 +156,35 @@ function saveSettings() {
   localStorage.setItem('desktop-reader-settings', JSON.stringify({ fontSize: fontSize.value, lineHeight: lineHeight.value, palette: palette.value }))
 }
 
+function savePrivacySettings() {
+  localStorage.setItem(PRIVACY_SETTINGS_STORAGE_KEY, JSON.stringify({
+    fontSize: privacyFontSize.value,
+    lineHeight: privacyLineHeight.value,
+    textColor: privacyCustomTextColor.value
+  }))
+}
+
+function setPrivacyTextColor(event: Event) {
+  const input = event.target
+  if (input instanceof HTMLInputElement) privacyCustomTextColor.value = input.value
+}
+
 function togglePrivacyPalette() {
   privacyPalette.value = privacyPalette.value === 'light' ? 'night' : 'light'
+}
+
+async function togglePrivacyAlwaysOnTop() {
+  const nextValue = !privacyAlwaysOnTop.value
+  if (!isTauri()) {
+    privacyAlwaysOnTop.value = nextValue
+    return
+  }
+  try {
+    await getCurrentWindow().setAlwaysOnTop(nextValue)
+    privacyAlwaysOnTop.value = nextValue
+  } catch (cause) {
+    showGlobalError(cause, nextValue ? '窗口置顶失败，请稍后重试' : '取消窗口置顶失败，请稍后重试')
+  }
 }
 
 function appearanceWindowTheme(): Theme | null {
@@ -185,16 +241,86 @@ function scrollProgress(element: HTMLElement | null | undefined) {
 
 function startPrivacyDragging(event: MouseEvent) {
   const target = event.target
+  if (target instanceof Element && !target.closest('.privacy-reader-settings, .privacy-reader-actions')) {
+    privacySettingsOpen.value = false
+  }
   if (!(target instanceof Element) || target.closest('button, a, input, textarea, select')) return
   if (!isTauri()) return
   event.preventDefault()
   void getCurrentWindow().startDragging().catch(error => console.warn('privacy-window-drag-failed', error))
 }
 
+function startPrivacyResize(direction: PrivacyResizeDirection) {
+  if (!isTauri()) return
+  void getCurrentWindow().startResizeDragging(direction).catch(error => console.warn('privacy-window-resize-failed', error))
+}
+
+function updatePrivacyViewport() {
+  if (!privacyMode.value) return
+  privacyViewportWidth.value = Math.max(PRIVACY_MIN_SIZE.width, window.innerWidth)
+  privacyViewportHeight.value = Math.max(PRIVACY_MIN_SIZE.height, window.innerHeight)
+}
+
+function loadPrivacyWindowBounds(): PrivacyWindowBounds | undefined {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PRIVACY_BOUNDS_STORAGE_KEY) || 'null') as Partial<PrivacyWindowBounds> | null
+    if (!stored || ![stored.width, stored.height, stored.x, stored.y].every(Number.isFinite)) return undefined
+    return {
+      width: Math.max(PRIVACY_MIN_SIZE.width, Number(stored.width)),
+      height: Math.max(PRIVACY_MIN_SIZE.height, Number(stored.height)),
+      x: Number(stored.x),
+      y: Number(stored.y)
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function privacyPositionIsVisible(bounds: PrivacyWindowBounds, physicalWidth: number, physicalHeight: number, monitors: Awaited<ReturnType<typeof availableMonitors>>) {
+  const minimumVisible = 48
+  return monitors.some(monitor => {
+    const left = monitor.workArea.position.x
+    const top = monitor.workArea.position.y
+    const right = left + monitor.workArea.size.width
+    const bottom = top + monitor.workArea.size.height
+    return bounds.x < right - minimumVisible
+      && bounds.y < bottom - minimumVisible
+      && bounds.x + physicalWidth > left + minimumVisible
+      && bounds.y + physicalHeight > top + minimumVisible
+  })
+}
+
+async function persistPrivacyWindowBounds() {
+  if (!isTauri()) return
+  const appWindow = getCurrentWindow()
+  const [size, position, scaleFactor] = await Promise.all([
+    appWindow.innerSize(),
+    appWindow.outerPosition(),
+    appWindow.scaleFactor()
+  ])
+  const logicalSize = size.toLogical(scaleFactor)
+  localStorage.setItem(PRIVACY_BOUNDS_STORAGE_KEY, JSON.stringify({
+    width: Math.max(PRIVACY_MIN_SIZE.width, Math.round(logicalSize.width)),
+    height: Math.max(PRIVACY_MIN_SIZE.height, Math.round(logicalSize.height)),
+    x: position.x,
+    y: position.y
+  } satisfies PrivacyWindowBounds))
+}
+
+function schedulePrivacyWindowBoundsSave() {
+  if (!privacyMode.value || !isTauri()) return
+  window.clearTimeout(privacyBoundsTimer)
+  privacyBoundsTimer = window.setTimeout(() => {
+    void persistPrivacyWindowBounds().catch(error => console.warn('privacy-window-bounds-save-failed', error))
+  }, 180)
+}
+
 async function restoreReaderWindow() {
   if (!isTauri() || !readerWindowSnapshot) return
   const appWindow = getCurrentWindow()
   const snapshot = readerWindowSnapshot
+  await appWindow.setAlwaysOnTop(snapshot.alwaysOnTop)
+  await appWindow.setSkipTaskbar(false)
   await appWindow.setDecorations(true)
   await appWindow.setShadow(true)
   await appWindow.setResizable(snapshot.resizable)
@@ -207,42 +333,66 @@ async function restoreReaderWindow() {
   readerWindowSnapshot = undefined
 }
 
-async function enterPrivacyMode() {
+async function enterPrivacyMode(progressOverride?: number) {
   if (privacyMode.value) return
-  const progress = compactMode.value && compactText.value.length
+  const progress = typeof progressOverride === 'number'
+    ? Math.min(1, Math.max(0, progressOverride))
+    : compactMode.value && compactText.value.length
     ? compactAnchor.value / compactText.value.length
     : scrollProgress(scrollRoot)
   privacyAnchor.value = Math.floor(privacyText.value.length * progress)
+  privacyAlwaysOnTop.value = false
+  privacySettingsOpen.value = false
   privacyMode.value = true
   document.documentElement.dataset.readerPrivacy = 'true'
   syncReaderChrome()
-  if (!isTauri()) return
+  if (!isTauri()) {
+    updatePrivacyViewport()
+    return
+  }
 
   const appWindow = getCurrentWindow()
   try {
-    const [innerSize, outerSize, position, scaleFactor, maximized, resizable, maximizable, minimizable] = await Promise.all([
+    const [innerSize, outerSize, position, scaleFactor, maximized, alwaysOnTop, resizable, maximizable, minimizable, monitors] = await Promise.all([
       appWindow.innerSize(),
       appWindow.outerSize(),
       appWindow.outerPosition(),
       appWindow.scaleFactor(),
       appWindow.isMaximized(),
+      appWindow.isAlwaysOnTop(),
       appWindow.isResizable(),
       appWindow.isMaximizable(),
-      appWindow.isMinimizable()
+      appWindow.isMinimizable(),
+      availableMonitors()
     ])
-    readerWindowSnapshot = { innerSize, outerSize, position, scaleFactor, maximized, resizable, maximizable, minimizable }
+    readerWindowSnapshot = { innerSize, outerSize, position, scaleFactor, maximized, alwaysOnTop, resizable, maximizable, minimizable }
+    const storedBounds = loadPrivacyWindowBounds()
+    const targetSize = new LogicalSize(
+      storedBounds?.width ?? PRIVACY_DEFAULT_SIZE.width,
+      storedBounds?.height ?? PRIVACY_DEFAULT_SIZE.height
+    )
+    const physicalWidth = targetSize.width * scaleFactor
+    const physicalHeight = targetSize.height * scaleFactor
+    const targetPosition = storedBounds && privacyPositionIsVisible(storedBounds, physicalWidth, physicalHeight, monitors)
+      ? new PhysicalPosition(storedBounds.x, storedBounds.y)
+      : new PhysicalPosition(
+          Math.round(position.x + (outerSize.width - physicalWidth) / 2),
+          Math.round(position.y + (outerSize.height - physicalHeight) / 2)
+        )
     if (maximized) await appWindow.unmaximize()
-    await appWindow.setMinSize(PRIVACY_WINDOW_SIZE)
+    await appWindow.setAlwaysOnTop(false)
+    await appWindow.setSkipTaskbar(true)
+    await appWindow.setMinSize(PRIVACY_MIN_SIZE)
     await appWindow.setDecorations(false)
     await appWindow.setShadow(false)
-    await appWindow.setResizable(false)
+    await appWindow.setResizable(true)
     await appWindow.setMaximizable(false)
     await appWindow.setMinimizable(false)
-    await appWindow.setSize(PRIVACY_WINDOW_SIZE)
-    await appWindow.setPosition(new PhysicalPosition(
-      Math.round(position.x + (outerSize.width - PRIVACY_WINDOW_SIZE.width * scaleFactor) / 2),
-      Math.round(position.y + (outerSize.height - PRIVACY_WINDOW_SIZE.height * scaleFactor) / 2)
-    ))
+    await appWindow.setSize(targetSize)
+    await appWindow.setPosition(targetPosition)
+    await nextTick()
+    updatePrivacyViewport()
+    schedulePrivacyWindowBoundsSave()
   } catch (cause) {
     privacyMode.value = false
     delete document.documentElement.dataset.readerPrivacy
@@ -261,7 +411,14 @@ async function leavePrivacyMode() {
   const progress = privacyText.value.length ? privacyAnchor.value / privacyText.value.length : 0
   compactAnchor.value = Math.floor(compactText.value.length * progress)
   void persistProgress(progress * 100)
+  try {
+    await persistPrivacyWindowBounds()
+  } catch (error) {
+    console.warn('privacy-window-bounds-save-failed', error)
+  }
   privacyMode.value = false
+  privacyAlwaysOnTop.value = false
+  privacySettingsOpen.value = false
   delete document.documentElement.dataset.readerPrivacy
   syncReaderChrome()
   try {
@@ -312,8 +469,8 @@ function moveCompactWindow(direction: -1 | 1, page = false) {
   if ((!compactMode.value && !privacyMode.value) || (!compactText.value.length && !privacyText.value.length)) return
   const activeWindow = privacyMode.value ? privacyWindow.value : compactWindow.value
   const activeText = privacyMode.value ? privacyText.value : compactText.value
-  const visibleLines = privacyMode.value ? PRIVACY_LINES : compactLines.value
-  const columns = privacyMode.value ? PRIVACY_COLUMNS : compactColumns.value
+  const visibleLines = privacyMode.value ? privacyLines.value : compactLines.value
+  const columns = privacyMode.value ? privacyColumns.value : compactColumns.value
   if (!activeWindow.lines.length) return
   const step = page ? visibleLines : 1
   const target = activeWindow.startLine + direction * step
@@ -337,6 +494,10 @@ function handleReaderKeydown(event: KeyboardEvent) {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
   if (privacyMode.value && event.key === 'Escape') {
     event.preventDefault()
+    if (privacySettingsOpen.value) {
+      privacySettingsOpen.value = false
+      return
+    }
     void leavePrivacyMode()
     return
   }
@@ -399,6 +560,13 @@ async function load() {
     compactAnchor.value = Math.floor(compactText.value.length * restoredProgress / 100)
     privacyAnchor.value = Math.floor(privacyText.value.length * restoredProgress / 100)
     await nextTick()
+    if (route.query.privacy === '1' && !privacyMode.value) {
+      await enterPrivacyMode(restoredProgress / 100)
+      const query = { ...route.query }
+      delete query.privacy
+      void router.replace({ query })
+      return
+    }
     window.requestAnimationFrame(() => {
       if (!scrollRoot || privacyMode.value) return
       const scrollable = scrollRoot.scrollHeight - scrollRoot.clientHeight
@@ -423,15 +591,32 @@ onMounted(() => {
     if (stored.palette) palette.value = stored.palette
   } catch {}
   privacyPalette.value = localStorage.getItem('desktop-reader-privacy-palette') === 'night' ? 'night' : 'light'
+  try {
+    const storedPrivacy = JSON.parse(localStorage.getItem(PRIVACY_SETTINGS_STORAGE_KEY) || '{}')
+    if (Number.isFinite(storedPrivacy.fontSize)) privacyFontSize.value = Math.min(20, Math.max(10, storedPrivacy.fontSize))
+    if ([1.7, 1.9, 2.1].includes(storedPrivacy.lineHeight)) privacyLineHeight.value = storedPrivacy.lineHeight
+    if (typeof storedPrivacy.textColor === 'string' && /^#[0-9a-f]{6}$/iu.test(storedPrivacy.textColor)) privacyCustomTextColor.value = storedPrivacy.textColor
+  } catch {}
   syncReaderChrome()
   void setReaderSizeLimit(true)
   scrollRoot = document.querySelector('.app-workspace')
   scrollRoot?.addEventListener('scroll', updateProgress, { passive: true })
   window.addEventListener('keydown', handleReaderKeydown)
-  load()
+  window.addEventListener('resize', updatePrivacyViewport)
+  if (isTauri()) {
+    const appWindow = getCurrentWindow()
+    void appWindow.onResized(() => {
+      updatePrivacyViewport()
+      schedulePrivacyWindowBoundsSave()
+    }).then(unlisten => { unlistenPrivacyResize = unlisten })
+    void appWindow.onMoved(schedulePrivacyWindowBoundsSave).then(unlisten => { unlistenPrivacyMove = unlisten })
+  }
+  void load()
 })
 onBeforeUnmount(() => {
-  const privacyRestore = privacyMode.value ? restoreReaderWindow() : Promise.resolve()
+  const privacyRestore = privacyMode.value
+    ? persistPrivacyWindowBounds().catch(error => console.warn('privacy-window-bounds-save-failed', error)).then(restoreReaderWindow)
+    : Promise.resolve()
   privacyMode.value = false
   delete document.documentElement.dataset.readerPrivacy
   restoreApplicationChrome()
@@ -440,11 +625,16 @@ onBeforeUnmount(() => {
     .finally(() => setReaderSizeLimit(false))
   scrollRoot?.removeEventListener('scroll', updateProgress)
   window.removeEventListener('keydown', handleReaderKeydown)
+  window.removeEventListener('resize', updatePrivacyViewport)
+  unlistenPrivacyResize?.()
+  unlistenPrivacyMove?.()
   window.clearTimeout(progressTimer)
+  window.clearTimeout(privacyBoundsTimer)
 })
 watch([fontSize, lineHeight, palette], saveSettings)
 watch([palette, privacyPalette], syncReaderChrome)
 watch(privacyPalette, value => localStorage.setItem('desktop-reader-privacy-palette', value))
+watch([privacyFontSize, privacyLineHeight, privacyCustomTextColor], savePrivacySettings)
 watch(() => route.params.chapterNumber, load)
 </script>
 
@@ -456,11 +646,21 @@ watch(() => route.params.chapterNumber, load)
       { 'desktop-reader--compact': compactMode, 'desktop-reader--privacy': privacyMode }
     ]"
     :style="{
-      '--reader-font-size': `${privacyMode ? PRIVACY_FONT_SIZE : fontSize}px`,
-      '--reader-line-height': privacyMode ? PRIVACY_LINE_HEIGHT : lineHeight
+      '--reader-font-size': `${privacyMode ? privacyFontSize : fontSize}px`,
+      '--reader-line-height': privacyMode ? privacyLineHeight : lineHeight,
+      '--privacy-visible-lines': privacyLines,
+      '--privacy-text-color': privacyTextColor
     }"
   >
-    <main v-if="privacyMode" class="privacy-reader" aria-label="隐私阅读模式" @mousedown.left="startPrivacyDragging" @wheel.prevent="handlePrivacyWheel">
+    <main v-if="privacyMode" class="privacy-reader" aria-label="隐私阅读模式" @mousedown.left="startPrivacyDragging" @mouseleave="privacySettingsOpen = false" @wheel.prevent="handlePrivacyWheel">
+      <span class="privacy-resize-handle privacy-resize-handle--north" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('North')" />
+      <span class="privacy-resize-handle privacy-resize-handle--south" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('South')" />
+      <span class="privacy-resize-handle privacy-resize-handle--east" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('East')" />
+      <span class="privacy-resize-handle privacy-resize-handle--west" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('West')" />
+      <span class="privacy-resize-handle privacy-resize-handle--north-east" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('NorthEast')" />
+      <span class="privacy-resize-handle privacy-resize-handle--north-west" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('NorthWest')" />
+      <span class="privacy-resize-handle privacy-resize-handle--south-east" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('SouthEast')" />
+      <span class="privacy-resize-handle privacy-resize-handle--south-west" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('SouthWest')" />
       <div class="privacy-reader-lines">
         <p v-for="line in privacyWindow.lines" :key="line.start">{{ line.text || ' ' }}</p>
       </div>
@@ -485,7 +685,50 @@ watch(() => route.params.chapterNumber, load)
           <ChevronRight :size="14" />
         </button>
       </div>
+      <div v-if="privacySettingsOpen" class="privacy-reader-settings" role="dialog" aria-label="隐私阅读设置" @mousedown.stop @wheel.stop>
+        <div class="privacy-setting-row">
+          <span>字号</span>
+          <div class="privacy-setting-stepper">
+            <button type="button" title="减小字号" :disabled="privacyFontSize <= 10" @click="privacyFontSize = Math.max(10, privacyFontSize - 1)"><Minus :size="12" /></button>
+            <output>{{ privacyFontSize }}</output>
+            <button type="button" title="增大字号" :disabled="privacyFontSize >= 20" @click="privacyFontSize = Math.min(20, privacyFontSize + 1)"><Plus :size="12" /></button>
+          </div>
+        </div>
+        <div class="privacy-setting-row">
+          <span>行距</span>
+          <div class="privacy-setting-segments">
+            <button v-for="item in ([['紧', 1.7], ['中', 1.9], ['松', 2.1]] as const)" :key="item[0]" type="button" :class="{ active: privacyLineHeight === item[1] }" @click="privacyLineHeight = item[1]">{{ item[0] }}</button>
+          </div>
+        </div>
+        <div class="privacy-setting-row">
+          <span>文字</span>
+          <div class="privacy-setting-color-picker">
+            <input type="color" :value="privacyTextColor" title="选择文字颜色" aria-label="选择文字颜色" @input="setPrivacyTextColor" />
+            <button type="button" title="恢复默认文字颜色" aria-label="恢复默认文字颜色" :disabled="!privacyCustomTextColor" @click="privacyCustomTextColor = ''"><RotateCcw :size="12" /></button>
+          </div>
+        </div>
+      </div>
       <div class="privacy-reader-actions">
+        <button
+          type="button"
+          :class="{ active: privacySettingsOpen }"
+          title="隐私阅读设置"
+          aria-label="隐私阅读设置"
+          :aria-expanded="privacySettingsOpen"
+          @click="privacySettingsOpen = !privacySettingsOpen"
+        >
+          <Settings2 :size="14" />
+        </button>
+        <button
+          type="button"
+          :class="{ active: privacyAlwaysOnTop }"
+          :title="privacyAlwaysOnTop ? '取消窗口置顶' : '窗口置顶'"
+          :aria-label="privacyAlwaysOnTop ? '取消窗口置顶' : '窗口置顶'"
+          :aria-pressed="privacyAlwaysOnTop"
+          @click="togglePrivacyAlwaysOnTop"
+        >
+          <Pin :size="14" />
+        </button>
         <button
           type="button"
           :title="privacyPalette === 'light' ? '切换到黑夜（F12）' : '切换到白色（F12）'"
@@ -502,7 +745,7 @@ watch(() => route.params.chapterNumber, load)
     </main>
 
     <template v-else>
-      <header class="desktop-reader-toolbar"><button type="button" class="icon-button" title="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button><div v-if="book && chapter"><strong>{{ book.title }}</strong><span>{{ chapterPositionLabel() }}</span></div><div class="reader-controls"><button type="button" class="reader-privacy-toggle" title="进入隐私模式" @click="enterPrivacyMode"><EyeOff :size="14" /><span>隐私</span></button><button type="button" :class="{ active: compactMode }" title="紧凑阅读模式" @click="compactMode = !compactMode">{{ compactMode ? '完整' : '紧凑' }}</button><label v-if="compactMode" class="reader-compact-lines" title="显示行数"><button v-for="value in [4, 5, 8]" :key="value" type="button" :class="{ active: compactLines === value }" @click="compactLines = value">{{ value }} 行</button></label><label class="reader-font-size" title="字号"><Type :size="16" /><button type="button" @click="fontSize = Math.max(15, fontSize - 1)"><Minus :size="14" /></button><output>{{ fontSize }}</output><button type="button" @click="fontSize = Math.min(26, fontSize + 1)"><Plus :size="14" /></button></label><label class="reader-line-height" title="行距"><AlignJustify :size="16" /><button v-for="value in [1.8, 2.05, 2.3]" :key="value" type="button" :class="{ active: lineHeight === value }" @click="lineHeight = value">{{ value === 1.8 ? '紧' : value === 2.05 ? '中' : '松' }}</button></label><label class="reader-palette" title="纸张"><Sun :size="16" /><button v-for="item in ([['light','白'],['paper','纸'],['night','夜']] as const)" :key="item[0]" type="button" :class="{ active: palette === item[0] }" @click="palette = item[0]">{{ item[1] }}</button></label></div></header>
+      <header class="desktop-reader-toolbar"><button type="button" class="icon-button" title="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button><div v-if="book && chapter"><strong>{{ book.title }}</strong><span>{{ chapterPositionLabel() }}</span></div><div class="reader-controls"><button type="button" class="reader-privacy-toggle" title="进入隐私模式" @click="enterPrivacyMode()"><EyeOff :size="14" /><span>隐私</span></button><button type="button" :class="{ active: compactMode }" title="紧凑阅读模式" @click="compactMode = !compactMode">{{ compactMode ? '完整' : '紧凑' }}</button><label v-if="compactMode" class="reader-compact-lines" title="显示行数"><button v-for="value in [4, 5, 8]" :key="value" type="button" :class="{ active: compactLines === value }" @click="compactLines = value">{{ value }} 行</button></label><label class="reader-font-size" title="字号"><Type :size="16" /><button type="button" @click="fontSize = Math.max(15, fontSize - 1)"><Minus :size="14" /></button><output>{{ fontSize }}</output><button type="button" @click="fontSize = Math.min(26, fontSize + 1)"><Plus :size="14" /></button></label><label class="reader-line-height" title="行距"><AlignJustify :size="16" /><button v-for="value in [1.8, 2.05, 2.3]" :key="value" type="button" :class="{ active: lineHeight === value }" @click="lineHeight = value">{{ value === 1.8 ? '紧' : value === 2.05 ? '中' : '松' }}</button></label><label class="reader-palette" title="纸张"><Sun :size="16" /><button v-for="item in ([['light','白'],['paper','纸'],['night','夜']] as const)" :key="item[0]" type="button" :class="{ active: palette === item[0] }" @click="palette = item[0]">{{ item[1] }}</button></label></div></header>
       <div v-if="loading" class="view-status" role="status">正在加载章节...</div>
       <main v-else-if="book && chapter" :class="compactMode ? 'desktop-reader-compact-content' : 'desktop-reader-content'"><article><p v-if="chapter.kind !== 'volume'" class="reader-volume">{{ chapter.volume || book.title }}</p><h1>{{ chapterHeading() }}</h1><section v-if="compactMode" class="compact-reader-window"><p v-for="line in compactWindow.lines" :key="line.start">{{ line.text || ' ' }}</p><small>{{ compactWindow.startLine + 1 }} - {{ compactWindow.endLine }} / {{ compactWindow.totalLines }} 行</small></section><template v-else><div v-if="isRichContent" class="epub-content" v-html="safeRichContent" /><template v-else><p v-for="(paragraph, index) in paragraphs" :key="index">{{ paragraph }}</p></template></template></article><footer><button type="button" :disabled="!previous" @click="previous && openChapter(previous.number)"><ChevronLeft :size="18" /><span><small>上一章</small>{{ previous?.title || '已经是第一章' }}</span></button><button type="button" :disabled="!next" @click="next && openChapter(next.number)"><span><small>下一章</small>{{ next?.title || '已经是最后一章' }}</span><ChevronRight :size="18" /></button></footer></main>
     </template>
