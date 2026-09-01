@@ -55,16 +55,17 @@ function remoteManifest(latest = '0.3.1') {
   }
 }
 
-function mockRemote(catalogLatest = '0.3.1', publishedLatest = catalogLatest) {
-  vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string | URL | Request) => {
+function mockRemote(catalogLatest = '0.3.1') {
+  const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
     const url = String(input)
+    if (url.includes('api.github.com')) throw new Error('GitHub Releases API must not be used for update checks')
     return {
       ok: true,
-      json: async () => url.includes('api.github.com')
-        ? { tag_name: `v${publishedLatest}`, draft: false, prerelease: false }
-        : remoteManifest(catalogLatest)
+      json: async () => remoteManifest(catalogLatest)
     }
-  }))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
 }
 
 describe('release center update consistency', () => {
@@ -81,14 +82,15 @@ describe('release center update consistency', () => {
     })
   })
 
-  it('does not expose a catalog version before it becomes the formal Latest Release', async () => {
+  it('uses the signed updater manifest without calling the GitHub Releases API', async () => {
     getVersionMock.mockResolvedValue('0.3.0')
     invokeMock.mockResolvedValue(null)
-    mockRemote('0.3.1', '0.3.0')
+    const fetchMock = mockRemote('0.3.1')
 
     await checkForUpdates()
 
-    expect(invokeMock).toHaveBeenCalledWith('check_application_update', { expectedVersion: '0.3.0' })
+    expect(invokeMock).toHaveBeenCalledWith('check_application_update')
+    expect(fetchMock).not.toHaveBeenCalled()
     expect(availableUpdate.value).toBeNull()
     expect(publishedUpdateVersion.value).toBeNull()
     expect(latestReadyVersion.value).toBe('0.3.0')
@@ -111,42 +113,58 @@ describe('release center update consistency', () => {
     expect(second.manifest.latest).toBe(first.manifest.latest)
   })
 
-  it('uses the formal Latest Release instead of a newer catalog entry', async () => {
+  it('uses the signed updater version instead of a newer catalog entry', async () => {
     getVersionMock.mockResolvedValue('0.3.0')
     invokeMock.mockResolvedValue({ currentVersion: '0.3.0', version: '0.3.1' })
-    mockRemote('0.3.2', '0.3.1')
+    const fetchMock = mockRemote('0.3.2')
 
     await checkForUpdates()
 
-    expect(invokeMock).toHaveBeenCalledWith('check_application_update', { expectedVersion: '0.3.1' })
+    expect(invokeMock).toHaveBeenCalledWith('check_application_update')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('api.github.com')
     expect(availableUpdate.value?.version).toBe('0.3.1')
     expect(latestReadyVersion.value).toBe('0.3.1')
     expect(updateStage.value).toBe('available')
   })
 
-  it('does not expose a formal release until its fixed-version manifest is readable', async () => {
+  it('reports an unavailable signed updater manifest as a connection failure', async () => {
     getVersionMock.mockResolvedValue('0.3.0')
     invokeMock.mockRejectedValue(new Error('MANIFEST_NOT_READY'))
-    mockRemote('0.3.1', '0.3.1')
+    const fetchMock = mockRemote('0.3.1')
 
     await checkForUpdates()
 
+    expect(fetchMock).not.toHaveBeenCalled()
     expect(availableUpdate.value).toBeNull()
     expect(publishedUpdateVersion.value).toBeNull()
     expect(latestReadyVersion.value).toBeNull()
     expect(updateStage.value).toBe('manifest-error')
   })
 
-  it('treats a target manifest version mismatch as a dedicated synchronization error', async () => {
-    getVersionMock.mockResolvedValue('0.3.0')
-    invokeMock.mockResolvedValue({ currentVersion: '0.3.0', version: '0.3.2' })
-    mockRemote('0.3.1', '0.3.1')
+  it('treats an updater version at or below the installed version as invalid', async () => {
+    getVersionMock.mockResolvedValue('0.3.2')
+    invokeMock.mockResolvedValue({ currentVersion: '0.3.2', version: '0.3.1' })
+    const fetchMock = mockRemote('0.3.1')
 
     await checkForUpdates()
 
+    expect(fetchMock).not.toHaveBeenCalled()
     expect(updateStage.value).toBe('version-mismatch')
     expect(updateError.value).toContain('尚未同步完成')
     expect(availableUpdate.value).toBeNull()
+  })
+
+  it('keeps a signed update available when release history cannot be refreshed', async () => {
+    getVersionMock.mockResolvedValue('0.3.0')
+    invokeMock.mockResolvedValue({ currentVersion: '0.3.0', version: '0.3.1' })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('history unavailable')))
+
+    await checkForUpdates()
+
+    expect(availableUpdate.value?.version).toBe('0.3.1')
+    expect(updateStage.value).toBe('available')
+    expect(updateError.value).toBe('')
   })
 
   it('does not replace a downloaded task during a new check', async () => {

@@ -6,8 +6,6 @@ use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const DOWNLOAD_EVENT: &str = "application-update-download";
-const RELEASE_DOWNLOAD_BASE: &str = "https://github.com/kengqin/book/releases/download";
-const TARGET_MANIFEST: &str = "latest-windows-x86_64-nsis.json";
 
 #[derive(Default)]
 pub struct UpdateDownloadState {
@@ -49,23 +47,6 @@ fn emit_progress(app: &AppHandle, progress: DownloadProgress) {
     let _ = app.emit(DOWNLOAD_EVENT, progress);
 }
 
-fn versioned_update_endpoint(version: &str) -> Result<tauri::Url, String> {
-    let version = version.strip_prefix('v').unwrap_or(version);
-    let valid = !version.is_empty()
-        && version.len() <= 64
-        && version.chars().all(|character| {
-            character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
-        });
-    if !valid {
-        return Err("更新版本号格式无效".to_string());
-    }
-
-    tauri::Url::parse(&format!(
-        "{RELEASE_DOWNLOAD_BASE}/v{version}/{TARGET_MANIFEST}"
-    ))
-    .map_err(|error| error.to_string())
-}
-
 fn allowed_download_url(url: &tauri::Url, version: &str) -> bool {
     let version = version.strip_prefix('v').unwrap_or(version);
     let expected_prefix = format!("/kengqin/book/releases/download/v{version}/");
@@ -92,7 +73,6 @@ fn classified_download_error(error: &str) -> String {
 pub async fn check_application_update(
     app: AppHandle,
     state: State<'_, UpdateDownloadState>,
-    expected_version: Option<String>,
 ) -> Result<Option<ApplicationUpdate>, String> {
     {
         let inner = lock_state(&state)?;
@@ -100,32 +80,14 @@ pub async fn check_application_update(
             return Err("UPDATE_BUSY: 当前更新任务尚未完成".to_string());
         }
     }
-    let updater = if let Some(version) = expected_version.as_deref() {
-        app.updater_builder()
-            .endpoints(vec![versioned_update_endpoint(version)?])
-            .map_err(|error| error.to_string())?
-            .build()
-            .map_err(|error| error.to_string())?
-    } else {
-        app.updater().map_err(|error| error.to_string())?
-    };
+    let updater = app.updater().map_err(|error| error.to_string())?;
     let update = updater
         .check()
         .await
-        .map_err(|_| "MANIFEST_NOT_READY: 无法读取目标更新 Manifest".to_string())?;
+        .map_err(|error| format!("MANIFEST_NOT_READY: 无法读取签名更新清单: {error}"))?;
 
     if let Some(update) = update.as_ref() {
-        let download_version = expected_version.as_deref().unwrap_or(&update.version);
-        if let Some(expected) = expected_version.as_deref() {
-            let expected = expected.strip_prefix('v').unwrap_or(expected);
-            if update.version != expected {
-                return Err(format!(
-                    "VERSION_MISMATCH: 期望 v{expected}，Manifest 返回 v{}",
-                    update.version
-                ));
-            }
-        }
-        if !allowed_download_url(&update.download_url, download_version) {
+        if !allowed_download_url(&update.download_url, &update.version) {
             return Err("DOWNLOAD_URL_NOT_ALLOWED: 更新安装包地址不在官方固定版本目录".to_string());
         }
     }
@@ -308,31 +270,7 @@ pub fn dismiss_application_update(state: State<'_, UpdateDownloadState>) -> Resu
 
 #[cfg(test)]
 mod tests {
-    use super::{allowed_download_url, classified_download_error, versioned_update_endpoint};
-
-    #[test]
-    fn builds_version_specific_update_endpoint() {
-        let endpoint = versioned_update_endpoint("0.3.1").expect("valid endpoint");
-        assert_eq!(
-            endpoint.as_str(),
-            "https://github.com/kengqin/book/releases/download/v0.3.1/latest-windows-x86_64-nsis.json"
-        );
-    }
-
-    #[test]
-    fn accepts_prefixed_version_without_duplicate_prefix() {
-        let endpoint = versioned_update_endpoint("v0.3.1").expect("valid endpoint");
-        assert!(endpoint
-            .as_str()
-            .contains("/v0.3.1/latest-windows-x86_64-nsis.json"));
-        assert!(!endpoint.as_str().contains("/vv0.3.1/"));
-    }
-
-    #[test]
-    fn rejects_version_that_can_escape_the_release_path() {
-        assert!(versioned_update_endpoint("../latest").is_err());
-        assert!(versioned_update_endpoint("0.3.1/latest").is_err());
-    }
+    use super::{allowed_download_url, classified_download_error};
 
     #[test]
     fn only_accepts_installer_from_the_expected_official_tag() {

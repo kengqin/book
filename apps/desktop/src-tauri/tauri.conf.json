@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost https://api.github.com https://raw.githubusercontent.com"
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost https://raw.githubusercontent.com"
     }
   },
   "bundle": {
@@ -43,6 +43,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaW5pIHB1YmxpYyBrZXk6IDY4MTE3MDJEMzJDNUJDMkEKUldRcXZNVXlMWEFSYUIzUnRneGdrL1ZFY3dsbUpPS0lZVDNmckU3Tk45SW93ZlhCc0RKVXJxZFkK",
       "endpoints": [
+        "https://github.com/kengqin/book/releases/latest/download/latest-windows-x86_64-nsis.json",
         "https://github.com/kengqin/book/releases/latest/download/latest.json"
       ],
       "windows": {
