@@ -1,8 +1,41 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.12",
+  "latest": "0.6.13",
   "releases": [
+    {
+      "version": "0.6.13",
+      "date": "2026-09-01",
+      "title": "可调隐私阅读窗口",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.12",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.13",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.13/NovelLibrary_0.6.13_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "隐私窗口支持四边和四角自由缩放，正文随尺寸自动重排，并记忆上次宽高和屏幕位置",
+            "书架卡片与书籍详情页新增隐私阅读入口，并提供可选的手动置顶按钮",
+            "隐私设置新增字号、行距和系统文字取色器，并可一键恢复默认文字颜色"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "进入隐私模式后隐藏 Windows 任务栏按钮并保留系统托盘入口，默认不自动置顶",
+            "底部状态与操作仅在悬浮时显示，修复按钮点击后鼠标移出仍持续显示的问题"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，隐私窗口的尺寸、位置和显示设置保存在本机，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.12",
       "date": "2026-09-01",
