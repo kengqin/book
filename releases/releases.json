@@ -1,8 +1,40 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.11",
+  "latest": "0.6.12",
   "releases": [
+    {
+      "version": "0.6.12",
+      "date": "2026-09-01",
+      "title": "隐私阅读小窗",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.11",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.12",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.12/NovelLibrary_0.6.12_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "阅读器新增一键隐私模式，以 300 × 200 无边框固定小窗展示正文并隐藏系统窗口控件",
+            "隐私模式提供白色与黑夜一键切换、整窗拖动、上下章图标以及章节位置和本章进度"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "隐私模式使用小窗专用中文排版，TXT 保留原始段落，EPUB 按标题、段落和列表等块级结构切分",
+            "底部状态与操作仅在悬浮时出现，并支持方向键翻行与切章、F12 切换日夜以及 Esc 退出"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和自定义数据目录保持不变，无需备份即可升级。"
+      ]
+    },
     {
       "version": "0.6.11",
       "date": "2026-09-01",
