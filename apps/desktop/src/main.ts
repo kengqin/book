@@ -5,6 +5,8 @@ import { router } from './router'
 import './styles.css'
 import './styles/editorial.css'
 
+window.addEventListener('contextmenu', event => event.preventDefault(), true)
+
 const app = createApp(App).use(router)
 app.mount('#app')
 
