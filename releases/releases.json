@@ -14,7 +14,7 @@
       "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.15",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.15/NovelLibrary_0.6.15_x64-setup.exe",
-      "sha256": "",
+      "sha256": "d14164e595e41c55462d4c781e8282fe61cd0bebee638a9b5d2c82fbffabb314",
       "sections": [
         {
           "title": "修复",
