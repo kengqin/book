@@ -413,6 +413,11 @@ for (const input of ['apps/local-runtime/', 'packages/reader-protocol/', 'plugin
 }
 requireMatch(pluginReuse, /asset\.digest[\s\S]*SHA256[\s\S]*bytes\.length[\s\S]*createHash\('sha256'\)/, 'IDE plugin reuse must verify release asset size and SHA-256')
 requireValue((desktopReleaseWorkflow.match(/stage-ide-plugin-runtime\.ps1/g) || []).length >= 3, 'Desktop release must stage the Runtime manifest and checksum for every rebuilt IDE plugin')
+const ideBuildWorkflow = source('.github/workflows/build-ide-plugins.yml')
+for (const input of ['plugins/**', 'apps/local-runtime/**', 'packages/reader-protocol/**', 'apps/desktop/src-tauri/resources/ide-plugins/manifest.json', 'scripts/package-visual-studio-plugin.ps1', 'scripts/stage-ide-plugin-runtime.ps1']) {
+  requireValue(ideBuildWorkflow.includes(input), `IDE plugin build workflow must track artifact input: ${input}`)
+}
+requireValue(!ideBuildWorkflow.includes("'scripts/validate-ide-integrations.mjs'"), 'IDE contract-only changes must not rebuild plugin packages')
 requireMatch(installer, /\[switch\]\$AllTargets/, 'Non-interactive all-target installation is missing')
 for (const command of ['trae', 'qoder', 'windsurf', 'kiro', 'codium', 'code-oss']) {
   requireValue(installer.includes(`'${command}'`), `Standalone installer Code OSS target is missing: ${command}`)

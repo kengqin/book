@@ -10,7 +10,9 @@ on:
       - 'plugins/**'
       - 'apps/local-runtime/**'
       - 'packages/reader-protocol/**'
-      - 'scripts/validate-ide-integrations.mjs'
+      - 'apps/desktop/src-tauri/resources/ide-plugins/manifest.json'
+      - 'scripts/package-visual-studio-plugin.ps1'
+      - 'scripts/stage-ide-plugin-runtime.ps1'
 
 concurrency:
   group: ide-plugins-${{ github.ref }}
