@@ -46,6 +46,7 @@ const files = [
   'packages/reader-protocol/src/index.ts',
   'scripts/install-ide-plugins.ps1',
   'scripts/package-visual-studio-plugin.ps1',
+  'scripts/release/prepare-ide-plugin-reuse.mjs',
   'scripts/stage-ide-plugin-runtime.ps1',
   'scripts/verify-ide-plugin-runtime.ps1',
   'scripts/test-local-runtime-e2e.mjs',
@@ -400,8 +401,18 @@ requireMatch(runtimeSource, /idempotency_key[\s\S]*same-client-request/, 'Local 
 requireMatch(runtimeSource, /retain_source[\s\S]*retain_source: Some\(false\)[\s\S]*managed_source_path\.is_none/, 'Local Runtime managed-source retention behavior is missing')
 requireMatch(runtimeSource, /checksumSha256[\s\S]*checksum 校验失败[\s\S]*selected-book package|checksumSha256[\s\S]*checksum 校验失败[\s\S]*selected export/, 'Local Runtime transfer checksum and selected-book boundaries are missing')
 requireMatch(runtimeSource, /check-database[\s\S]*storageIdSuffix[\s\S]*databasePath/, 'Local Runtime database check and diagnostics redaction coverage is missing')
-requireValue(!source('.github/workflows/release-desktop.yml').includes('Reuse unchanged IDE plugin artifacts'), 'Desktop release must build current IDE plugin artifacts')
-requireValue((source('.github/workflows/release-desktop.yml').match(/stage-ide-plugin-runtime\.ps1/g) || []).length >= 3, 'Desktop release must stage the Runtime manifest and checksum for every IDE plugin')
+const desktopReleaseWorkflow = source('.github/workflows/release-desktop.yml')
+const pluginReuse = source('scripts/release/prepare-ide-plugin-reuse.mjs')
+requireMatch(desktopReleaseWorkflow, /Prepare reusable IDE plugin artifacts[\s\S]*prepare-ide-plugin-reuse\.mjs/, 'Desktop release must assess reusable IDE plugin artifacts')
+requireMatch(desktopReleaseWorkflow, /Verify reusable IDE plugin artifacts[\s\S]*verify-ide-plugin-runtime\.ps1[\s\S]*ExpectedIdentifier[\s\S]*reused=true/, 'Reused IDE plugin artifacts must pass package identity and Runtime verification')
+for (const step of ['Validate standalone IDE Runtime', 'Build standalone IDE Runtime', 'Stage standalone IDE Runtime', 'Package VS Code and Cursor plugin', 'Build JetBrains plugin', 'Build Visual Studio plugin']) {
+  requireMatch(desktopReleaseWorkflow, new RegExp(`name: ${step}\\n\\s+if: steps\\.reuse-plugins\\.outputs\\.reused != 'true'`), `${step} must run only when verified artifacts cannot be reused`)
+}
+for (const input of ['apps/local-runtime/', 'packages/reader-protocol/', 'plugins/', 'manifest.json', 'stage-ide-plugin-runtime.ps1', 'package-visual-studio-plugin.ps1']) {
+  requireValue(pluginReuse.includes(input), `IDE plugin reuse must track build input: ${input}`)
+}
+requireMatch(pluginReuse, /asset\.digest[\s\S]*SHA256[\s\S]*bytes\.length[\s\S]*createHash\('sha256'\)/, 'IDE plugin reuse must verify release asset size and SHA-256')
+requireValue((desktopReleaseWorkflow.match(/stage-ide-plugin-runtime\.ps1/g) || []).length >= 3, 'Desktop release must stage the Runtime manifest and checksum for every rebuilt IDE plugin')
 requireMatch(installer, /\[switch\]\$AllTargets/, 'Non-interactive all-target installation is missing')
 for (const command of ['trae', 'qoder', 'windsurf', 'kiro', 'codium', 'code-oss']) {
   requireValue(installer.includes(`'${command}'`), `Standalone installer Code OSS target is missing: ${command}`)
