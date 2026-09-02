@@ -1,8 +1,32 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.15",
+  "latest": "0.6.16",
   "releases": [
+    {
+      "version": "0.6.16",
+      "date": "2026-09-02",
+      "title": "桌面端右键菜单禁用",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.15",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.16",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.16/NovelLibrary_0.6.16_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "桌面端所有页面统一禁用 WebView2 原生右键菜单，避免出现返回、刷新、另存为、打印、更多工具及发送到设备等浏览器操作"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记和本机设置无需迁移。"
+      ]
+    },
     {
       "version": "0.6.15",
       "date": "2026-09-02",
