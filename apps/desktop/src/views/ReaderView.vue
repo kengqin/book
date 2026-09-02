@@ -9,6 +9,7 @@ import { availableMonitors, getCurrentWindow, type Theme } from '@tauri-apps/api
 import { getDesktopBook, getDesktopChapter, listDesktopChapters, saveDesktopProgress, type DesktopBook, type DesktopChapter, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 import { showGlobalError } from '../services/global-message'
+import { buildPrivacyReaderText } from '../services/privacy-reader-text'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,12 +26,19 @@ const compactColumns = ref(36)
 const compactAnchor = ref(0)
 const privacyAnchor = ref(0)
 const privacyMode = ref(false)
-const privacyPalette = ref<'light' | 'night'>('light')
+type PrivacyPalette = 'light' | 'night'
+const privacyPalette = ref<PrivacyPalette>('light')
 const privacyAlwaysOnTop = ref(false)
 const privacySettingsOpen = ref(false)
 const privacyFontSize = ref(12)
 const privacyLineHeight = ref(1.9)
-const privacyCustomTextColor = ref('')
+const privacyCustomTextColors = ref<Record<PrivacyPalette, string>>({ light: '', night: '' })
+const privacyCustomTextColor = computed({
+  get: () => privacyCustomTextColors.value[privacyPalette.value],
+  set: value => {
+    privacyCustomTextColors.value = { ...privacyCustomTextColors.value, [privacyPalette.value]: value }
+  }
+})
 const privacyViewportWidth = ref(300)
 const privacyViewportHeight = ref(200)
 let scrollRoot: HTMLElement | null = null
@@ -87,28 +95,10 @@ const safeRichContent = computed(() => isRichContent.value ? sanitizeReaderHtml(
 const compactText = computed(() => chapter.value?.contentText || chapter.value?.content.replace(/<[^>]+>/gu, ' ') || '')
 const privacyText = computed(() => {
   if (!chapter.value) return ''
-  if (!isRichContent.value) {
-    return chapter.value.content
-      .split(/\n{2,}/u)
-      .map(paragraph => paragraph.replace(/\s*\n\s*/gu, '').trim())
-      .filter(Boolean)
-      .map(paragraph => `　　${paragraph}`)
-      .join('\n')
-  }
-
-  const document = new DOMParser().parseFromString(safeRichContent.value, 'text/html')
-  const blockSelector = 'h1, h2, h3, h4, h5, h6, p, blockquote, li, figcaption, pre, td, th'
-  return Array.from(document.body.querySelectorAll(blockSelector))
-    .filter(element => !element.querySelector(blockSelector))
-    .map(element => {
-      const text = (element.textContent || '').replace(/\s+/gu, ' ').trim()
-      if (!text) return ''
-      if (element.tagName === 'LI') return `· ${text}`
-      const heading = /^H[1-6]$/u.test(element.tagName) || (text.length <= 20 && !/[。！？!?；;：:]$/u.test(text))
-      return heading ? text : `　　${text}`
-    })
-    .filter(Boolean)
-    .join('\n')
+  return buildPrivacyReaderText(
+    isRichContent.value ? safeRichContent.value : chapter.value.content,
+    chapter.value.contentFormat
+  )
 })
 const compactWindow = computed(() => getCompactReaderWindow(compactText.value, compactAnchor.value, compactLines.value, compactColumns.value))
 const privacyColumns = computed(() => Math.max(12, Math.floor(
@@ -118,7 +108,7 @@ const privacyLines = computed(() => Math.max(3, Math.floor(
   (privacyViewportHeight.value - PRIVACY_VERTICAL_CHROME) / (privacyFontSize.value * privacyLineHeight.value)
 )))
 const privacyWindow = computed(() => getCompactReaderWindow(privacyText.value, privacyAnchor.value, privacyLines.value, privacyColumns.value))
-const privacyDefaultTextColor = computed(() => privacyPalette.value === 'light' ? '#252925' : '#d6dad6')
+const privacyDefaultTextColor = computed(() => privacyPalette.value === 'light' ? '#252925' : '#ffffff')
 const privacyTextColor = computed(() => privacyCustomTextColor.value || privacyDefaultTextColor.value)
 const privacyStatusLabel = computed(() => {
   const position = chapterIndex.value >= 0 ? chapterIndex.value + 1 : 0
@@ -160,7 +150,7 @@ function savePrivacySettings() {
   localStorage.setItem(PRIVACY_SETTINGS_STORAGE_KEY, JSON.stringify({
     fontSize: privacyFontSize.value,
     lineHeight: privacyLineHeight.value,
-    textColor: privacyCustomTextColor.value
+    textColors: privacyCustomTextColors.value
   }))
 }
 
@@ -173,10 +163,10 @@ function togglePrivacyPalette() {
   privacyPalette.value = privacyPalette.value === 'light' ? 'night' : 'light'
 }
 
-function releasePrivacyPointerFocus(event: MouseEvent) {
-  if (event.detail <= 0 || !(event.target instanceof Element)) return
+function preventPrivacyPointerFocus(event: MouseEvent) {
+  if (!(event.target instanceof Element)) return
   const button = event.target.closest('button')
-  if (button instanceof HTMLButtonElement) button.blur()
+  if (button instanceof HTMLButtonElement) event.preventDefault()
 }
 
 async function togglePrivacyAlwaysOnTop() {
@@ -602,8 +592,15 @@ onMounted(() => {
     const storedPrivacy = JSON.parse(localStorage.getItem(PRIVACY_SETTINGS_STORAGE_KEY) || '{}')
     if (Number.isFinite(storedPrivacy.fontSize)) privacyFontSize.value = Math.min(20, Math.max(10, storedPrivacy.fontSize))
     if ([1.7, 1.9, 2.1].includes(storedPrivacy.lineHeight)) privacyLineHeight.value = storedPrivacy.lineHeight
-    if (typeof storedPrivacy.textColor === 'string' && /^#[0-9a-f]{6}$/iu.test(storedPrivacy.textColor)) privacyCustomTextColor.value = storedPrivacy.textColor
+    const storedTextColors = storedPrivacy.textColors
+    if (storedTextColors && typeof storedTextColors === 'object') {
+      privacyCustomTextColors.value = {
+        light: typeof storedTextColors.light === 'string' && /^#[0-9a-f]{6}$/iu.test(storedTextColors.light) ? storedTextColors.light : '',
+        night: typeof storedTextColors.night === 'string' && /^#[0-9a-f]{6}$/iu.test(storedTextColors.night) ? storedTextColors.night : ''
+      }
+    }
   } catch {}
+  savePrivacySettings()
   syncReaderChrome()
   void setReaderSizeLimit(true)
   scrollRoot = document.querySelector('.app-workspace')
@@ -671,7 +668,7 @@ watch(() => route.params.chapterNumber, load)
       <div class="privacy-reader-lines">
         <p v-for="line in privacyWindow.lines" :key="line.start">{{ line.text || ' ' }}</p>
       </div>
-      <div class="privacy-reader-chapter-controls" @mousedown.stop @click="releasePrivacyPointerFocus">
+      <div class="privacy-reader-chapter-controls" @mousedown.stop="preventPrivacyPointerFocus">
         <small class="privacy-reader-status" title="当前章节 / 总章节 · 本章进度">{{ privacyStatusLabel }}</small>
         <button
           type="button"
@@ -694,7 +691,7 @@ watch(() => route.params.chapterNumber, load)
           <ChevronRight :size="14" />
         </button>
       </div>
-      <div v-if="privacySettingsOpen" class="privacy-reader-settings" role="dialog" aria-label="隐私阅读设置" @mousedown.stop @click="releasePrivacyPointerFocus" @wheel.stop>
+      <div v-if="privacySettingsOpen" class="privacy-reader-settings" role="dialog" aria-label="隐私阅读设置" @mousedown.stop="preventPrivacyPointerFocus" @wheel.stop>
         <div class="privacy-setting-row">
           <span>字号</span>
           <div class="privacy-setting-stepper">
@@ -717,7 +714,7 @@ watch(() => route.params.chapterNumber, load)
           </div>
         </div>
       </div>
-      <div class="privacy-reader-actions" @mousedown.stop @click="releasePrivacyPointerFocus">
+      <div class="privacy-reader-actions" @mousedown.stop="preventPrivacyPointerFocus">
         <button
           type="button"
           :class="{ active: privacySettingsOpen }"
