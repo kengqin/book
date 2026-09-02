@@ -1,8 +1,34 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.14",
+  "latest": "0.6.15",
   "releases": [
+    {
+      "version": "0.6.15",
+      "date": "2026-09-02",
+      "title": "隐私阅读排版与桌面快捷键修复",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.14",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.15",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.15/NovelLibrary_0.6.15_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "关闭 Windows WebView2 浏览器快捷键，避免调出与阅读无关的下载等浏览器面板",
+            "修复隐私阅读按钮偶发残留焦点，以及 EPUB 短对白和拟声词缺少两字缩进的问题",
+            "黑夜模式正文默认使用纯白文字，白天和黑夜分别保存自定义文字颜色"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度和笔记无需迁移；旧版全局自定义文字颜色会恢复为日夜模式默认值。"
+      ]
+    },
     {
       "version": "0.6.14",
       "date": "2026-09-02",
@@ -14,7 +40,7 @@
       "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.14",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.14/NovelLibrary_0.6.14_x64-setup.exe",
-      "sha256": "",
+      "sha256": "718e8cb8f87602a56e027670f50fb8c2275554f307f539db36ed024d34eb9464",
       "sections": [
         {
           "title": "新增",

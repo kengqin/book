@@ -20,6 +20,30 @@ use models::{
 use tauri::{Manager, State};
 use updater::UpdateDownloadState;
 
+#[cfg(windows)]
+fn disable_browser_accelerator_keys(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+    use windows_core::Interface;
+
+    window.with_webview(|webview| unsafe {
+        let result = webview
+            .controller()
+            .CoreWebView2()
+            .and_then(|core_webview| core_webview.Settings())
+            .and_then(|settings| settings.cast::<ICoreWebView2Settings3>())
+            .and_then(|settings| settings.SetAreBrowserAcceleratorKeysEnabled(false));
+
+        if let Err(error) = result {
+            eprintln!("disable-browser-accelerator-keys-error: {error}");
+        }
+    })
+}
+
+#[cfg(not(windows))]
+fn disable_browser_accelerator_keys(_window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    Ok(())
+}
+
 fn legacy_data_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let default_directory = app
         .path()
@@ -349,6 +373,9 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            if let Some(main_window) = app.get_webview_window("main") {
+                disable_browser_accelerator_keys(&main_window)?;
+            }
             let legacy_directory = legacy_data_directory(app.handle())?;
             let install_directory = installation_directory()?;
             let data_directory = default_data_directory(&install_directory)?;
