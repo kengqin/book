@@ -406,7 +406,7 @@ const pluginReuse = source('scripts/release/prepare-ide-plugin-reuse.mjs')
 requireMatch(desktopReleaseWorkflow, /Prepare reusable IDE plugin artifacts[\s\S]*prepare-ide-plugin-reuse\.mjs/, 'Desktop release must assess reusable IDE plugin artifacts')
 requireMatch(desktopReleaseWorkflow, /Verify reusable IDE plugin artifacts[\s\S]*verify-ide-plugin-runtime\.ps1[\s\S]*ExpectedIdentifier[\s\S]*reused=true/, 'Reused IDE plugin artifacts must pass package identity and Runtime verification')
 for (const step of ['Validate standalone IDE Runtime', 'Build standalone IDE Runtime', 'Stage standalone IDE Runtime', 'Package VS Code and Cursor plugin', 'Build JetBrains plugin', 'Build Visual Studio plugin']) {
-  requireMatch(desktopReleaseWorkflow, new RegExp(`name: ${step}\\n\\s+if: steps\\.reuse-plugins\\.outputs\\.reused != 'true'`), `${step} must run only when verified artifacts cannot be reused`)
+  requireMatch(desktopReleaseWorkflow, new RegExp(`name: ${step}\\r?\\n\\s+if: steps\\.reuse-plugins\\.outputs\\.reused != 'true'`), `${step} must run only when verified artifacts cannot be reused`)
 }
 for (const input of ['apps/local-runtime/', 'packages/reader-protocol/', 'plugins/', 'manifest.json', 'stage-ide-plugin-runtime.ps1', 'package-visual-studio-plugin.ps1']) {
   requireValue(pluginReuse.includes(input), `IDE plugin reuse must track build input: ${input}`)
