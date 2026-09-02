@@ -1,7 +1,11 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
-  [string]$Path
+  [string]$Path,
+  [ValidateSet('vscode', 'jetbrains', 'visual-studio')]
+  [string]$ExpectedKind,
+  [string]$ExpectedIdentifier,
+  [string]$ExpectedVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,6 +31,79 @@ function Copy-ZipEntry {
     $outputStream.Dispose()
     $inputStream.Dispose()
   }
+}
+
+function Read-ZipEntryText {
+  param([Parameter(Mandatory = $true)]$Entry)
+  $stream = $Entry.Open()
+  $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+  try {
+    return $reader.ReadToEnd()
+  } finally {
+    $reader.Dispose()
+    $stream.Dispose()
+  }
+}
+
+function Assert-PluginMetadata {
+  param(
+    [Parameter(Mandatory = $true)]$Archive,
+    [Parameter(Mandatory = $true)][string]$Kind,
+    [Parameter(Mandatory = $true)][string]$Identifier,
+    [Parameter(Mandatory = $true)][string]$Version
+  )
+  $actualIdentifier = ''
+  $actualVersion = ''
+  switch ($Kind) {
+    'vscode' {
+      $entry = @($Archive.Entries | Where-Object { $_.FullName -eq 'extension/package.json' }) | Select-Object -First 1
+      if (-not $entry) { throw "VS Code package metadata is missing: $archivePath" }
+      $metadata = Read-ZipEntryText -Entry $entry | ConvertFrom-Json
+      $actualIdentifier = "$($metadata.publisher).$($metadata.name)"
+      $actualVersion = [string]$metadata.version
+    }
+    'jetbrains' {
+      $metadataFound = $false
+      foreach ($jarEntry in @($Archive.Entries | Where-Object { $_.FullName -match '\.jar$' })) {
+        $stream = $jarEntry.Open()
+        try {
+          $nested = [System.IO.Compression.ZipArchive]::new($stream, [System.IO.Compression.ZipArchiveMode]::Read, $false)
+          try {
+            $entry = $nested.GetEntry('META-INF/plugin.xml')
+            if (-not $entry) { continue }
+            [xml]$metadata = Read-ZipEntryText -Entry $entry
+            $candidateIdentifier = [string]$metadata.SelectSingleNode("/*[local-name()='idea-plugin']/*[local-name()='id']").InnerText
+            if ($candidateIdentifier -ne $Identifier) { continue }
+            $actualIdentifier = $candidateIdentifier
+            $actualVersion = [string]$metadata.SelectSingleNode("/*[local-name()='idea-plugin']/*[local-name()='version']").InnerText
+            $metadataFound = $true
+            break
+          } finally {
+            $nested.Dispose()
+          }
+        } finally {
+          $stream.Dispose()
+        }
+      }
+      if (-not $metadataFound) { throw "JetBrains plugin metadata is missing or has the wrong identifier: $archivePath" }
+    }
+    'visual-studio' {
+      $entry = @($Archive.Entries | Where-Object { $_.FullName -eq 'extension.vsixmanifest' }) | Select-Object -First 1
+      if (-not $entry) { throw "Visual Studio package metadata is missing: $archivePath" }
+      [xml]$metadata = Read-ZipEntryText -Entry $entry
+      $identity = $metadata.SelectSingleNode("//*[local-name()='Identity']")
+      if (-not $identity) { throw "Visual Studio package identity is missing: $archivePath" }
+      $actualIdentifier = [string]$identity.GetAttribute('Id')
+      $actualVersion = [string]$identity.GetAttribute('Version')
+    }
+  }
+  if ($actualIdentifier -ne $Identifier -or $actualVersion -ne $Version) {
+    throw "IDE plugin identity/version does not match the current manifest in ${archivePath}: ${actualIdentifier}@${actualVersion}"
+  }
+}
+
+if (@($ExpectedKind, $ExpectedIdentifier, $ExpectedVersion).Where({ -not [string]::IsNullOrWhiteSpace($_) }).Count -notin @(0, 3)) {
+  throw 'ExpectedKind, ExpectedIdentifier and ExpectedVersion must be provided together'
 }
 
 try {
@@ -71,8 +148,11 @@ try {
       }
     }
   }
-    if (-not $runtimeExtracted -or $entries.Count -eq 0) {
-      throw "IDE plugin package does not contain a non-empty NovelLibrary Runtime: $archivePath"
+    if (-not $runtimeExtracted -or $entries.Count -ne 1) {
+      throw "IDE plugin package must contain exactly one non-empty NovelLibrary Runtime: $archivePath"
+    }
+    if ($ExpectedKind) {
+      Assert-PluginMetadata -Archive $archive -Kind $ExpectedKind -Identifier $ExpectedIdentifier -Version $ExpectedVersion
     }
   } finally {
     $archive.Dispose()
