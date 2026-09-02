@@ -1,7 +1,26 @@
 const vscode = require('vscode')
-const { openDesktopApp, request } = require('./bridge')
+const crypto = require('crypto')
+const path = require('path')
+const {
+  beginLocalDataMigration,
+  configureProvider,
+  defaultLocalDataDirectory,
+  endLocalDataMigration,
+  getProviderIdentity,
+  getProviderSettings,
+  importFile: importLibraryFile,
+  openDesktopApp,
+  reparseBook,
+  request,
+  restartLocalRuntime,
+  setLocalDataDirectory,
+  shutdownLocalRuntime
+} = require('./bridge')
 const { lineStartFromProgress } = require('./reader-utils')
 const { createWheelBridge } = require('./wheel-bridge')
+const { selectImportFile } = require('./import-selection')
+
+const MODAL_CANCEL_ACTION = Object.freeze({ title: '取消', isCloseAffordance: true })
 
 const state = {
   books: [],
@@ -73,6 +92,11 @@ function createReader(context, wheelBridge) {
   status.tooltip = '小说书库：点击显示或隐藏代码内阅读'
   let previousEditor
   let notifySidebar = () => {}
+  // A client identity belongs to one extension-host process. Persisted identities are
+  // shared by multiple VS Code windows and can make equal sequence numbers look like
+  // duplicate writes even when they came from different readers.
+  const progressClientId = crypto.randomUUID()
+  let progressSequence = 0
 
   const updateNavigationContexts = () => {
     const index = currentChapterIndex()
@@ -158,10 +182,55 @@ function createReader(context, wheelBridge) {
   }
 
   let progressWriteQueue = Promise.resolve()
+  const pendingProgressStorageKey = 'novelLibrary.pendingProgress.v1'
 
-  const rememberProgress = ({ bookId, chapterNumber, chapterProgress }) => {
+  const legacyProgressProviderKey = () => getProviderSettings().useDesktopLibrary
+    ? 'desktop'
+    : `local:${path.resolve(getProviderSettings().localDataDirectory).toLowerCase()}`
+  const progressProviderKey = () => getProviderIdentity()
+
+  const pendingProgressKey = progress => `${progressProviderKey()}::${progress.bookId}`
+
+  const rememberPendingProgress = async progress => {
+    const pending = storage.get(pendingProgressStorageKey, {})
+    pending[pendingProgressKey(progress)] = {
+      providerKey: progressProviderKey(),
+      route: getProviderSettings().useDesktopLibrary ? '/v1/progress' : '/v2/progress',
+      progress,
+      savedAt: Date.now()
+    }
+    const entries = Object.entries(pending).sort((left, right) => right[1].savedAt - left[1].savedAt).slice(0, 100)
+    await storage.update(pendingProgressStorageKey, Object.fromEntries(entries))
+  }
+
+  const clearPendingProgress = async progress => {
+    const pending = storage.get(pendingProgressStorageKey, {})
+    delete pending[pendingProgressKey(progress)]
+    await storage.update(pendingProgressStorageKey, pending)
+  }
+
+  const replayPendingProgress = async () => {
+    const pending = storage.get(pendingProgressStorageKey, {})
+    const providerKey = progressProviderKey()
+    for (const [key, item] of Object.entries(pending)) {
+      if (item.providerKey !== providerKey && item.providerKey !== legacyProgressProviderKey()) continue
+      try {
+        await request(item.route, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.progress)
+        })
+        delete pending[key]
+      } catch (error) {
+        if (error.code === 'PROGRESS_CONFLICT') delete pending[key]
+      }
+    }
+    await storage.update(pendingProgressStorageKey, pending)
+  }
+
+  const rememberProgress = ({ bookId, chapterNumber, chapterProgress, revision }) => {
     const updateBook = book => book?.id === bookId
-      ? { ...book, currentChapter: chapterNumber, chapterProgress }
+      ? { ...book, currentChapter: chapterNumber, chapterProgress, revision: revision ?? book.revision }
       : book
     state.books = state.books.map(updateBook)
     state.book = updateBook(state.book)
@@ -169,17 +238,42 @@ function createReader(context, wheelBridge) {
 
   const persistProgress = async () => {
     if (!state.book || !state.chapter) return
+    progressSequence += 1
     const progress = {
       bookId: state.book.id,
       chapterNumber: state.chapter.number,
-      chapterProgress: currentProgress()
+      chapterProgress: currentProgress(),
+      ...(getProviderSettings().useDesktopLibrary
+        ? {}
+        : {
+            baseRevision: state.book.revision || 0,
+            clientId: progressClientId,
+            sequence: progressSequence,
+            lineIndex: state.lineStart
+          })
     }
     rememberProgress(progress)
-    const write = progressWriteQueue.then(() => request('/v1/progress', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(progress)
-    }))
+    const write = progressWriteQueue.then(async () => {
+      try {
+        const saved = await request(getProviderSettings().useDesktopLibrary ? '/v1/progress' : '/v2/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(progress)
+        })
+        rememberProgress({ ...progress, revision: saved.revision })
+        await clearPendingProgress(progress)
+        return saved
+      } catch (error) {
+        if (error.code === 'PROGRESS_CONFLICT') {
+          await clearPendingProgress(progress)
+          const latest = await latestBook(state.book)
+          state.book = latest
+          return { conflict: true }
+        }
+        await rememberPendingProgress(progress)
+        throw error
+      }
+    })
     progressWriteQueue = write.catch(() => {})
     await write
   }
@@ -271,6 +365,7 @@ function createReader(context, wheelBridge) {
         ? { bookId: state.book.id, chapterNumber: state.chapter.number, lineStart: state.lineStart }
         : undefined
       state.books = await request('/v1/books')
+      await replayPendingProgress()
       state.connected = true
       if (!state.books.length) {
         state.book = null
@@ -316,7 +411,7 @@ function createReader(context, wheelBridge) {
       clear()
       vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
       notifySidebar()
-      if (!silent) vscode.window.showErrorMessage(`小说阅读器无法连接桌面端：${error.message}`)
+      if (!silent) vscode.window.showErrorMessage(`小说阅读器无法连接当前书库：${error.message}`)
       return false
     }
   }
@@ -356,6 +451,20 @@ function createReader(context, wheelBridge) {
   const toggleDisplayMode = async () => {
     state.displayMode = state.displayMode === 'paragraph' ? 'lineEnd' : 'paragraph'
     await storage.update('novelLibrary.displayMode', state.displayMode)
+    render()
+    notifySidebar()
+  }
+
+  const resetProvider = async () => {
+    if (state.book && state.chapter) await persistProgress().catch(() => {})
+    await progressWriteQueue
+    state.books = []
+    state.chapters = []
+    state.book = null
+    state.chapter = null
+    state.lines = []
+    state.lineStart = 0
+    state.connected = false
     render()
     notifySidebar()
   }
@@ -426,6 +535,7 @@ function createReader(context, wheelBridge) {
     openBook,
     openChapter,
     loadLibrary,
+    resetProvider,
     toggleDisplayMode,
     setSidebarRefresh(callback) {
       notifySidebar = callback
@@ -459,13 +569,25 @@ class ReaderTreeProvider {
 
   getChildren(element) {
     if (!element) {
+      const local = !getProviderSettings().useDesktopLibrary
       return [
+        {
+          id: 'provider.status',
+          type: 'status',
+          label: `数据源：${local ? '本地书库' : '桌面书库'}`,
+          description: state.connected ? '已连接' : state.loading ? '正在连接' : '离线',
+          tooltip: local
+            ? `本地数据目录：${getProviderSettings().localDataDirectory}`
+            : '桌面模式只连接桌面端书库，连接失败时不会静默切换到本地书库',
+          icon: state.connected ? 'pass-filled' : state.loading ? 'loading~spin' : 'warning',
+          contextValue: 'providerStatus'
+        },
         {
           id: 'section.books',
           type: 'books',
           label: `书架 (${state.books.length})`,
           description: state.book?.title || '',
-          tooltip: '桌面端小说书架',
+          tooltip: getProviderSettings().useDesktopLibrary ? '桌面端小说书架' : '本地 Runtime 小说书架',
           icon: 'library',
           collapsibleState: vscode.TreeItemCollapsibleState.Expanded
         },
@@ -496,7 +618,8 @@ class ReaderTreeProvider {
 
     if (element.type === 'books') {
       if (!state.books.length) {
-        return [this.emptyItem(state.connected ? '桌面端书库暂无小说' : '正在等待桌面端连接（将自动重试）')]
+        const source = getProviderSettings().useDesktopLibrary ? '桌面端书库' : '本地书库'
+        return [this.emptyItem(state.connected ? `${source}暂无小说` : `正在等待${source}连接（将自动重试）`)]
       }
       return state.books.map(book => {
         const current = book.id === state.book?.id
@@ -508,6 +631,7 @@ class ReaderTreeProvider {
           icon: current ? 'check' : 'book',
           command: 'novelLibrary.openBookFromSidebar',
           arguments: [book],
+          book,
           contextValue: current ? 'currentBook' : 'book'
         }
       })
@@ -557,6 +681,16 @@ class ReaderTreeProvider {
 }
 
 function activate(context) {
+  const configuration = vscode.workspace.getConfiguration('novelLibrary')
+  const desktopSetting = configuration.inspect('useDesktopLibrary')?.globalValue
+  const dataDirectorySetting = configuration.inspect('localDataDirectory')?.globalValue
+  configureProvider({
+    useDesktopLibrary: desktopSetting ?? context.globalState.get('novelLibrary.useDesktopLibrary', true),
+    localDataDirectory: dataDirectorySetting || context.globalState.get('novelLibrary.localDataDirectory') || undefined,
+    runtimePath: context.globalState.get('novelLibrary.runtimePath') || undefined,
+    logLevel: configuration.get('logLevel', 'info'),
+    retainManagedSource: configuration.get('retainManagedSource', true)
+  })
   let reader
   const wheelBridge = createWheelBridge(
     direction => reader?.moveLines(direction),
@@ -578,6 +712,39 @@ function activate(context) {
   const treeView = vscode.window.createTreeView('novelLibrary.reader', { treeDataProvider: treeProvider })
   context.subscriptions.push(treeView)
   vscode.commands.executeCommand('setContext', 'novelLibrary.readerEnabled', false)
+  vscode.commands.executeCommand('setContext', 'novelLibrary.useDesktopLibrary', getProviderSettings().useDesktopLibrary)
+  let applyingConfiguration = false
+  context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(async event => {
+    if (applyingConfiguration) return
+    if (!event.affectsConfiguration('novelLibrary.useDesktopLibrary') && !event.affectsConfiguration('novelLibrary.localDataDirectory') && !event.affectsConfiguration('novelLibrary.logLevel') && !event.affectsConfiguration('novelLibrary.retainManagedSource')) return
+    const previous = getProviderSettings()
+    const nextUseDesktop = configuration.get('useDesktopLibrary', true)
+    const configuredDirectory = configuration.get('localDataDirectory', '').trim()
+    const nextDirectory = configuredDirectory || defaultLocalDataDirectory()
+    let migrationLock
+    try {
+      await reader.resetProvider()
+      if (path.resolve(nextDirectory) !== path.resolve(previous.localDataDirectory)) {
+        migrationLock = beginLocalDataMigration(previous.localDataDirectory)
+        await shutdownLocalRuntime()
+        setLocalDataDirectory(nextDirectory)
+      }
+      configureProvider({
+        useDesktopLibrary: nextUseDesktop,
+        localDataDirectory: nextDirectory,
+        logLevel: configuration.get('logLevel', 'info'),
+        retainManagedSource: configuration.get('retainManagedSource', true)
+      })
+      await context.globalState.update('novelLibrary.useDesktopLibrary', nextUseDesktop)
+      await context.globalState.update('novelLibrary.localDataDirectory', path.resolve(nextDirectory))
+      vscode.commands.executeCommand('setContext', 'novelLibrary.useDesktopLibrary', nextUseDesktop)
+      await reader.loadLibrary()
+    } catch (error) {
+      vscode.window.showErrorMessage(`小说书库设置应用失败：${error.message}`)
+    } finally {
+      endLocalDataMigration(migrationLock)
+    }
+  }))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openReader', () => reader.toggle()))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.showReader', () => reader.toggle(true)))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.hideReader', () => reader.toggle(false)))
@@ -596,6 +763,100 @@ function activate(context) {
     '@ext:novel-library.novel-library-reader'
   )
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.configureShortcuts', configureShortcuts))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.toggleLibraryMode', async () => {
+    const current = getProviderSettings()
+    const nextUseDesktop = !current.useDesktopLibrary
+    if (nextUseDesktop) {
+      const choice = await vscode.window.showInformationMessage(
+        '切换后将使用桌面端书库；本地书库数据会保留。',
+        { modal: true },
+        '切换到桌面端',
+        MODAL_CANCEL_ACTION
+      )
+      if (choice !== '切换到桌面端') return
+    } else {
+      const choice = await vscode.window.showInformationMessage(
+        '切换后将由插件维护独立本地书库；桌面书库不会被修改。',
+        { modal: true },
+        '切换到本地',
+        MODAL_CANCEL_ACTION
+      )
+      if (choice !== '切换到本地') return
+    }
+    await reader.resetProvider()
+    applyingConfiguration = true
+    try {
+      await configuration.update('useDesktopLibrary', nextUseDesktop, vscode.ConfigurationTarget.Global)
+      await context.globalState.update('novelLibrary.useDesktopLibrary', nextUseDesktop)
+    } finally {
+      applyingConfiguration = false
+    }
+    configureProvider({ useDesktopLibrary: nextUseDesktop })
+    vscode.commands.executeCommand('setContext', 'novelLibrary.useDesktopLibrary', nextUseDesktop)
+    await reader.loadLibrary()
+  }))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.configureLocalDataDirectory', async () => {
+    const current = getProviderSettings()
+    const selected = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: '选择本地书库目录',
+      defaultUri: vscode.Uri.file(current.localDataDirectory)
+    })
+    if (!selected?.[0]) return
+    const target = selected[0].fsPath
+    const copyChoice = await vscode.window.showInformationMessage(
+      `是否把当前本地书库复制到新目录？\n${target}`,
+      { modal: true },
+      '复制并切换',
+      '空目录切换',
+      MODAL_CANCEL_ACTION
+    )
+    if (!['复制并切换', '空目录切换'].includes(copyChoice)) return
+    let migrationLock
+    try {
+      await reader.resetProvider()
+      if (path.resolve(target) !== path.resolve(current.localDataDirectory)) {
+        migrationLock = beginLocalDataMigration(current.localDataDirectory)
+        await shutdownLocalRuntime()
+      }
+      const result = setLocalDataDirectory(target, { copyFrom: copyChoice === '复制并切换' ? current.localDataDirectory : undefined })
+      applyingConfiguration = true
+      try {
+        await configuration.update('localDataDirectory', result.directory, vscode.ConfigurationTarget.Global)
+        await configuration.update('useDesktopLibrary', false, vscode.ConfigurationTarget.Global)
+        await context.globalState.update('novelLibrary.localDataDirectory', result.directory)
+        await context.globalState.update('novelLibrary.useDesktopLibrary', false)
+      } finally {
+        applyingConfiguration = false
+      }
+      configureProvider({ useDesktopLibrary: false, localDataDirectory: result.directory })
+      vscode.commands.executeCommand('setContext', 'novelLibrary.useDesktopLibrary', false)
+      await reader.loadLibrary()
+      vscode.window.showInformationMessage(`本地书库目录已切换：${result.directory}`)
+    } catch (error) {
+      vscode.window.showErrorMessage(`本地书库目录切换失败：${error.message}`)
+    } finally {
+      endLocalDataMigration(migrationLock)
+    }
+  }))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openLocalDataDirectory', async () => {
+    const directory = getProviderSettings().localDataDirectory
+    await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(directory))
+  }))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.restartLocalRuntime', async () => {
+    if (getProviderSettings().useDesktopLibrary) {
+      vscode.window.showInformationMessage('当前是桌面端模式，无需重启本地 Runtime')
+      return
+    }
+    try {
+      await restartLocalRuntime()
+      await reader.loadLibrary()
+    } catch (error) {
+      vscode.window.showErrorMessage(`本地 Runtime 重启失败：${error.message}`)
+    }
+  }))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.showShortcuts', async () => {
     const choice = await vscode.window.showInformationMessage('小说书库快捷键', {
       modal: true,
@@ -610,10 +871,14 @@ function activate(context) {
         'Ctrl+Alt+→    下一章',
         'Ctrl+Alt+D    打开小说书库桌面端'
       ].join('\n')
-    }, '打开快捷键设置')
+    }, '打开快捷键设置', MODAL_CANCEL_ACTION)
     if (choice === '打开快捷键设置') await configureShortcuts()
   }))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openDesktop', async () => {
+    if (!getProviderSettings().useDesktopLibrary) {
+      await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(getProviderSettings().localDataDirectory))
+      return
+    }
     try {
       await request('/v1/show', { method: 'POST' })
     } catch {
@@ -625,17 +890,142 @@ function activate(context) {
     }
   }))
   context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.importFile', async uri => {
-    const file = uri || vscode.window.activeTextEditor?.document.uri
+    const file = await selectImportFile(vscode.window, uri)
     if (!file) return
     try {
-      await request('/v1/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: file.fsPath })
-      })
-      vscode.window.showInformationMessage('已发送到小说书库导入队列')
+      const job = await importLibraryFile(file.fsPath)
+      if (job.state === 'completed') await reader.loadLibrary()
+      vscode.window.showInformationMessage(job.state === 'completed' ? '小说导入完成' : '已发送到桌面端导入队列')
     } catch (error) {
       vscode.window.showErrorMessage(`导入失败：${error.message}`)
+    }
+  }))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.deleteCurrentBook', async item => {
+    if (getProviderSettings().useDesktopLibrary) {
+      vscode.window.showInformationMessage('删除书籍请在桌面端中操作；本命令仅管理本地书库。')
+      return
+    }
+    const selectedBook = item?.book || state.book
+    if (!selectedBook) {
+      vscode.window.showInformationMessage('请先在书架中选择要删除的书籍')
+      return
+    }
+    const choice = await vscode.window.showWarningMessage(
+      `确定从本地书库删除《${selectedBook.title}》及其受管源文件吗？`,
+      { modal: true },
+      '删除',
+      MODAL_CANCEL_ACTION
+    )
+    if (choice !== '删除') return
+    try {
+      await request(`/v2/books/${encodeURIComponent(selectedBook.id)}`, { method: 'DELETE' })
+      if (state.book?.id === selectedBook.id) {
+        state.book = null
+        state.chapter = null
+        state.chapters = []
+        state.lines = []
+      }
+      await reader.loadLibrary()
+      vscode.window.showInformationMessage(`《${selectedBook.title}》已从本地书库删除`)
+    } catch (error) {
+      vscode.window.showErrorMessage(`删除失败：${error.message}`)
+    }
+  }))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.reparseCurrentBook', async () => {
+    if (getProviderSettings().useDesktopLibrary) {
+      vscode.window.showInformationMessage('重新解析仅适用于本地书库')
+      return
+    }
+    if (!state.book) {
+      vscode.window.showInformationMessage('当前没有可重新解析的书籍')
+      return
+    }
+    try {
+      await reparseBook(state.book.id)
+      await reader.loadLibrary()
+      vscode.window.showInformationMessage('本地书籍重新解析完成')
+    } catch (error) {
+      vscode.window.showErrorMessage(`重新解析失败：${error.message}`)
+    }
+  }))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.backupCurrentLibrary', async () => {
+    const sourceName = getProviderSettings().useDesktopLibrary ? 'desktop' : 'local'
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const selected = await vscode.window.showSaveDialog({
+      title: '备份当前小说书库',
+      defaultUri: vscode.Uri.file(path.join(getProviderSettings().localDataDirectory, 'backups', `novel-library-${sourceName}-${timestamp}.json`)),
+      filters: { '小说书库备份': ['json', 'novellibrary-backup'] },
+      saveLabel: '创建备份'
+    })
+    if (!selected) return
+    try {
+      const result = await request('/v2/transfers/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: selected.fsPath })
+      })
+      vscode.window.showInformationMessage(`书库备份完成：${result.bookCount ?? result.books ?? 0} 本`)
+    } catch (error) {
+      vscode.window.showErrorMessage(`备份失败：${error.message}`)
+    }
+  }))
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.restoreCurrentLibrary', async () => {
+    const selected = await vscode.window.showOpenDialog({
+      title: '恢复或迁移小说书库',
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      filters: { '小说书库备份': ['json', 'novellibrary-backup', 'novellibrary-transfer'] },
+      openLabel: '选择备份'
+    })
+    if (!selected?.[0]) return
+    const local = !getProviderSettings().useDesktopLibrary
+    const choices = local ? ['合并恢复', '清空并恢复', MODAL_CANCEL_ACTION] : ['合并恢复', MODAL_CANCEL_ACTION]
+    const choice = await vscode.window.showWarningMessage(
+      local ? '请选择恢复方式；“清空并恢复”会先自动备份当前本地书库。' : '备份内容将合并到当前桌面书库。',
+      { modal: true },
+      ...choices
+    )
+    if (!['合并恢复', '清空并恢复'].includes(choice)) return
+    try {
+      await request('/v2/transfers/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: selected[0].fsPath, strategy: choice === '清空并恢复' ? 'replace' : 'merge' })
+      })
+      state.book = null
+      state.chapter = null
+      await reader.loadLibrary()
+      vscode.window.showInformationMessage('书库恢复完成')
+    } catch (error) {
+      vscode.window.showErrorMessage(`恢复失败：${error.message}`)
+    }
+  }))
+  const diagnosticsOutput = vscode.window.createOutputChannel('小说书库诊断')
+  context.subscriptions.push(diagnosticsOutput)
+  context.subscriptions.push(vscode.commands.registerCommand('novelLibrary.openDiagnostics', async () => {
+    if (getProviderSettings().useDesktopLibrary) {
+      vscode.window.showInformationMessage('Runtime 诊断仅适用于本地书库')
+      return
+    }
+    try {
+      const diagnostics = await request('/v2/runtime/diagnostics')
+      diagnosticsOutput.clear()
+      diagnosticsOutput.appendLine(`插件版本：${context.extension.packageJSON.version}`)
+      diagnosticsOutput.appendLine(`IDE：${vscode.env.appName} ${vscode.version}`)
+      diagnosticsOutput.appendLine('当前模式：本地书库')
+      diagnosticsOutput.appendLine(`Runtime：${diagnostics.runtimeVersion || '未知'}`)
+      diagnosticsOutput.appendLine(`协议版本：${diagnostics.protocolVersion ?? '未知'}`)
+      diagnosticsOutput.appendLine(`storageId：…${diagnostics.storageIdSuffix || '未知'}`)
+      diagnosticsOutput.appendLine(`数据库 schema：${diagnostics.schemaVersion ?? '未知'}`)
+      diagnosticsOutput.appendLine(`服务：PID ${diagnostics.pid ?? '未知'} / 端口 ${diagnostics.port ?? '未知'}`)
+      diagnosticsOutput.appendLine(`完整性：${diagnostics.integrity || '未知'}`)
+      diagnosticsOutput.appendLine(`书籍：${diagnostics.bookCount ?? 0} / 待处理导入：${diagnostics.pendingImportJobs ?? 0}`)
+      diagnosticsOutput.appendLine(`数据目录：${diagnostics.dataDirectory || '未知'}`)
+      diagnosticsOutput.appendLine(`日志目录：${diagnostics.logDirectory || '未知'}`)
+      diagnosticsOutput.show(true)
+    } catch (error) {
+      vscode.window.showErrorMessage(`诊断失败：${error.message}`)
     }
   }))
 

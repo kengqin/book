@@ -19,6 +19,7 @@ internal sealed class BookItem
     public string Title { get; set; } = "";
     public int? CurrentChapter { get; set; }
     public double ChapterProgress { get; set; }
+    public long Revision { get; set; }
     public override string ToString() => Title;
 }
 
@@ -41,6 +42,10 @@ internal sealed class ChapterPayload
 
 internal static class NovelLibraryReaderSession
 {
+    private sealed class ProgressResult
+    {
+        public long Revision { get; set; }
+    }
     private static readonly NovelLibraryBridge Bridge = new NovelLibraryBridge();
     private static readonly SemaphoreSlim Gate = new SemaphoreSlim(1, 1);
     private static bool _loaded;
@@ -75,7 +80,9 @@ internal static class NovelLibraryReaderSession
         ? "尚未加载章节 · 总进度 0.0%"
         : $"第 {CurrentChapterOrdinal}/{Chapters.Count} 章 · {CurrentChapter.Title} · 总进度 {OverallProgress:F1}%";
     public static string Status => CurrentChapter == null
-        ? "正在连接小说书库桌面端"
+        ? _loaded && Books.Count == 0
+            ? $"{(NovelLibraryLocalSettings.UseDesktopLibrary ? "桌面端" : "本地")}书库中还没有小说"
+            : $"正在连接小说书库{(NovelLibraryLocalSettings.UseDesktopLibrary ? "桌面端" : "本地 Runtime")}"
         : _lines.Count == 0
             ? $"{CurrentChapter.Title} · 当前章节没有可阅读的正文 · {DisplayModeLabel}"
         : $"{CurrentChapter.Title} · {_lineStart + 1}-{Math.Min(_lines.Count, _lineStart + 5)} / {_lines.Count} 行 · {DisplayModeLabel}";
@@ -138,10 +145,22 @@ internal static class NovelLibraryReaderSession
         try
         {
             if (_loaded) return;
+            await Bridge.ReplayPendingProgressAsync().ConfigureAwait(false);
             Books = await Bridge.GetAsync<List<BookItem>>("/v1/books").ConfigureAwait(false);
-            CurrentBook = Books.FirstOrDefault() ?? throw new InvalidOperationException("桌面端书库中还没有小说");
-            await LoadBookCoreAsync(CurrentBook).ConfigureAwait(false);
-            _loaded = true;
+            CurrentBook = Books.FirstOrDefault();
+            if (CurrentBook == null)
+            {
+                Chapters = Array.Empty<ChapterItem>();
+                CurrentChapter = null;
+                _lines.Clear();
+                _lineStart = 0;
+                _loaded = true;
+            }
+            else
+            {
+                await LoadBookCoreAsync(CurrentBook).ConfigureAwait(false);
+                _loaded = true;
+            }
         }
         finally
         {
@@ -149,6 +168,65 @@ internal static class NovelLibraryReaderSession
         }
         RaiseChanged();
     }
+
+    public static void ResetForProviderSwitch()
+    {
+        _loaded = false;
+        Books = Array.Empty<BookItem>();
+        Chapters = Array.Empty<ChapterItem>();
+        CurrentBook = null;
+        CurrentChapter = null;
+        _lines.Clear();
+        _lineStart = 0;
+        RaiseChanged();
+    }
+
+    public static async Task FlushProgressAsync()
+    {
+        await Gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await SaveProgressAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    public static async Task ImportFileAsync(string path)
+    {
+        await Bridge.ImportFileAsync(path).ConfigureAwait(false);
+        ResetForProviderSwitch();
+        await EnsureLoadedAsync().ConfigureAwait(false);
+    }
+
+    public static async Task DeleteCurrentBookAsync()
+    {
+        var book = CurrentBook ?? throw new InvalidOperationException("当前没有可删除的书籍");
+        await Bridge.DeleteBookAsync(book.Id).ConfigureAwait(false);
+        ResetForProviderSwitch();
+        await EnsureLoadedAsync().ConfigureAwait(false);
+    }
+
+    public static async Task ReparseCurrentBookAsync()
+    {
+        var book = CurrentBook ?? throw new InvalidOperationException("当前没有可重新解析的书籍");
+        await Bridge.ReparseBookAsync(book.Id).ConfigureAwait(false);
+        ResetForProviderSwitch();
+        await EnsureLoadedAsync().ConfigureAwait(false);
+    }
+
+    public static Task BackupLibraryAsync(string path) => Bridge.ExportLibraryAsync(path);
+
+    public static async Task RestoreLibraryAsync(string path, string strategy)
+    {
+        await Bridge.ImportLibraryAsync(path, strategy).ConfigureAwait(false);
+        ResetForProviderSwitch();
+        await EnsureLoadedAsync().ConfigureAwait(false);
+    }
+
+    public static Task<string> GetDiagnosticsAsync() => Bridge.GetDiagnosticsAsync();
 
     public static async Task SelectBookAsync(BookItem book)
     {
@@ -245,6 +323,7 @@ internal static class NovelLibraryReaderSession
         {
             book.CurrentChapter = latestBook.CurrentChapter;
             book.ChapterProgress = latestBook.ChapterProgress;
+            book.Revision = latestBook.Revision;
         }
         CurrentBook = book;
         var allChapters = await Bridge.GetAsync<List<ChapterItem>>(
@@ -300,12 +379,58 @@ internal static class NovelLibraryReaderSession
         var chapterProgress = ChapterProgress;
         CurrentBook.CurrentChapter = chapterNumber;
         CurrentBook.ChapterProgress = chapterProgress;
-        await Bridge.PostAsync("/v1/progress", new
+        if (NovelLibraryLocalSettings.UseDesktopLibrary)
         {
-            bookId = CurrentBook.Id,
-            chapterNumber,
-            chapterProgress
-        }).ConfigureAwait(false);
+            const string route = "/v1/progress";
+            var payload = new
+            {
+                bookId = CurrentBook.Id,
+                chapterNumber,
+                chapterProgress
+            };
+            try
+            {
+                await Bridge.PostAsync(route, payload).ConfigureAwait(false);
+                NovelLibraryLocalSettings.ClearPendingProgressForBook(CurrentBook.Id);
+            }
+            catch
+            {
+                NovelLibraryLocalSettings.SavePendingProgress(CurrentBook.Id, route, new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(payload));
+                throw;
+            }
+        }
+        else
+        {
+            var identity = NovelLibraryLocalSettings.NextProgressIdentity();
+            const string route = "/v2/progress";
+            var payload = new
+            {
+                bookId = CurrentBook.Id,
+                chapterNumber,
+                chapterProgress,
+                baseRevision = CurrentBook.Revision,
+                clientId = identity.ClientId,
+                sequence = identity.Sequence,
+                lineIndex = _lineStart
+            };
+            try
+            {
+                var saved = await Bridge.PostForResultAsync<ProgressResult>(route, payload).ConfigureAwait(false);
+                NovelLibraryLocalSettings.ClearPendingProgressForBook(CurrentBook.Id);
+                CurrentBook.Revision = saved.Revision;
+            }
+            catch (BridgeRequestException error) when (string.Equals(error.Code, "PROGRESS_CONFLICT", StringComparison.Ordinal))
+            {
+                NovelLibraryLocalSettings.ClearPendingProgressForBook(CurrentBook.Id);
+                var latest = await Bridge.GetAsync<BookItem>($"/v1/books/{Uri.EscapeDataString(CurrentBook.Id)}").ConfigureAwait(false);
+                CurrentBook.Revision = latest.Revision;
+            }
+            catch
+            {
+                NovelLibraryLocalSettings.SavePendingProgress(CurrentBook.Id, route, new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(payload));
+                throw;
+            }
+        }
     }
 
     private static List<string> SplitLines(string text)

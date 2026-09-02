@@ -1,11 +1,76 @@
-export const READER_PROTOCOL_VERSION = 1
+export const READER_PROTOCOL_VERSION = 2
+
+export type BridgeProviderType = 'desktop' | 'local'
 
 export interface BridgeManifest {
   protocolVersion: number
+  minimumClientProtocolVersion?: number
+  providerType?: BridgeProviderType
+  providerVersion?: string
+  runtimeVersion?: string
+  storageId?: string
+  schemaVersion?: number
+  dataDirectory?: string
+  databasePath?: string
   appVersion: string
-  port: number
-  sessionId: string
+  port?: number
+  sessionId?: string
   capabilities: string[]
+}
+
+export interface BridgeError {
+  code: string
+  message: string
+  retryable: boolean
+  requestId?: string
+  details?: Record<string, unknown>
+}
+
+export interface ImportJob {
+  id: string
+  sourcePath: string
+  state: 'queued' | 'copying' | 'hashing' | 'parsing' | 'validating' | 'saving' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  message: string
+  resultBookId?: string
+  errorCode?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface TransferRequest {
+  path: string
+  strategy?: 'merge' | 'replace' | 'selected'
+  bookIds?: string[]
+}
+
+export interface RuntimeStatus {
+  providerType: 'local'
+  runtimeVersion: string
+  protocolVersion: number
+  storageId: string
+  dataDirectory: string
+  databasePath: string
+  databaseReady: boolean
+  port: number
+  pid: number
+}
+
+export function isBridgeManifest(value: unknown): value is BridgeManifest {
+  if (!value || typeof value !== 'object') return false
+  const manifest = value as Partial<BridgeManifest>
+  const minimumClientProtocolVersion = manifest.minimumClientProtocolVersion ?? 1
+  const shapeIsValid = Number.isInteger(manifest.protocolVersion)
+    && Number.isInteger(minimumClientProtocolVersion)
+    && minimumClientProtocolVersion >= 1
+    && minimumClientProtocolVersion <= (manifest.protocolVersion ?? 0)
+    && typeof manifest.appVersion === 'string'
+    && Array.isArray(manifest.capabilities)
+    && manifest.capabilities.every(item => typeof item === 'string')
+    && (manifest.providerType === undefined || manifest.providerType === 'desktop' || manifest.providerType === 'local')
+  if (!shapeIsValid) return false
+  return manifest.providerType !== 'local'
+    || ((manifest.protocolVersion ?? 0) >= 2 && typeof manifest.storageId === 'string' && manifest.storageId.length > 0)
 }
 
 export interface BridgeBook {
@@ -48,12 +113,59 @@ export interface ProgressUpdate {
   anchorOffset?: number
   paragraphIndex?: number
   lineIndex?: number
+  baseRevision?: number
+  clientId?: string
+  sequence?: number
   updatedAt?: number
+}
+
+export interface ProgressResult {
+  revision: number
+  chapterNumber: number
+  chapterProgress: number
+  progress: number
+  updatedAt?: number
+  updatedBy?: string
+  merged?: boolean
+  deduplicated?: boolean
 }
 
 export interface ImportRequest {
   path: string
   existingId?: string
+  idempotencyKey?: string
+  retainSource?: boolean
+}
+
+export interface RuntimeDatabaseCheck {
+  ok: boolean
+  integrity: string
+  checkedAt: number
+}
+
+export interface RuntimeDiagnostics {
+  ok: boolean
+  integrity: string
+  schemaVersion: string
+  storageIdSuffix: string
+  runtimeVersion: string
+  protocolVersion: number
+  dataDirectory: string
+  logDirectory: string
+  bookCount: number
+  pendingImportJobs: number
+  pid: number
+  port: number
+}
+
+export interface TransferResult {
+  path?: string
+  imported?: boolean
+  strategy?: 'merge' | 'replace' | 'selected'
+  bookCount: number
+  chapterCount?: number
+  noteCount: number
+  automaticBackupPath?: string
 }
 
 export interface OpenRequest {

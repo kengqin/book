@@ -2,3 +2,4 @@
 .gitignore
 *.vsix
 *.test.mjs
+*.node-test.mjs

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compareProtocolVersions, getAvailableMobileUpdate, isMobileUpdateManifest } from './index'
+import { compareProtocolVersions, getAvailableMobileUpdate, isBridgeManifest, isMobileUpdateManifest } from './index'
 
 function manifest() {
   return {
@@ -61,5 +61,15 @@ describe('mobile update protocol', () => {
     expect(isMobileUpdateManifest(data)).toBe(true)
     expect(getAvailableMobileUpdate('1.1.0', data, 'android')?.storeUrl).toContain('.apk')
     expect(getAvailableMobileUpdate('1.1.0', data, 'ios')?.storeUrl).toContain('testflight.apple.com')
+  })
+})
+
+describe('IDE bridge protocol', () => {
+  it('accepts the desktop and local manifest shapes', () => {
+    expect(isBridgeManifest({ protocolVersion: 1, appVersion: '0.6.9', capabilities: ['books'] })).toBe(true)
+    expect(isBridgeManifest({ protocolVersion: 2, appVersion: '1.0.0', providerType: 'local', storageId: 'local-id', capabilities: ['books.read'] })).toBe(true)
+    expect(isBridgeManifest({ protocolVersion: 2, appVersion: '1.0.0', providerType: 'local', capabilities: ['books.read'] })).toBe(false)
+    expect(isBridgeManifest({ protocolVersion: 2, appVersion: '1.0.0', providerType: 'unknown', capabilities: [] })).toBe(false)
+    expect(isBridgeManifest({ protocolVersion: 2, minimumClientProtocolVersion: 3, appVersion: '1.0.0', capabilities: [] })).toBe(false)
   })
 })

@@ -7,9 +7,10 @@ using Microsoft.VisualStudio.Shell;
 namespace NovelLibrary.VisualStudio;
 
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-[InstalledProductRegistration("小说书库阅读器", "在 Visual Studio 中只读浏览本地书库并同步阅读进度", "0.4.15")]
+[InstalledProductRegistration("小说书库阅读器", "在 Visual Studio 中只读浏览本地书库并同步阅读进度", "0.5.2")]
 [ProvideMenuResource("Menus.ctmenu", 1)]
 [ProvideToolWindow(typeof(NovelLibraryToolWindow))]
+[ProvideOptionPage(typeof(NovelLibraryOptionsPage), "小说书库", "常规", 0, 0, true)]
 [Guid(PackageGuidString)]
 public sealed class NovelLibraryPackage : AsyncPackage
 {

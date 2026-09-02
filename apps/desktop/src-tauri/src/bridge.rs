@@ -29,6 +29,8 @@ pub struct BridgeInfo {
     pub pid: u32,
     pub session_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_directory: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub database_path: Option<String>,
@@ -46,6 +48,14 @@ struct ImportRequest {
 struct OpenRequest {
     book_id: String,
     chapter_number: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransferRequest {
+    path: String,
+    #[serde(default)]
+    strategy: Option<String>,
 }
 
 fn json_response(status: &str, value: serde_json::Value) -> Vec<u8> {
@@ -161,7 +171,7 @@ fn handle_request(
         return json_response("200 OK", json!({ "ok": true }));
     }
     let state = app.state::<database::DatabaseState>();
-    let connection = match state.connect() {
+    let mut connection = match state.connect() {
         Ok(connection) => connection,
         Err(error) => return json_response("500 Internal Server Error", json!({ "error": error })),
     };
@@ -174,10 +184,33 @@ fn handle_request(
                 .find_map(|bytes| serde_json::from_slice::<BridgeInfo>(&bytes).ok());
             json!({
                 "protocolVersion": 1,
+                "minimumClientProtocolVersion": 1,
+                "providerType": "desktop",
                 "appVersion": env!("CARGO_PKG_VERSION"),
+                "storageId": database::storage_id(&connection).ok(),
                 "port": bridge.as_ref().map(|value| value.port),
                 "sessionId": bridge.as_ref().map(|value| value.session_id.clone()),
                 "capabilities": ["books", "chapters", "progress", "import", "open", "show"]
+            })
+        }
+        ("GET", ["v2", "manifest"]) => {
+            let bridge = bridge_file_candidates(&state)
+                .into_iter()
+                .filter_map(|path| std::fs::read(path).ok())
+                .find_map(|bytes| serde_json::from_slice::<BridgeInfo>(&bytes).ok());
+            let storage = state.storage_paths().ok();
+            json!({
+                "protocolVersion": 2,
+                "minimumClientProtocolVersion": 1,
+                "providerType": "desktop",
+                "providerVersion": env!("CARGO_PKG_VERSION"),
+                "appVersion": env!("CARGO_PKG_VERSION"),
+                "storageId": database::storage_id(&connection).ok(),
+                "port": bridge.as_ref().map(|value| value.port),
+                "sessionId": bridge.as_ref().map(|value| value.session_id.clone()),
+                "dataDirectory": storage.as_ref().map(|value| value.0.display().to_string()),
+                "databasePath": storage.as_ref().map(|value| value.1.display().to_string()),
+                "capabilities": ["books.read", "chapters.read", "progress.v1", "import.legacy", "open", "show", "backup.transfer"]
             })
         }
         ("GET", ["v1", "books"]) => match database::list_books(&connection) {
@@ -265,6 +298,92 @@ fn handle_request(
                 return json_response("400 Bad Request", json!({ "error": error.to_string() }))
             }
         },
+        ("POST", ["v2", "transfers", "export"]) => {
+            match serde_json::from_slice::<TransferRequest>(body) {
+                Ok(request) if Path::new(&request.path).is_absolute() => {
+                    match database::export_backup(&connection, Path::new(&request.path)) {
+                        Ok(result) => json!(result),
+                        Err(error) => {
+                            return json_response("400 Bad Request", json!({ "error": error }))
+                        }
+                    }
+                }
+                Ok(_) => {
+                    return json_response(
+                        "400 Bad Request",
+                        json!({ "error": "迁移目标必须是绝对路径" }),
+                    )
+                }
+                Err(error) => {
+                    return json_response("400 Bad Request", json!({ "error": error.to_string() }))
+                }
+            }
+        }
+        ("POST", ["v2", "transfers", "import"]) => {
+            match serde_json::from_slice::<TransferRequest>(body) {
+                Ok(request) if Path::new(&request.path).is_absolute() => {
+                    let strategy = request.strategy.as_deref().unwrap_or("merge");
+                    if !matches!(strategy, "merge" | "replace") {
+                        return json_response(
+                            "400 Bad Request",
+                            json!({ "error": "桌面端迁移策略只支持 merge 或 replace" }),
+                        );
+                    }
+                    let automatic_backup = if strategy == "replace" {
+                        let path = state.storage_paths().map(|(directory, _)| {
+                            directory.join("backups").join(format!(
+                                "pre-restore-{}.json",
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis()
+                            ))
+                        });
+                        match path.and_then(|path| {
+                            database::export_backup(&connection, &path)?;
+                            Ok(path)
+                        }) {
+                            Ok(path) => Some(path),
+                            Err(error) => {
+                                return json_response(
+                                    "400 Bad Request",
+                                    json!({ "error": format!("覆盖恢复前自动备份失败：{error}") }),
+                                )
+                            }
+                        }
+                    } else {
+                        None
+                    };
+                    match database::import_backup_with_strategy(
+                        &mut connection,
+                        Path::new(&request.path),
+                        strategy == "replace",
+                    ) {
+                        Ok(result) => json!({
+                            "imported": true,
+                            "strategy": strategy,
+                            "path": result.path,
+                            "bookCount": result.books,
+                            "chapterCount": result.chapters,
+                            "noteCount": result.notes,
+                            "automaticBackupPath": automatic_backup,
+                        }),
+                        Err(error) => {
+                            return json_response("400 Bad Request", json!({ "error": error }))
+                        }
+                    }
+                }
+                Ok(_) => {
+                    return json_response(
+                        "400 Bad Request",
+                        json!({ "error": "迁移源必须是绝对路径" }),
+                    )
+                }
+                Err(error) => {
+                    return json_response("400 Bad Request", json!({ "error": error.to_string() }))
+                }
+            }
+        }
         _ => return json_response("404 Not Found", json!({ "error": "接口不存在" })),
     };
     json_response("200 OK", response)
@@ -301,6 +420,7 @@ pub fn start(app: AppHandle) -> Result<BridgeInfo, String> {
     });
     let state = app.state::<database::DatabaseState>();
     let (data_directory, database_path) = state.storage_paths()?;
+    let storage_id = database::storage_id(&state.connect()?)?;
     let info = BridgeInfo {
         protocol_version: 1,
         app_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -308,6 +428,7 @@ pub fn start(app: AppHandle) -> Result<BridgeInfo, String> {
         token,
         pid: std::process::id(),
         session_id,
+        storage_id: Some(storage_id),
         data_directory: Some(data_directory.display().to_string()),
         database_path: Some(database_path.display().to_string()),
     };
@@ -375,7 +496,7 @@ fn write_bridge_files(app: &AppHandle, info: &BridgeInfo) -> Result<(), String> 
                 "schemaVersion": 1,
                 "bridgePath": install_directory.join("bridge.json").display().to_string()
             });
-            let _ = fs::create_dir_all(&state.default_data_directory()).and_then(|_| {
+            let _ = fs::create_dir_all(state.default_data_directory()).and_then(|_| {
                 fs::write(
                     locator,
                     serde_json::to_vec_pretty(&location).unwrap_or_default(),
@@ -398,6 +519,7 @@ pub fn sync_storage_paths(app: &AppHandle) -> Result<(), String> {
         .ok_or_else(|| "Bridge 配置尚未启动".to_string())?;
     info.data_directory = Some(data_directory.display().to_string());
     info.database_path = Some(database_path.display().to_string());
+    info.storage_id = Some(database::storage_id(&state.connect()?)?);
     write_bridge_files(app, &info)
 }
 

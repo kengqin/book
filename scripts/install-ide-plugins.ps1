@@ -198,11 +198,25 @@ function Install-JetBrains([string]$PluginPath) {
 }
 
 function Find-VisualStudioInstaller {
-  $known = @(
-    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\VSIXInstaller.exe'),
-    (Join-Path $env:ProgramFiles 'Microsoft Visual Studio\Installer\VSIXInstaller.exe')
-  )
-  foreach ($path in $known) { if (Test-Path $path) { return $path } }
+  $roots = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }
+  $vswhere = $roots | ForEach-Object { Join-Path $_ 'Microsoft Visual Studio\Installer\vswhere.exe' } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  if ($vswhere) {
+    $instances = & $vswhere -all -products '*' -format json -utf8 | ConvertFrom-Json
+    foreach ($instance in @($instances | Where-Object ProductId -in @(
+      'Microsoft.VisualStudio.Product.Community',
+      'Microsoft.VisualStudio.Product.Professional',
+      'Microsoft.VisualStudio.Product.Enterprise'
+    ))) {
+      $candidate = Join-Path $instance.InstallationPath 'Common7\IDE\VSIXInstaller.exe'
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+  }
+  foreach ($root in $roots) {
+    foreach ($edition in @('Community', 'Professional', 'Enterprise')) {
+      $candidate = Join-Path $root "Microsoft Visual Studio\2022\$edition\Common7\IDE\VSIXInstaller.exe"
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+  }
   return $null
 }
 

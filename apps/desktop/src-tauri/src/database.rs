@@ -9,6 +9,7 @@ use std::{
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, MAIN_DB};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::models::{
@@ -117,10 +118,9 @@ fn repair_epub_chapter_structure(connection: &Connection, legacy: bool) -> Resul
         let (chapter_label, heading_end) = chapter_heading_info(&content, &title);
         let inferred_kind = if chapter_label.is_some() {
             "chapter"
-        } else if VOLUME_HEADING_RE.is_match(title.trim()) {
-            "volume"
-        } else if !volume.trim().is_empty()
-            && normalized_heading(&title) == normalized_heading(&volume)
+        } else if VOLUME_HEADING_RE.is_match(title.trim())
+            || (!volume.trim().is_empty()
+                && normalized_heading(&title) == normalized_heading(&volume))
         {
             "volume"
         } else if !volume.trim().is_empty() && volume != "前置内容" && volume != "附加内容"
@@ -137,11 +137,10 @@ fn repair_epub_chapter_structure(connection: &Connection, legacy: bool) -> Resul
             || !matches!(
                 stored_kind.as_str(),
                 "frontmatter" | "volume" | "chapter" | "appendix"
-            ) {
-            inferred_kind
-        } else if stored_kind == "appendix" && inferred_kind == "chapter" {
-            inferred_kind
-        } else if stored_kind != "volume" && inferred_kind == "volume" {
+            )
+            || (stored_kind == "appendix" && inferred_kind == "chapter")
+            || (stored_kind != "volume" && inferred_kind == "volume")
+        {
             inferred_kind
         } else {
             stored_kind.as_str()
@@ -718,6 +717,13 @@ fn migrate(connection: &Connection) -> Result<(), String> {
             "当前书库版本过高：{previous_version}，应用最多支持 {CURRENT_SCHEMA_VERSION}"
         ));
     }
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS library_meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)",
+            [],
+        )
+        .map_err(|error| error.to_string())?;
+    storage_id(connection)?;
     if previous_version == CURRENT_SCHEMA_VERSION {
         ensure_epub_volume_backfill(connection, false)?;
         // Re-evaluate legacy EPUB chapter kinds so unnumbered entries nested
@@ -892,6 +898,43 @@ fn migrate(connection: &Connection) -> Result<(), String> {
     }
     connection
         .execute_batch(&format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION}"))
+        .map_err(|error| error.to_string())
+}
+
+pub fn storage_id(connection: &Connection) -> Result<String, String> {
+    let existing = connection
+        .query_row(
+            "SELECT value FROM library_meta WHERE key='storageId'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
+    if let Some(value) = existing.as_ref().filter(|value| !value.trim().is_empty()) {
+        return Ok(value.clone());
+    }
+    let value = Uuid::new_v4().to_string();
+    if existing.is_some() {
+        connection
+            .execute(
+                "UPDATE library_meta SET value=?1 WHERE key='storageId'",
+                params![value],
+            )
+            .map_err(|error| error.to_string())?;
+        return Ok(value);
+    }
+    connection
+        .execute(
+            "INSERT INTO library_meta(key,value) VALUES('storageId',?1) ON CONFLICT(key) DO NOTHING",
+            params![value],
+        )
+        .map_err(|error| error.to_string())?;
+    connection
+        .query_row(
+            "SELECT value FROM library_meta WHERE key='storageId'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
         .map_err(|error| error.to_string())
 }
 
@@ -1541,12 +1584,31 @@ pub fn export_backup(connection: &Connection, target_path: &Path) -> Result<Back
         books,
         chapters,
         notes,
+        checksum_sha256: None,
     };
-    let source = serde_json::to_vec(&payload).map_err(|error| error.to_string())?;
+    let mut value = serde_json::to_value(&payload).map_err(|error| error.to_string())?;
+    let checksum = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&value).map_err(|error| error.to_string())?)
+    );
+    value["checksumSha256"] = serde_json::Value::String(checksum);
+    let source = serde_json::to_vec_pretty(&value).map_err(|error| error.to_string())?;
     if let Some(parent) = target_path.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
-    fs::write(target_path, source).map_err(|error| error.to_string())?;
+    let temp_path = target_path.with_extension(format!(
+        "{}.{}.tmp",
+        target_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("backup"),
+        Uuid::new_v4()
+    ));
+    fs::write(&temp_path, source).map_err(|error| error.to_string())?;
+    if let Err(error) = fs::rename(&temp_path, target_path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(error.to_string());
+    }
     Ok(BackupResult {
         path: target_path.display().to_string(),
         books: payload.books.len(),
@@ -1559,15 +1621,144 @@ pub fn import_backup(
     connection: &mut Connection,
     source_path: &Path,
 ) -> Result<BackupResult, String> {
+    import_backup_with_strategy(connection, source_path, false)
+}
+
+fn chapter_fingerprint(chapters: &[ChapterRecord]) -> Result<String, String> {
+    let mut chapters = chapters.iter().collect::<Vec<_>>();
+    chapters.sort_by_key(|chapter| (chapter.number, chapter.id.as_str()));
+    let payload = chapters
+        .into_iter()
+        .map(|chapter| {
+            (
+                chapter.number,
+                chapter.original_label.as_str(),
+                chapter.title.as_str(),
+                chapter.volume.as_str(),
+                chapter.kind.as_str(),
+                chapter.content.as_str(),
+                chapter.content_text.as_str(),
+                chapter.content_format.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&payload).map_err(|error| error.to_string())?)
+    ))
+}
+
+pub fn import_backup_with_strategy(
+    connection: &mut Connection,
+    source_path: &Path,
+    replace: bool,
+) -> Result<BackupResult, String> {
     let source = fs::read(source_path).map_err(|error| error.to_string())?;
-    let payload: BackupPayload =
+    let mut value: serde_json::Value =
         serde_json::from_slice(&source).map_err(|error| format!("备份格式错误：{error}"))?;
-    if payload.format != "novel-library-backup" || !(1..=4).contains(&payload.version) {
+    if let Some(expected) = value
+        .get("checksumSha256")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+    {
+        if expected.len() != 64
+            || !expected
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
+        {
+            return Err("备份 checksum 格式无效".to_string());
+        }
+        value
+            .as_object_mut()
+            .ok_or_else(|| "备份根节点必须是对象".to_string())?
+            .remove("checksumSha256");
+        let actual = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&value).map_err(|error| error.to_string())?)
+        );
+        if !expected.eq_ignore_ascii_case(&actual) {
+            return Err("备份 checksum 校验失败，文件可能已损坏或被修改".to_string());
+        }
+    }
+    let mut payload: BackupPayload =
+        serde_json::from_value(value).map_err(|error| format!("备份格式错误：{error}"))?;
+    let supported = (payload.format == "novel-library-backup"
+        && (1..=4).contains(&payload.version))
+        || (payload.format == "novel-library-transfer" && payload.version == 1);
+    if !supported {
         return Err("不支持的小说书库备份版本".to_string());
     }
     let transaction = connection
         .transaction()
         .map_err(|error| error.to_string())?;
+    if !replace {
+        let existing_books = list_books(&transaction)?;
+        let existing_chapters = list_all_chapters(&transaction)?;
+        for book in &mut payload.books {
+            let existing_book = existing_books
+                .iter()
+                .find(|existing| existing.id == book.id);
+            let current = existing_chapters
+                .iter()
+                .filter(|chapter| chapter.book_id == book.id)
+                .cloned()
+                .collect::<Vec<_>>();
+            if current.is_empty() {
+                continue;
+            }
+            let incoming = payload
+                .chapters
+                .iter()
+                .filter(|chapter| chapter.book_id == book.id)
+                .cloned()
+                .collect::<Vec<_>>();
+            if chapter_fingerprint(&current)? != chapter_fingerprint(&incoming)? {
+                let previous_id = book.id.clone();
+                let replacement_id = Uuid::new_v4().to_string();
+                book.id = replacement_id.clone();
+                book.title = format!("{}（导入副本）", book.title);
+                for chapter in payload
+                    .chapters
+                    .iter_mut()
+                    .filter(|chapter| chapter.book_id == previous_id)
+                {
+                    chapter.book_id = replacement_id.clone();
+                    chapter.id = format!("{replacement_id}-{}", chapter.number);
+                }
+            } else if let Some(existing) = existing_book {
+                if (existing.last_read_at, existing.updated_at)
+                    > (book.last_read_at, book.updated_at)
+                {
+                    book.current_chapter = existing.current_chapter;
+                    book.progress = existing.progress;
+                    book.chapter_progress = existing.chapter_progress;
+                    book.last_read_at = existing.last_read_at;
+                }
+                book.created_at = book.created_at.min(existing.created_at);
+            }
+        }
+        let existing_notes = list_all_notes(&transaction)?;
+        for note in &mut payload.notes {
+            if let Some(existing) = existing_notes
+                .iter()
+                .find(|existing| existing.id == note.id)
+            {
+                if existing.content_html != note.content_html
+                    || existing.content_text != note.content_text
+                {
+                    note.id = Uuid::new_v4().to_string();
+                    note.title = format!("{}（导入冲突副本）", note.title);
+                } else if existing.updated_at > note.updated_at {
+                    *note = existing.clone();
+                }
+            }
+        }
+    }
+    if replace {
+        transaction
+            .execute_batch("DELETE FROM chapters; DELETE FROM books; DELETE FROM notes;")
+            .map_err(|error| error.to_string())?;
+    }
 
     for book in &payload.books {
         transaction
@@ -2061,6 +2252,11 @@ mod tests {
             .execute_batch("PRAGMA foreign_keys = ON")
             .expect("enable foreign keys");
         migrate(&source).expect("migrate source database");
+        let first_storage_id = storage_id(&source).expect("storage id");
+        assert_eq!(
+            storage_id(&source).expect("stable storage id"),
+            first_storage_id
+        );
         save_imported_book(&mut source, sample_import()).expect("save source book");
         create_note(&source, "随书笔记").expect("save source note");
 
@@ -2070,6 +2266,31 @@ mod tests {
         assert_eq!(exported.books, 1);
         assert_eq!(exported.chapters, 2);
         assert_eq!(exported.notes, 1);
+        export_backup(&source, &backup_path).expect("atomically replace an existing backup");
+        let backup_payload: serde_json::Value =
+            serde_json::from_slice(&fs::read(&backup_path).expect("read checksum backup"))
+                .expect("parse checksum backup");
+        assert_eq!(
+            backup_payload["checksumSha256"]
+                .as_str()
+                .expect("backup checksum")
+                .len(),
+            64
+        );
+        let mut tampered_payload = backup_payload.clone();
+        tampered_payload["books"][0]["title"] = serde_json::Value::from("篡改标题");
+        let tampered_path = backup_path.with_extension("tampered.json");
+        fs::write(
+            &tampered_path,
+            serde_json::to_vec(&tampered_payload).expect("serialize tampered backup"),
+        )
+        .expect("write tampered backup");
+        let mut tampered_target = Connection::open_in_memory().expect("open tampered target");
+        migrate(&tampered_target).expect("migrate tampered target");
+        assert!(import_backup(&mut tampered_target, &tampered_path)
+            .expect_err("tampered checksum")
+            .contains("checksum 校验失败"));
+        fs::remove_file(tampered_path).expect("remove tampered backup");
 
         let mut target = Connection::open_in_memory().expect("open target database");
         target
@@ -2093,7 +2314,102 @@ mod tests {
             1
         );
 
+        save_imported_book(&mut target, sample_import()).expect("save extra target book");
+        create_note(&target, "仅存在于目标的笔记").expect("save extra target note");
+        assert_eq!(list_books(&target).expect("books before replace").len(), 2);
+        import_backup_with_strategy(&mut target, &backup_path, true).expect("replace backup");
+        assert_eq!(list_books(&target).expect("books after replace").len(), 1);
+        assert_eq!(
+            list_notes(&target, "").expect("notes after replace").len(),
+            1
+        );
+
+        let mut transfer_payload: serde_json::Value =
+            serde_json::from_slice(&fs::read(&backup_path).expect("read backup"))
+                .expect("parse backup");
+        transfer_payload["format"] = serde_json::Value::from("novel-library-transfer");
+        transfer_payload["version"] = serde_json::Value::from(1);
+        transfer_payload
+            .as_object_mut()
+            .expect("transfer object")
+            .remove("checksumSha256");
+        fs::write(
+            &backup_path,
+            serde_json::to_vec(&transfer_payload).expect("serialize transfer"),
+        )
+        .expect("write transfer");
+        let mut transfer_target = Connection::open_in_memory().expect("open transfer target");
+        migrate(&transfer_target).expect("migrate transfer target");
+        let transferred =
+            import_backup(&mut transfer_target, &backup_path).expect("import transfer");
+        assert_eq!(transferred.books, 1);
+        assert_eq!(
+            list_books(&transfer_target)
+                .expect("transferred books")
+                .len(),
+            1
+        );
+
         fs::remove_file(backup_path).expect("remove backup fixture");
+    }
+
+    #[test]
+    fn merge_backup_preserves_same_id_book_with_different_content() {
+        let mut source = Connection::open_in_memory().expect("source");
+        migrate(&source).expect("migrate source");
+        let saved = save_imported_book(&mut source, sample_import()).expect("save source");
+        let backup_path = std::env::temp_dir().join(format!(
+            "novel-library-merge-conflict-test-{}.json",
+            Uuid::new_v4()
+        ));
+        export_backup(&source, &backup_path).expect("export backup");
+
+        let mut target = Connection::open_in_memory().expect("target");
+        migrate(&target).expect("migrate target");
+        import_backup(&mut target, &backup_path).expect("seed target");
+        let original_content = get_chapter(&target, &saved.id, 1)
+            .expect("original chapter")
+            .expect("original exists")
+            .content_text;
+
+        let mut payload: serde_json::Value =
+            serde_json::from_slice(&fs::read(&backup_path).expect("backup bytes"))
+                .expect("backup payload");
+        payload
+            .as_object_mut()
+            .expect("backup object")
+            .remove("checksumSha256");
+        payload["chapters"][0]["content"] = serde_json::Value::from("导入版本正文");
+        payload["chapters"][0]["contentText"] = serde_json::Value::from("导入版本正文");
+        fs::write(
+            &backup_path,
+            serde_json::to_vec(&payload).expect("modified backup"),
+        )
+        .expect("write modified backup");
+
+        import_backup(&mut target, &backup_path).expect("merge backup");
+        let books = list_books(&target).expect("merged books");
+        assert_eq!(books.len(), 2);
+        assert_eq!(
+            get_chapter(&target, &saved.id, 1)
+                .expect("preserved chapter")
+                .expect("preserved exists")
+                .content_text,
+            original_content
+        );
+        let copy = books
+            .iter()
+            .find(|book| book.id != saved.id)
+            .expect("conflict copy");
+        assert!(copy.title.ends_with("（导入副本）"));
+        assert_eq!(
+            get_chapter(&target, &copy.id, 1)
+                .expect("copy chapter")
+                .expect("copy exists")
+                .content_text,
+            "导入版本正文"
+        );
+        fs::remove_file(backup_path).expect("remove fixture");
     }
 
     #[test]
@@ -2111,6 +2427,10 @@ mod tests {
             serde_json::from_slice(&fs::read(&backup_path).expect("read current backup"))
                 .expect("parse current backup");
         payload["version"] = serde_json::Value::from(2);
+        payload
+            .as_object_mut()
+            .expect("backup object")
+            .remove("checksumSha256");
         for book in payload["books"].as_array_mut().expect("backup books") {
             book.as_object_mut()
                 .expect("book object")

@@ -1,6 +1,6 @@
 {
   "name": "book",
-  "version": "0.6.13",
+  "version": "0.6.14",
   "description": "",
   "main": "index.js",
   "private": true,
@@ -34,9 +34,12 @@
     "release:validate": "node scripts/validate-release.mjs",
     "release:manifest": "node scripts/release/build-target-manifest.mjs",
     "release:verify": "node scripts/release/verify-published-release.mjs",
-    "test": "vitest run && node scripts/validate-desktop-feedback.mjs",
+    "test": "vitest run && node --test plugins/vscode/bridge.node-test.mjs plugins/vscode/import-selection.test.mjs plugins/vscode/wheel-bridge.test.mjs && node scripts/validate-desktop-feedback.mjs",
     "desktop:feedback:validate": "node scripts/validate-desktop-feedback.mjs",
-    "plugins:validate": "node scripts/validate-ide-integrations.mjs"
+    "plugins:validate": "node scripts/validate-ide-integrations.mjs",
+    "runtime:test": "cargo test --manifest-path apps/local-runtime/Cargo.toml",
+    "runtime:build": "cargo build --manifest-path apps/local-runtime/Cargo.toml --release",
+    "runtime:e2e": "npm run runtime:build && node scripts/test-local-runtime-e2e.mjs"
   },
   "repository": {
     "type": "git",

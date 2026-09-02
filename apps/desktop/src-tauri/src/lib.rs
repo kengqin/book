@@ -6,7 +6,10 @@ mod models;
 mod updater;
 mod window_theme;
 
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use database::DatabaseState;
 use models::{
@@ -36,7 +39,7 @@ fn installation_directory() -> Result<PathBuf, String> {
         .ok_or_else(|| "无法定位 NovelLibrary 安装目录".to_string())
 }
 
-fn default_data_directory(install_directory: &PathBuf) -> Result<PathBuf, String> {
+fn default_data_directory(install_directory: &Path) -> Result<PathBuf, String> {
     Ok(install_directory.join("NovelLibraryData"))
 }
 

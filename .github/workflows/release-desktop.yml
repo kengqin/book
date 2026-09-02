@@ -114,6 +114,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -123,11 +125,15 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.13'
 
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: apps/desktop/src-tauri
+          workspaces: |
+            apps/desktop/src-tauri
+            apps/local-runtime
 
       - name: Cache Tauri binaries
         uses: actions/cache@v4
@@ -140,51 +146,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Reuse unchanged IDE plugin artifacts
-        id: reuse-plugins
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
+      - name: Validate standalone IDE Runtime
         run: |
-          $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
-          $resourceDir = Join-Path $PWD 'apps/desktop/src-tauri/resources/ide-plugins'
-          $stagingDir = Join-Path $PWD '.ide-plugin-reuse'
-          $files = @($manifest.plugins | ForEach-Object file)
-          $releaseJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest" | Out-String
-          if ($LASTEXITCODE -ne 0) {
-            $global:LASTEXITCODE = 0
-            "reused=false" >> $env:GITHUB_OUTPUT
-            exit 0
-          }
-
-          $previousRelease = $releaseJson | ConvertFrom-Json
-          $previousTag = $previousRelease.tag_name
-          $assetNames = @($previousRelease.assets | ForEach-Object name)
-          $canReuse = -not [string]::IsNullOrWhiteSpace($previousTag) -and $previousTag -ne $env:TAG
-          foreach ($file in $files) {
-            if ($assetNames -notcontains $file) { $canReuse = $false }
-          }
-
-          if (-not $canReuse) {
-            "reused=false" >> $env:GITHUB_OUTPUT
-            Write-Host "IDE plugin artifacts changed or unavailable; building them"
-            exit 0
-          }
-
-          New-Item -ItemType Directory -Force $stagingDir | Out-Null
-          foreach ($file in $files) {
-            gh release download $previousTag --repo $env:GITHUB_REPOSITORY --pattern $file --dir $stagingDir
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $stagingDir $file))) {
-              throw "Failed to download reusable IDE plugin artifact: $file"
-            }
-            Copy-Item (Join-Path $stagingDir $file) (Join-Path $resourceDir $file) -Force
-          }
-          "reused=true" >> $env:GITHUB_OUTPUT
-          Write-Host "Reused IDE plugin artifacts from $previousTag"
+          cargo fmt --manifest-path apps/local-runtime/Cargo.toml -- --check
+          cargo clippy --manifest-path apps/local-runtime/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path apps/local-runtime/Cargo.toml
+      - name: Build standalone IDE Runtime
+        run: cargo build --manifest-path apps/local-runtime/Cargo.toml --release
+      - name: Test standalone IDE Runtime
+        run: node scripts/test-local-runtime-e2e.mjs
+      - name: Stage standalone IDE Runtime
+        shell: pwsh
+        run: |
+          $runtime = (Resolve-Path 'apps/local-runtime/target/release/novel-library-runtime.exe').Path
+          ./scripts/stage-ide-plugin-runtime.ps1 -RuntimePath $runtime -TargetRoot plugins/vscode
+          ./scripts/stage-ide-plugin-runtime.ps1 -RuntimePath $runtime -TargetRoot plugins/intellij/src/main/resources
+          ./scripts/stage-ide-plugin-runtime.ps1 -RuntimePath $runtime -TargetRoot plugins/visual-studio
 
       - name: Package VS Code and Cursor plugin
-        if: steps.reuse-plugins.outputs.reused != 'true'
         shell: pwsh
         run: |
           $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
@@ -195,12 +174,10 @@ jobs:
           Pop-Location
 
       - name: Build JetBrains plugin
-        if: steps.reuse-plugins.outputs.reused != 'true'
-        run: gradle buildPlugin
+        run: gradle buildPlugin verifyPlugin
         working-directory: plugins/intellij
 
       - name: Copy JetBrains plugin into desktop resources
-        if: steps.reuse-plugins.outputs.reused != 'true'
         shell: pwsh
         run: |
           $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
@@ -210,7 +187,6 @@ jobs:
           Copy-Item $plugin.FullName (Join-Path apps/desktop/src-tauri/resources/ide-plugins $intellijFile)
 
       - name: Build Visual Studio plugin
-        if: steps.reuse-plugins.outputs.reused != 'true'
         shell: pwsh
         run: |
           $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
@@ -229,6 +205,7 @@ jobs:
           $required = @($manifest.plugins | ForEach-Object file)
           foreach ($file in $required) {
             if (-not (Test-Path "apps/desktop/src-tauri/resources/ide-plugins/$file")) { throw "Missing bundled IDE plugin: $file" }
+            ./scripts/verify-ide-plugin-runtime.ps1 -Path "apps/desktop/src-tauri/resources/ide-plugins/$file"
           }
 
       - name: Test and validate

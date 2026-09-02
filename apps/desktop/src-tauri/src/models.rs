@@ -257,6 +257,8 @@ pub struct BackupPayload {
     pub chapters: Vec<ChapterRecord>,
     #[serde(default)]
     pub notes: Vec<NoteRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checksum_sha256: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

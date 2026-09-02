@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 
 plugins {
     id("org.jetbrains.intellij.platform") version "2.5.0"
@@ -17,7 +18,7 @@ java {
 }
 
 group = "com.kengqin.novellibrary"
-version = "0.4.15"
+version = "0.5.2"
 
 repositories {
     maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies")
@@ -35,6 +36,11 @@ intellijPlatform {
             sinceBuild = "241"
             untilBuild = provider { null }
         }
-        changeNotes = "修复切换小说或重新打开插件后从头开始的问题；进度写入改为串行，并在切书时刷新桌面端的最新章节与行位置。"
+        changeNotes = "新增无需桌面端的本地 Runtime 模式、自定义数据目录、安全书库迁移、后台导入任务和崩溃自动恢复。"
+    }
+    pluginVerification {
+        ides {
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2024.1")
+        }
     }
 }

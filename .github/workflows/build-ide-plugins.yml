@@ -8,6 +8,7 @@ on:
       - develop
     paths:
       - 'plugins/**'
+      - 'apps/local-runtime/**'
       - 'packages/reader-protocol/**'
       - 'scripts/validate-ide-integrations.mjs'
 
@@ -16,7 +17,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build-runtime:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: cargo fmt --manifest-path apps/local-runtime/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path apps/local-runtime/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path apps/local-runtime/Cargo.toml
+      - run: cargo build --manifest-path apps/local-runtime/Cargo.toml --release
+      - run: node scripts/test-local-runtime-e2e.mjs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: novel-library-runtime-win32-x64
+          path: apps/local-runtime/target/release/novel-library-runtime.exe
+
   validate-vscode:
+    needs: build-runtime
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -26,6 +48,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run plugins:validate
+      - uses: actions/download-artifact@v7
+        with:
+          name: novel-library-runtime-win32-x64
+          path: .runtime-stage
+      - shell: pwsh
+        run: ./scripts/stage-ide-plugin-runtime.ps1 -RuntimePath .runtime-stage/novel-library-runtime.exe -TargetRoot plugins/vscode
       - run: node --check plugins/vscode/extension.js
       - run: node --check plugins/vscode/bridge.js
       - name: Read plugin artifact names
@@ -39,12 +67,16 @@ jobs:
           Push-Location plugins/vscode
           npx --yes @vscode/vsce@3.6.0 package --allow-missing-repository --allow-star-activation --out $env:VSCODE_FILE
           Pop-Location
+      - name: Verify VS Code Runtime payload
+        shell: pwsh
+        run: ./scripts/verify-ide-plugin-runtime.ps1 -Path "plugins/vscode/$env:VSCODE_FILE"
       - uses: actions/upload-artifact@v7
         with:
           name: novel-library-vscode
           path: plugins/vscode/${{ env.VSCODE_FILE }}
 
   build-intellij:
+    needs: build-runtime
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -53,23 +85,41 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.13'
+      - uses: actions/download-artifact@v7
+        with:
+          name: novel-library-runtime-win32-x64
+          path: .runtime-stage
+      - shell: pwsh
+        run: ./scripts/stage-ide-plugin-runtime.ps1 -RuntimePath .runtime-stage/novel-library-runtime.exe -TargetRoot plugins/intellij/src/main/resources
       - name: Read plugin artifact name
         shell: pwsh
         run: |
           $manifest = Get-Content -Raw apps/desktop/src-tauri/resources/ide-plugins/manifest.json | ConvertFrom-Json
           "INTELLIJ_FILE=$(($manifest.plugins | Where-Object id -eq 'intellij').file)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - run: gradle buildPlugin
+      - run: gradle buildPlugin verifyPlugin
         working-directory: plugins/intellij
+      - name: Verify JetBrains Runtime payload
+        shell: pwsh
+        run: ./scripts/verify-ide-plugin-runtime.ps1 -Path "plugins/intellij/build/distributions/$env:INTELLIJ_FILE"
       - uses: actions/upload-artifact@v7
         with:
           name: novel-library-intellij
           path: plugins/intellij/build/distributions/${{ env.INTELLIJ_FILE }}
 
   build-visual-studio:
+    needs: build-runtime
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - run: dotnet restore plugins/visual-studio/NovelLibrary.VisualStudio.csproj
+      - uses: actions/download-artifact@v7
+        with:
+          name: novel-library-runtime-win32-x64
+          path: .runtime-stage
+      - shell: pwsh
+        run: ./scripts/stage-ide-plugin-runtime.ps1 -RuntimePath .runtime-stage/novel-library-runtime.exe -TargetRoot plugins/visual-studio
       - run: dotnet build plugins/visual-studio/NovelLibrary.VisualStudio.csproj --configuration Release --no-restore
       - name: Read plugin artifact name
         shell: pwsh
@@ -79,6 +129,9 @@ jobs:
       - name: Package Visual Studio VSIX
         shell: pwsh
         run: ./scripts/package-visual-studio-plugin.ps1 -Root $PWD
+      - name: Verify Visual Studio Runtime payload
+        shell: pwsh
+        run: ./scripts/verify-ide-plugin-runtime.ps1 -Path "plugins/visual-studio/bin/$env:VISUAL_STUDIO_FILE"
       - uses: actions/upload-artifact@v7
         with:
           name: novel-library-visual-studio

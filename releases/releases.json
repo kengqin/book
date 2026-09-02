@@ -1,8 +1,47 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.13",
+  "latest": "0.6.14",
   "releases": [
+    {
+      "version": "0.6.14",
+      "date": "2026-09-02",
+      "title": "IDE 插件独立运行与双模式",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.13",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.14",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.14/NovelLibrary_0.6.14_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "VS Code、JetBrains 和 Visual Studio 插件新增独立本地 Runtime 模式，无需启动桌面端即可维护书库和阅读",
+            "三套 IDE 插件支持桌面端与本地书库双模式切换，并提供自定义数据目录、备份恢复、重新解析和诊断"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "桌面模式统一校验 Bridge 协议、能力集和会话，进度写入按 IDE 进程及书库隔离",
+            "共享 Runtime 增加并发安装协调、防降级、能力握手和最低客户端协议保护"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "修复桌面端覆盖与合并恢复的数据一致性问题，并补齐 Runtime manifest 和 SHA-256 sidecar",
+            "修复 Windows 分段 POST 导入偶发 os error 10035、JetBrains 验证配置和多实例进度冲突"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库和阅读进度无需迁移；IDE 插件升级为 0.5.2，并随包附带 Runtime 1.0.1。"
+      ]
+    },
     {
       "version": "0.6.13",
       "date": "2026-09-01",
