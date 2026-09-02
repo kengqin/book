@@ -173,6 +173,12 @@ function togglePrivacyPalette() {
   privacyPalette.value = privacyPalette.value === 'light' ? 'night' : 'light'
 }
 
+function releasePrivacyPointerFocus(event: MouseEvent) {
+  if (event.detail <= 0 || !(event.target instanceof Element)) return
+  const button = event.target.closest('button')
+  if (button instanceof HTMLButtonElement) button.blur()
+}
+
 async function togglePrivacyAlwaysOnTop() {
   const nextValue = !privacyAlwaysOnTop.value
   if (!isTauri()) {
@@ -517,18 +523,19 @@ function handleReaderKeydown(event: KeyboardEvent) {
     return
   }
   if (privacyMode.value) {
-    if (event.key === 'ArrowRight') {
+    const directionCode = event.ctrlKey || event.altKey || event.metaKey ? '' : event.code
+    if (event.key === 'ArrowRight' || directionCode === 'KeyD') {
       event.preventDefault()
       if (next.value) openChapter(next.value.number)
-    } else if (event.key === 'ArrowLeft') {
+    } else if (event.key === 'ArrowLeft' || directionCode === 'KeyA') {
       event.preventDefault()
       if (previous.value) openChapter(previous.value.number)
-    } else if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') {
+    } else if (event.key === 'ArrowDown' || directionCode === 'KeyS' || event.key === 'PageDown' || event.key === ' ') {
       event.preventDefault()
-      moveCompactWindow(1, event.key !== 'ArrowDown')
-    } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+      moveCompactWindow(1, event.key === 'PageDown' || event.key === ' ')
+    } else if (event.key === 'ArrowUp' || directionCode === 'KeyW' || event.key === 'PageUp') {
       event.preventDefault()
-      moveCompactWindow(-1, event.key !== 'ArrowUp')
+      moveCompactWindow(-1, event.key === 'PageUp')
     }
     return
   }
@@ -664,12 +671,13 @@ watch(() => route.params.chapterNumber, load)
       <div class="privacy-reader-lines">
         <p v-for="line in privacyWindow.lines" :key="line.start">{{ line.text || ' ' }}</p>
       </div>
-      <div class="privacy-reader-chapter-controls">
+      <div class="privacy-reader-chapter-controls" @mousedown.stop @click="releasePrivacyPointerFocus">
         <small class="privacy-reader-status" title="当前章节 / 总章节 · 本章进度">{{ privacyStatusLabel }}</small>
         <button
           type="button"
-          title="上一章（←）"
+          title="上一章（← / A）"
           aria-label="上一章"
+          aria-keyshortcuts="ArrowLeft A"
           :disabled="!previous"
           @click="previous && openChapter(previous.number)"
         >
@@ -677,15 +685,16 @@ watch(() => route.params.chapterNumber, load)
         </button>
         <button
           type="button"
-          title="下一章（→）"
+          title="下一章（→ / D）"
           aria-label="下一章"
+          aria-keyshortcuts="ArrowRight D"
           :disabled="!next"
           @click="next && openChapter(next.number)"
         >
           <ChevronRight :size="14" />
         </button>
       </div>
-      <div v-if="privacySettingsOpen" class="privacy-reader-settings" role="dialog" aria-label="隐私阅读设置" @mousedown.stop @wheel.stop>
+      <div v-if="privacySettingsOpen" class="privacy-reader-settings" role="dialog" aria-label="隐私阅读设置" @mousedown.stop @click="releasePrivacyPointerFocus" @wheel.stop>
         <div class="privacy-setting-row">
           <span>字号</span>
           <div class="privacy-setting-stepper">
@@ -708,7 +717,7 @@ watch(() => route.params.chapterNumber, load)
           </div>
         </div>
       </div>
-      <div class="privacy-reader-actions">
+      <div class="privacy-reader-actions" @mousedown.stop @click="releasePrivacyPointerFocus">
         <button
           type="button"
           :class="{ active: privacySettingsOpen }"
