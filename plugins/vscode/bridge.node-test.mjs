@@ -9,7 +9,9 @@ const require = createRequire(import.meta.url)
 process.env.LOCALAPPDATA = fs.mkdtempSync(path.join(os.tmpdir(), 'novel-library-runtime-home-'))
 const bridge = require('./bridge.js')
 
-test('bundled Runtime installs into the shared version directory with active rollback metadata', () => {
+test('bundled Runtime installs into the shared version directory with active rollback metadata', {
+  skip: process.platform !== 'win32' && 'bundled Runtime is a Windows x64 executable'
+}, () => {
   const executable = bridge.__testInstallBundledRuntime()
   const root = bridge.__testSharedRuntimeRoot()
   const active = bridge.__testReadActiveRuntime(root)
