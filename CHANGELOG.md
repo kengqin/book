@@ -4,6 +4,34 @@
 
 ## [Unreleased]
 
+## [0.6.14] - 2026-09-02
+
+### 新增
+
+- VS Code、JetBrains 和 Visual Studio 插件新增独立本地 Runtime 模式，无需启动桌面端即可维护书库、导入 TXT/EPUB、阅读并同步进度。
+- 三套 IDE 插件支持在桌面端书库与本地书库之间切换，并提供自定义数据目录、备份恢复、重新解析和 Runtime 诊断能力。
+
+### 优化
+
+- 三套 IDE 插件在桌面模式下统一校验 Bridge 协议、能力集和会话，避免连接到过期或不兼容的桌面服务。
+- 阅读进度改用每个 IDE 进程独立的 `clientId + sequence`，避免 VS Code 多窗口和 Visual Studio 多实例之间把不同写入误判为重复请求。
+- 失败进度队列按 `providerType + storageId + bookId` 隔离，并在进度冲突时丢弃过期写入、回读最新 revision。
+- 共享 Runtime 激活信息增加最低客户端协议，旧插件遇到不兼容的新 Runtime 时不再覆盖或终止它。
+
+### 修复
+
+- 修复 VS Code 复制本地书库到已存在书库的目录时静默切换的问题；现在会保留目标数据并要求用户明确选择空目录或直接切换。
+- Runtime 拒绝只有 `clientId` 或只有 `sequence` 的不完整进度请求，防止失去幂等与冲突控制语义。
+- 修复桌面端 Bridge 忽略 `replace` 恢复策略的问题；覆盖恢复现在先自动备份，并在事务中清空旧书籍、章节和笔记。
+- 修复合并恢复使用替换插入导致阅读进度被级联删除的问题；同 ID 但正文不同的书籍现在作为“导入副本”保留。
+- 修复桌面 Release 只复制 Runtime 可执行文件、遗漏 manifest 与 SHA-256 sidecar 的问题。
+- 修复 JetBrains 插件描述和验证目标不符合 Plugin Verifier 要求的问题，并将 Rust Clippy 纳入 CI。
+- 修复 Windows 上非阻塞监听套接字导致 IDE 插件的分段 POST 请求偶发返回 `os error 10035`、无法导入小说的问题。
+
+### 升级说明
+
+- 桌面端数据库 Schema 保持为 6，现有书库和阅读进度无需迁移；IDE 插件升级为 0.5.2，并随包附带 Runtime 1.0.1。
+
 ## [0.6.13] - 2026-09-01
 
 ### 新增
@@ -299,6 +327,21 @@
 ### 修复
 
 - 修复更新清单因旧历史版本缺少 `minimumSupportedVersion` 而整体校验失败，导致新版本无法被发现的问题。
+
+## IDE 插件 0.5.2 / Runtime 1.0.1 - 2026-08-04
+
+### 新增
+
+- VS Code、JetBrains 和 Visual Studio 插件均可在不安装桌面端时启动共享本地 Runtime，并支持自定义数据目录。
+- Runtime 使用版本目录、`install.lock`、`active.json`、防降级和上一版本元数据完成三端并发安装协调。
+- 三端增加受管源文件保留开关、导入幂等、数据库检查和 Runtime 诊断。
+
+### 修复
+
+- 独立 Runtime 的 EPUB 解析与桌面端对齐：支持 EPUB2 NCX、EPUB3 Navigation、卷层级、前置内容和附录分类。
+- IDE 阅读章节只保留正文，内容简介回填为书籍简介，并移除正文开头重复的章节标题。
+- Runtime 能力握手增加 `epub.structure.v2`，避免新版插件误连旧解析器。
+- 迁移包增加 SHA-256 校验、选择性书籍边界和篡改拒绝；桌面端新备份同样写入 checksum。
 
 ## [0.5.1] - 2026-07-17
 

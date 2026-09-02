@@ -1,0 +1,21 @@
+[package]
+name = "novel-library-runtime"
+version = "1.0.1"
+description = "Standalone local runtime for NovelLibrary IDE plugins"
+authors = ["Novel Library"]
+edition = "2021"
+
+[dependencies]
+base64 = "0.22"
+encoding_rs = "0.8"
+regex = "1"
+roxmltree = "0.21"
+rusqlite = { version = "0.40.1", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+uuid = { version = "1.23.5", features = ["v4"] }
+zip = { version = "4.6.1", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile = "3"

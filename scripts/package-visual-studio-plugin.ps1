@@ -30,6 +30,9 @@ try {
     'extension.vsixmanifest',
     'NovelLibrary.VisualStudio.dll',
     'NovelLibrary.VisualStudio.pkgdef',
+    'runtime-manifest.json',
+    'runtime/win32-x64/novel-library-runtime.exe',
+    'runtime/win32-x64/novel-library-runtime.exe.sha256',
     'LICENSE',
     'Icon.png',
     'README.md'

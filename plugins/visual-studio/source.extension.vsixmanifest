@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
   <Metadata>
-    <Identity Id="NovelLibrary.VisualStudio" Version="0.4.15" Language="zh-CN" Publisher="Novel Library" />
+    <Identity Id="NovelLibrary.VisualStudio" Version="0.5.2" Language="zh-CN" Publisher="Novel Library" />
     <DisplayName>小说书库阅读器</DisplayName>
-    <Description xml:space="preserve">小说书库桌面端的 Visual Studio 2022 配套扩展。支持书架与章节浏览、五行只读正文、自动跨章、固定章节进度栏、段落/行尾显示模式、快捷键与悬停滚轮导航，并通过本机 Bridge 同步阅读位置；不会修改项目文件或源代码。</Description>
+    <Description xml:space="preserve">小说书库的 Visual Studio 2022 扩展。支持桌面端或本地 Runtime 书架与章节浏览、五行只读正文、自动跨章、固定章节进度栏、段落/行尾显示模式、快捷键与悬停滚轮导航，并通过本机 Bridge 同步阅读位置；不会修改项目文件或源代码。</Description>
     <MoreInfo>https://github.com/kengqin/book</MoreInfo>
     <License>LICENSE</License>
     <Icon>Icon.png</Icon>

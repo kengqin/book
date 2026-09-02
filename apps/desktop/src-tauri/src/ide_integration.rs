@@ -22,7 +22,7 @@ fn decode_process_output(bytes: &[u8]) -> String {
     }
     #[cfg(windows)]
     {
-        return encoding_rs::GBK.decode(bytes).0.into_owned();
+        encoding_rs::GBK.decode(bytes).0.into_owned()
     }
     #[cfg(not(windows))]
     String::from_utf8_lossy(bytes).into_owned()
@@ -62,6 +62,13 @@ struct JetBrainsProductInfo {
     data_directory_name: String,
     #[serde(default)]
     product_vendor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VisualStudioInstance {
+    installation_path: String,
+    product_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -232,7 +239,7 @@ fn target_executable_is_running(target: &IdeTarget) -> bool {
         else {
             return false;
         };
-        return output.status.success();
+        output.status.success()
     }
     #[cfg(not(windows))]
     {
@@ -290,7 +297,7 @@ fn close_target_ide_gracefully(target: &IdeTarget, action: &str) -> Result<(), S
                 installer_failure("jetbrains", &output, "关闭请求")
             ));
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(windows))]
     {
@@ -937,6 +944,81 @@ fn jetbrains_label(path: &Path) -> String {
     }
 }
 
+fn visual_studio_product_has_ide(product_id: &str) -> bool {
+    matches!(
+        product_id,
+        "Microsoft.VisualStudio.Product.Community"
+            | "Microsoft.VisualStudio.Product.Professional"
+            | "Microsoft.VisualStudio.Product.Enterprise"
+    )
+}
+
+fn visual_studio_vsix_installers() -> Vec<PathBuf> {
+    let mut installers = Vec::new();
+    let roots = [
+        std::env::var_os("ProgramFiles(x86)").map(PathBuf::from),
+        std::env::var_os("ProgramFiles").map(PathBuf::from),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+
+    for root in &roots {
+        let vswhere = root
+            .join("Microsoft Visual Studio")
+            .join("Installer")
+            .join("vswhere.exe");
+        if !vswhere.is_file() {
+            continue;
+        }
+        let Ok(output) = hidden_command(&vswhere)
+            .args(["-all", "-products", "*", "-format", "json", "-utf8"])
+            .output()
+        else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let text = decode_process_output(&output.stdout);
+        let Ok(instances) = serde_json::from_str::<Vec<VisualStudioInstance>>(&text) else {
+            continue;
+        };
+        for instance in instances
+            .into_iter()
+            .filter(|instance| visual_studio_product_has_ide(&instance.product_id))
+        {
+            let installer = PathBuf::from(instance.installation_path)
+                .join("Common7")
+                .join("IDE")
+                .join("VSIXInstaller.exe");
+            if installer.is_file() {
+                installers.push(installer);
+            }
+        }
+    }
+
+    if installers.is_empty() {
+        for root in roots {
+            for edition in ["Community", "Professional", "Enterprise"] {
+                let installer = root
+                    .join("Microsoft Visual Studio")
+                    .join("2022")
+                    .join(edition)
+                    .join("Common7")
+                    .join("IDE")
+                    .join("VSIXInstaller.exe");
+                if installer.is_file() {
+                    installers.push(installer);
+                }
+            }
+        }
+    }
+    installers.sort();
+    installers.dedup();
+    installers
+}
+
 fn detect_targets() -> Vec<IdeTarget> {
     let mut targets = Vec::new();
     let mut code_oss_launchers = CODE_OSS_TARGETS
@@ -1047,31 +1129,19 @@ fn detect_targets() -> Vec<IdeTarget> {
         });
     }
 
-    for root in [
-        std::env::var_os("ProgramFiles(x86)").map(PathBuf::from),
-        std::env::var_os("ProgramFiles").map(PathBuf::from),
-    ]
-    .into_iter()
-    .flatten()
-    {
-        let path = root
-            .join("Microsoft Visual Studio")
-            .join("Installer")
-            .join("VSIXInstaller.exe");
-        if path.is_file() {
-            targets.push(IdeTarget {
-                id: target_id("visual-studio", &path),
-                label: "Visual Studio 2022".to_string(),
-                kind: "visual-studio".to_string(),
-                path: path.display().to_string(),
-                installed: false,
-                installed_version: None,
-                can_uninstall: false,
-                wheel_injection_available: false,
-                wheel_injection_enabled: false,
-                wheel_injection_needs_repair: false,
-            });
-        }
+    for path in visual_studio_vsix_installers() {
+        targets.push(IdeTarget {
+            id: target_id("visual-studio", &path),
+            label: "Visual Studio 2022".to_string(),
+            kind: "visual-studio".to_string(),
+            path: path.display().to_string(),
+            installed: false,
+            installed_version: None,
+            can_uninstall: false,
+            wheel_injection_available: false,
+            wheel_injection_enabled: false,
+            wheel_injection_needs_repair: false,
+        });
     }
     targets
 }
@@ -2002,10 +2072,11 @@ mod tests {
         is_jetbrains_cds_warning_only, jetbrains_plugin_location_in_root,
         parse_vscode_extension_state, read_plugin_xml_from_jar,
         remove_vscode_extension_directories_in_home, target_id, verify_vscode_uninstall,
-        vscode_extension_directories_in_home, vscode_extension_state, vscode_script_process,
-        workbench_integrity_checksum, xml_tag_value, IdeTarget, InstallIdePluginInput,
-        UninstallIdePluginInput, CODE_OSS_TARGETS, JETBRAINS_CDS_WARNING, WHEEL_INJECTION_END,
-        WHEEL_INJECTION_SCRIPT_NAME, WHEEL_INJECTION_START,
+        visual_studio_product_has_ide, vscode_extension_directories_in_home,
+        vscode_extension_state, vscode_script_process, workbench_integrity_checksum, xml_tag_value,
+        IdeTarget, InstallIdePluginInput, UninstallIdePluginInput, CODE_OSS_TARGETS,
+        JETBRAINS_CDS_WARNING, WHEEL_INJECTION_END, WHEEL_INJECTION_SCRIPT_NAME,
+        WHEEL_INJECTION_START,
     };
     use std::{
         collections::HashSet,
@@ -2445,6 +2516,22 @@ mod tests {
             targets.len(),
             started.elapsed()
         );
+    }
+
+    #[test]
+    fn excludes_visual_studio_build_tools_from_vsix_targets() {
+        assert!(visual_studio_product_has_ide(
+            "Microsoft.VisualStudio.Product.Community"
+        ));
+        assert!(visual_studio_product_has_ide(
+            "Microsoft.VisualStudio.Product.Professional"
+        ));
+        assert!(visual_studio_product_has_ide(
+            "Microsoft.VisualStudio.Product.Enterprise"
+        ));
+        assert!(!visual_studio_product_has_ide(
+            "Microsoft.VisualStudio.Product.BuildTools"
+        ));
     }
 
     #[test]

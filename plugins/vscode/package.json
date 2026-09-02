@@ -1,16 +1,46 @@
 {
   "name": "novel-library-reader",
   "displayName": "小说书库阅读器",
-  "description": "小说书库桌面端的 VS Code 系列编辑器阅读扩展，支持书架与章节浏览、五行只读正文、自动跨章、阅读进度同步及段落/行尾显示模式。",
-  "version": "0.4.15",
+  "description": "小说书库的 VS Code 系列编辑器阅读扩展，支持桌面端或本地 Runtime 书架、章节浏览、五行只读正文、自动跨章、阅读进度同步及段落/行尾显示模式。",
+  "version": "0.5.2",
   "publisher": "novel-library",
   "license": "MIT",
   "engines": { "vscode": ">=1.85.0" },
   "categories": ["Other"],
   "main": "extension.js",
   "icon": "media/novel-library.png",
-  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.selectBook", "onCommand:novelLibrary.selectChapter", "onCommand:novelLibrary.importFile", "onCommand:novelLibrary.toggleDisplayMode", "onCommand:novelLibrary.configureShortcuts"],
+  "activationEvents": ["onStartupFinished", "onView:novelLibrary.reader", "onCommand:novelLibrary.openReader", "onCommand:novelLibrary.selectBook", "onCommand:novelLibrary.selectChapter", "onCommand:novelLibrary.importFile", "onCommand:novelLibrary.toggleDisplayMode", "onCommand:novelLibrary.configureShortcuts", "onCommand:novelLibrary.backupCurrentLibrary", "onCommand:novelLibrary.restoreCurrentLibrary"],
   "contributes": {
+    "configuration": {
+      "title": "小说书库",
+      "properties": {
+        "novelLibrary.useDesktopLibrary": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "开启后连接原来的桌面端书库；关闭后由插件启动并维护独立本地书库。"
+        },
+        "novelLibrary.localDataDirectory": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "本地书库数据目录。建议使用“小说书库: 配置本地书库目录”命令选择。"
+        },
+        "novelLibrary.logLevel": {
+          "type": "string",
+          "enum": ["error", "warn", "info", "debug"],
+          "default": "info",
+          "scope": "application",
+          "description": "本地 Runtime 日志级别。修改后重启本地 Runtime 生效。"
+        },
+        "novelLibrary.retainManagedSource": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "导入本地书库时保留受管源文件，便于以后重新解析；关闭可节省空间，但原文件移动后将无法重新解析。"
+        }
+      }
+    },
     "commands": [
       { "command": "novelLibrary.openReader", "title": "小说书库: 显示或隐藏代码内阅读", "icon": "$(eye)" },
       { "command": "novelLibrary.showReader", "title": "显示代码内阅读", "icon": "$(eye)" },
@@ -25,8 +55,17 @@
       { "command": "novelLibrary.toggleDisplayMode", "title": "切换阅读显示模式", "icon": "$(layout)" },
       { "command": "novelLibrary.showShortcuts", "title": "小说书库: 查看快捷键", "icon": "$(keyboard)" },
       { "command": "novelLibrary.configureShortcuts", "title": "小说书库: 自定义快捷键", "icon": "$(settings-gear)" },
-      { "command": "novelLibrary.importFile", "title": "小说书库: 导入当前文件", "icon": "$(file-add)" },
-      { "command": "novelLibrary.openDesktop", "title": "小说书库: 打开桌面端", "icon": "$(open-preview)" }
+      { "command": "novelLibrary.importFile", "title": "小说书库: 导入小说文件", "icon": "$(file-add)" },
+      { "command": "novelLibrary.openDesktop", "title": "小说书库: 打开桌面端 / 本地书库目录", "icon": "$(open-preview)" },
+      { "command": "novelLibrary.toggleLibraryMode", "title": "小说书库: 切换桌面端 / 本地模式", "icon": "$(server-process)" },
+      { "command": "novelLibrary.configureLocalDataDirectory", "title": "小说书库: 配置本地书库目录", "icon": "$(folder-opened)" },
+      { "command": "novelLibrary.openLocalDataDirectory", "title": "小说书库: 打开本地书库目录", "icon": "$(folder-opened)" },
+      { "command": "novelLibrary.restartLocalRuntime", "title": "小说书库: 重启本地 Runtime", "icon": "$(debug-restart)" },
+      { "command": "novelLibrary.deleteCurrentBook", "title": "删除本地书籍", "category": "小说书库", "icon": "$(trash)" },
+      { "command": "novelLibrary.reparseCurrentBook", "title": "小说书库: 重新解析当前本地书籍", "icon": "$(sync)" },
+      { "command": "novelLibrary.backupCurrentLibrary", "title": "小说书库: 备份当前书库", "icon": "$(save)" },
+      { "command": "novelLibrary.restoreCurrentLibrary", "title": "小说书库: 恢复 / 迁移当前书库", "icon": "$(history)" },
+      { "command": "novelLibrary.openDiagnostics", "title": "小说书库: 打开本地 Runtime 诊断", "icon": "$(output)" }
     ],
     "keybindings": [
       { "command": "novelLibrary.openReader", "key": "ctrl+alt+n" },
@@ -60,12 +99,23 @@
         { "command": "novelLibrary.showShortcuts", "when": "view == novelLibrary.reader", "group": "navigation@8" },
         { "command": "novelLibrary.configureShortcuts", "when": "view == novelLibrary.reader", "group": "navigation@9" },
         { "command": "novelLibrary.importFile", "when": "view == novelLibrary.reader", "group": "2_actions@1" },
-        { "command": "novelLibrary.openDesktop", "when": "view == novelLibrary.reader", "group": "2_actions@2" }
+        { "command": "novelLibrary.openDesktop", "when": "view == novelLibrary.reader", "group": "2_actions@2" },
+        { "command": "novelLibrary.toggleLibraryMode", "when": "view == novelLibrary.reader", "group": "2_actions@3" },
+        { "command": "novelLibrary.configureLocalDataDirectory", "when": "view == novelLibrary.reader", "group": "2_actions@4" },
+        { "command": "novelLibrary.openLocalDataDirectory", "when": "view == novelLibrary.reader", "group": "2_actions@5" },
+        { "command": "novelLibrary.restartLocalRuntime", "when": "view == novelLibrary.reader", "group": "2_actions@6" },
+        { "command": "novelLibrary.backupCurrentLibrary", "when": "view == novelLibrary.reader", "group": "3_maintenance@1" },
+        { "command": "novelLibrary.restoreCurrentLibrary", "when": "view == novelLibrary.reader", "group": "3_maintenance@2" },
+        { "command": "novelLibrary.reparseCurrentBook", "when": "view == novelLibrary.reader && !novelLibrary.useDesktopLibrary", "group": "3_maintenance@3" },
+        { "command": "novelLibrary.openDiagnostics", "when": "view == novelLibrary.reader && !novelLibrary.useDesktopLibrary", "group": "3_maintenance@5" }
+      ],
+      "view/item/context": [
+        { "command": "novelLibrary.deleteCurrentBook", "when": "view == novelLibrary.reader && (viewItem == book || viewItem == currentBook) && !novelLibrary.useDesktopLibrary", "group": "3_maintenance@1" }
       ],
       "editor/context": [
         { "command": "novelLibrary.importFile", "when": "resourceExtname == .txt || resourceExtname == .epub", "group": "navigation@90" }
       ]
     }
   },
-  "scripts": { "validate": "node --check extension.js && node --check bridge.js && node --check reader-utils.js && node --check wheel-bridge.js && node --test wheel-bridge.test.mjs" }
+  "scripts": { "validate": "node --check extension.js && node --check bridge.js && node --check import-selection.js && node --check reader-utils.js && node --check wheel-bridge.js && node --test import-selection.test.mjs wheel-bridge.test.mjs" }
 }

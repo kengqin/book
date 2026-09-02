@@ -8,11 +8,14 @@ const files = [
   'apps/desktop/src-tauri/resources/ide-plugins/code-oss-wheel-injection.js',
   'apps/desktop/src-tauri/src/ide_integration.rs',
   'apps/desktop/src-tauri/src/bridge.rs',
+  'apps/local-runtime/Cargo.toml',
+  'apps/local-runtime/src/main.rs',
   'apps/desktop/src/views/IdeIntegrationView.vue',
   'plugins/vscode/package.json',
   'plugins/README.md',
   'plugins/vscode/bridge.js',
   'plugins/vscode/extension.js',
+  'plugins/vscode/import-selection.js',
   'plugins/vscode/reader-utils.js',
   'plugins/vscode/wheel-bridge.js',
   'plugins/vscode/README.md',
@@ -22,6 +25,7 @@ const files = [
   'plugins/intellij/src/main/resources/META-INF/pluginIcon.svg',
   'plugins/intellij/src/main/resources/META-INF/pluginIcon_dark.svg',
   'plugins/intellij/build.gradle.kts',
+  'plugins/intellij/gradle.properties',
   'plugins/intellij/README.md',
   'plugins/intellij/src/main/kotlin/com/kengqin/novellibrary/NovelLibraryPlugin.kt',
   'plugins/intellij/src/main/resources/META-INF/plugin.xml',
@@ -29,6 +33,8 @@ const files = [
   'plugins/visual-studio/NovelLibrary.VisualStudio.csproj',
   'plugins/visual-studio/README.md',
   'plugins/visual-studio/NovelLibraryBridge.cs',
+  'plugins/visual-studio/NovelLibraryLocalSettings.cs',
+  'plugins/visual-studio/NovelLibraryOptionsPage.cs',
   'plugins/visual-studio/NovelLibraryPackage.cs',
   'plugins/visual-studio/NovelLibraryReaderSession.cs',
   'plugins/visual-studio/NovelLibraryToolWindow.cs',
@@ -37,8 +43,12 @@ const files = [
   'plugins/visual-studio/NovelLibrary.vsct',
   'plugins/visual-studio/LICENSE',
   'plugins/visual-studio/source.extension.vsixmanifest',
+  'packages/reader-protocol/src/index.ts',
   'scripts/install-ide-plugins.ps1',
   'scripts/package-visual-studio-plugin.ps1',
+  'scripts/stage-ide-plugin-runtime.ps1',
+  'scripts/verify-ide-plugin-runtime.ps1',
+  'scripts/test-local-runtime-e2e.mjs',
   '.github/workflows/build-ide-plugins.yml',
   '.github/workflows/release-desktop.yml'
 ]
@@ -68,11 +78,20 @@ const vscodeViewCommands = new Set(vscode.contributes?.menus?.['view/title']?.ma
 for (const command of ['novelLibrary.showReader', 'novelLibrary.hideReader', 'novelLibrary.previousLine', 'novelLibrary.nextLine', 'novelLibrary.previousChapter', 'novelLibrary.nextChapter', 'novelLibrary.refreshLibrary', 'novelLibrary.showShortcuts']) {
   requireValue(vscodeViewCommands.has(command), `VS Code reader toolbar command is missing: ${command}`)
 }
+requireValue(!vscodeViewCommands.has('novelLibrary.deleteCurrentBook'), 'VS Code delete action must not stay in the reader title overflow menu')
+const vscodeBookContextDelete = vscode.contributes?.menus?.['view/item/context']?.find(item => item.command === 'novelLibrary.deleteCurrentBook')
+requireValue(vscodeBookContextDelete?.when?.includes('viewItem == book') && vscodeBookContextDelete.when.includes('viewItem == currentBook') && vscodeBookContextDelete.when.includes('!novelLibrary.useDesktopLibrary'), 'VS Code delete action must be scoped to local book context menus')
+const vscodeDeleteCommand = vscode.contributes?.commands?.find(item => item.command === 'novelLibrary.deleteCurrentBook')
+requireValue(vscodeDeleteCommand?.title === '删除本地书籍' && vscodeDeleteCommand.category === '小说书库', 'VS Code book context delete label must stay concise')
 const vscodeKeys = new Set(vscode.contributes?.keybindings?.map(item => item.key))
 for (const key of ['ctrl+alt+n', 'ctrl+alt+9', 'ctrl+alt+up', 'ctrl+alt+down', 'ctrl+alt+left', 'ctrl+alt+right', 'ctrl+alt+d']) {
   requireValue(vscodeKeys.has(key), `VS Code keybinding is missing: ${key}`)
 }
 const vscodeExtension = source('plugins/vscode/extension.js')
+const vscodeImportSelection = source('plugins/vscode/import-selection.js')
+requireMatch(vscodeExtension, /MODAL_CANCEL_ACTION = Object\.freeze\(\{ title: '取消', isCloseAffordance: true \}\)/, 'VS Code modal dialogs must use a single localized close affordance')
+requireMatch(vscodeExtension, /if \(!\['复制并切换', '空目录切换'\]\.includes\(copyChoice\)\) return/, 'VS Code directory migration must stop for the modal close affordance')
+requireMatch(vscodeExtension, /if \(!\['合并恢复', '清空并恢复'\]\.includes\(choice\)\) return/, 'VS Code restore must stop for the modal close affordance')
 requireMatch(vscodeExtension, /slice\(state\.lineStart, state\.lineStart \+ 5\)/, 'VS Code five-line reader is missing')
 requireMatch(vscodeExtension, /createTextEditorDecorationType/, 'VS Code inline editor decorations are missing')
 requireValue(!vscodeExtension.includes('hoverMessage:'), 'VS Code inline reader hover popup must not obscure novel content')
@@ -88,6 +107,7 @@ requireMatch(vscodeExtension, /label: `书架 \(\$\{state\.books\.length\}\)`/, 
 requireMatch(vscodeExtension, /label: `章节 \(\$\{state\.chapters\.length\}\)`/, 'VS Code chapter section is missing')
 requireMatch(vscodeExtension, /type: 'content'/, 'VS Code content section is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.openBookFromSidebar'/, 'VS Code direct sidebar book selection is missing')
+requireMatch(vscodeExtension, /arguments: \[book\],[\s\S]*book,[\s\S]*contextValue: current \? 'currentBook' : 'book'/, 'VS Code book tree items must carry their book payload for context actions')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.openChapterFromSidebar'/, 'VS Code direct sidebar chapter selection is missing')
 requireMatch(vscodeExtension, /const scheduleReconnect = \(delay = 0\) =>[\s\S]*reader\.loadLibrary\(\)[\s\S]*scheduleReconnect\(3000\)/, 'VS Code automatic library reconnection is missing')
 requireMatch(vscodeExtension, /onDidChangeVisibility[\s\S]*onDidChangeWindowState/, 'VS Code reconnect triggers are missing')
@@ -101,8 +121,13 @@ requireMatch(vscodeExtension, /restoredProgress = !position[\s\S]*resolvedBook\.
 requireMatch(vscodeExtension, /lineStartFromProgress\(lines\.length, restoredProgress\)/, 'VS Code startup must restore the saved chapter line')
 requireMatch(vscodeExtension, /await persistProgress\(\)/, 'VS Code progress writes must complete before reader actions return')
 requireMatch(vscodeExtension, /let progressWriteQueue = Promise\.resolve\(\)[\s\S]*progressWriteQueue = write\.catch/, 'VS Code progress writes must remain serialized')
+requireMatch(vscodeExtension, /pendingProgressStorageKey[\s\S]*rememberPendingProgress[\s\S]*replayPendingProgress/, 'VS Code failed progress writes must persist per provider and replay')
+requireMatch(vscodeExtension, /getProviderIdentity\(\)[\s\S]*bookId/, 'VS Code pending progress keys must include provider storage identity and book id')
+requireMatch(vscodeExtension, /const progressClientId = crypto\.randomUUID\(\)[\s\S]*let progressSequence = 0/, 'VS Code progress identity must be isolated per extension-host process')
+requireValue(!vscodeExtension.includes("storage.get('novelLibrary.progressClientId')"), 'VS Code must not share a progress client identity across parallel windows')
 requireMatch(vscodeExtension, /rememberProgress[\s\S]*currentChapter: chapterNumber[\s\S]*chapterProgress/, 'VS Code must update its in-memory book progress after every move')
 requireMatch(vscodeExtension, /flushCurrentBookProgress[\s\S]*latestBook\(book\)/, 'VS Code book switching must flush writes and reload persisted progress')
+requireMatch(vscodeExtension, /resetProvider[\s\S]*progressWriteQueue[\s\S]*state\.book = null/, 'VS Code provider switching must flush progress and isolate provider state')
 requireValue(!/moveLines = async direction => \{\s*if \(!state\.enabled\) await toggle\(true\)/.test(vscodeExtension), 'VS Code line shortcuts must not force hidden reading back on')
 requireValue(vscode.contributes?.commands?.some(item => item.command === 'novelLibrary.showShortcuts' && item.icon === '$(keyboard)'), 'VS Code shortcut-help button is missing')
 requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.showShortcuts'[\s\S]*小说书库快捷键[\s\S]*Ctrl\+Alt\+D/, 'VS Code shortcut-help dialog is incomplete')
@@ -113,11 +138,31 @@ const vscodeBridge = source('plugins/vscode/bridge.js')
 const vscodeWheelBridge = source('plugins/vscode/wheel-bridge.js')
 const codeOssWheelInjection = source('apps/desktop/src-tauri/resources/ide-plugins/code-oss-wheel-injection.js')
 requireMatch(vscodeBridge, /AbortSignal\.timeout\(5000\)/, 'VS Code Bridge timeout must be five seconds')
+requireMatch(vscodeBridge, /waitForImportJob[\s\S]*\/v2\/import-jobs/, 'VS Code local imports must poll background jobs')
+requireMatch(vscodeBridge, /retainSource:[\s\S]*retainManagedSource/, 'VS Code managed-source retention setting is not sent to Runtime imports')
+requireMatch(vscodeBridge, /\/v2\/runtime\/status[\s\S]*dataDirectory/, 'VS Code must validate the Runtime data directory')
+requireMatch(vscodeBridge, /requiredCapabilities[\s\S]*progress\.v2[\s\S]*import\.idempotency[\s\S]*runtime\.diagnostics[\s\S]*runtime\.check-database[\s\S]*epub\.structure\.v2/, 'VS Code Runtime capability negotiation is incomplete')
+requireMatch(vscodeBridge, /providerSettings\.useDesktopLibrary[\s\S]*\['books', 'chapters', 'progress'\][\s\S]*Bridge 会话已失效/, 'VS Code desktop Bridge capability and session negotiation is incomplete')
+requireMatch(vscodeBridge, /minimumClientProtocolVersion[\s\S]*isRuntimeCompatible[\s\S]*PROTOCOL_INCOMPATIBLE/, 'VS Code must reject a Runtime that requires a newer client')
+requireMatch(vscodeBridge, /error\.code === 'PROTOCOL_INCOMPATIBLE'\) throw error/, 'VS Code must not terminate a Runtime that requires a newer client')
+requireMatch(vscodeBridge, /getProviderIdentity[\s\S]*storageId/, 'VS Code provider identity must use the persistent storage id')
+requireMatch(vscodeBridge, /runtime-manifest\.json[\s\S]*\.sha256[\s\S]*createHash\('sha256'\)[\s\S]*\['version'\]/, 'VS Code bundled Runtime integrity and version verification is incomplete')
+for (const contract of [/install\.lock/, /active\.json/, /['"]versions['"]/, /previousVersion/]) {
+  requireMatch(vscodeBridge, contract, 'VS Code shared Runtime installation, activation and rollback metadata are incomplete')
+}
+requireMatch(vscodeBridge, /migration\.lock/, 'VS Code local directory migration lock is missing')
 requireMatch(vscodeBridge, /Connection: 'close'/, 'VS Code Bridge must close each local HTTP connection')
 requireMatch(vscodeBridge, /novel-library-desktop/, 'VS Code Bridge must resolve the running desktop installation')
 requireMatch(vscodeBridge, /ShowWindowAsync[\s\S]*SetForegroundWindow[\s\S]*Start-Process/, 'VS Code desktop fallback must restore or launch the installed desktop app')
 requireValue(!vscodeExtension.includes('novellibrary://'), 'VS Code must not use an unregistered desktop URL scheme')
 requireMatch(vscodeExtension, /createWheelBridge[\s\S]*wheelBridge\.markerCss\(\)/, 'VS Code loopback wheel bridge marker is missing')
+for (const command of ['deleteCurrentBook', 'reparseCurrentBook', 'backupCurrentLibrary', 'restoreCurrentLibrary', 'openDiagnostics']) {
+  requireMatch(vscodeExtension, new RegExp(`registerCommand\\('novelLibrary\\.${command}'`), `VS Code local maintenance command is missing: ${command}`)
+}
+requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.deleteCurrentBook', async item =>[\s\S]*const selectedBook = item\?\.book \|\| state\.book[\s\S]*encodeURIComponent\(selectedBook\.id\)/, 'VS Code delete action must delete the right-clicked book')
+requireMatch(vscodeExtension, /registerCommand\('novelLibrary\.importFile'[\s\S]*selectImportFile\(vscode\.window, uri\)/, 'VS Code import command must delegate to the file picker')
+requireMatch(vscodeImportSelection, /IMPORT_DIALOG_OPTIONS[\s\S]*canSelectFiles: true[\s\S]*txt[\s\S]*epub[\s\S]*showOpenDialog\(IMPORT_DIALOG_OPTIONS\)/, 'VS Code import command must open a TXT/EPUB file picker')
+requireValue(!vscodeExtension.includes('activeTextEditor?.document.uri'), 'VS Code import command must not silently use the active editor file')
 requireMatch(vscodeExtension, /const wheelMarker = wheelBridge\.markerCss\(\)[\s\S]*textDecoration: `none; \$\{wheelMarker\}/, 'VS Code editor decorations must expose the injected wheel marker')
 requireMatch(vscodeWheelBridge, /server\.listen\(0, '127\.0\.0\.1'/, 'VS Code wheel bridge must bind to a random loopback port')
 requireMatch(vscodeWheelBridge, /randomBytes\(18\)/, 'VS Code wheel bridge must authenticate injected clients')
@@ -136,8 +181,10 @@ const intellijVersion = intellijBuild.match(/^version\s*=\s*"([^"]+)"/m)?.[1]
 requireValue(semver(intellijVersion), 'JetBrains plugin version must be valid SemVer')
 requireMatch(intellijBuild, /jvmTarget = JvmTarget\.JVM_17/, 'JetBrains Kotlin bytecode must target Java 17')
 requireMatch(intellijBuild, /targetCompatibility = JavaVersion\.VERSION_17/, 'JetBrains Java bytecode must target Java 17')
+requireMatch(intellijBuild, /pluginVerification[\s\S]*IntellijIdeaCommunity[\s\S]*2024\.1/, 'JetBrains plugin verifier target is missing')
+requireValue(source('plugins/intellij/gradle.properties').includes('kotlin.stdlib.default.dependency=false'), 'JetBrains plugin must use the platform Kotlin standard library')
 requireMatch(intellijXml, /<toolWindow id="小说书库"[^>]+icon="\/icons\/novelLibrary\.svg"/, 'JetBrains tool window icon is missing')
-for (const detail of ['核心能力', '不会修改项目文件', '本机 Bridge']) {
+for (const detail of ['Core features', 'without modifying project files', 'localhost desktop Bridge']) {
   requireValue(intellijXml.includes(detail), `JetBrains marketplace description is missing: ${detail}`)
 }
 requireMatch(source('plugins/vscode/media/novel-library.svg'), /M1\.25 3\.15C3\.6/, 'VS Code activity bar must use the shared book icon shape')
@@ -147,6 +194,7 @@ for (const icon of [intellijPluginIcon, intellijPluginIconDark]) {
   requireMatch(icon, /M338 125h43v132/, 'JetBrains marketplace icon bookmark is missing')
 }
 requireMatch(intellijXml, /<postStartupActivity/, 'JetBrains automatic startup activity is missing')
+requireMatch(intellijXml, /<applicationConfigurable[^>]+NovelLibraryApplicationConfigurable/, 'JetBrains application-level local Runtime settings page is missing')
 for (const shortcut of ['ctrl alt N', 'ctrl alt UP', 'ctrl alt DOWN', 'ctrl alt LEFT', 'ctrl alt RIGHT']) {
   requireValue(intellijXml.includes(`first-keystroke="${shortcut}"`), `JetBrains keybinding is missing: ${shortcut}`)
 }
@@ -166,12 +214,13 @@ requireMatch(intellijCode, /AWTEventListener[\s\S]*inlays\[editor\][\s\S]*bounds
 requireMatch(intellijCode, /isDescendingFrom\(event\.component, it\.component\)[\s\S]*convertPoint\(event\.component, event\.point, editor\.contentComponent\)/, 'JetBrains wheel hit testing must accept events from the full editor component tree')
 requireMatch(intellijCode, /if \(overReader\) \{\s*event\.consume\(\)[\s\S]*moveLine/, 'JetBrains reader wheel navigation must consume only inlay hits')
 requireValue(!/contentComponent\.addMouseWheelListener/.test(intellijCode), 'JetBrains reader must not steal wheel events from the editor content component')
-requireMatch(intellijCode, /repeat\(if \(body == null\) 3 else 1\)/, 'JetBrains Bridge GET retry is missing')
+requireMatch(intellijCode, /val attempts = if \(method == "GET"\) 3 else 1/, 'JetBrains Bridge GET retry is missing')
 requireMatch(intellijCode, /连接中断，正在重试/, 'JetBrains session reconnect handling is missing')
 requireMatch(intellijCode, /val refresh = JButton\("刷新"\)/, 'JetBrains manual reader refresh is missing')
 requireMatch(intellijCode, /fun reload\(\)[\s\S]*loadBooks\(preservePosition = true\)/, 'JetBrains reader refresh must preserve the current reading position')
 requireMatch(intellijCode, /chapterProgress: Double[\s\S]*lineStartFromProgress/, 'JetBrains startup must restore the saved chapter progress')
 requireMatch(intellijCode, /newSingleThreadExecutor[\s\S]*awaitProgressWrites/, 'JetBrains progress writes must remain serialized')
+requireMatch(intellijCode, /flushProgressWrites[\s\S]*resetForProviderSwitch/, 'JetBrains provider switching must flush progress and isolate provider state')
 requireMatch(intellijCode, /fun book\(bookId: String\)[\s\S]*send\("\/v1\/books\/\$id"\)/, 'JetBrains book switching must reload persisted progress')
 requireMatch(intellijCode, /updatedBook = book\.copy\(currentChapter = chapter\.number, chapterProgress = progress\)/, 'JetBrains must update its in-memory book progress after every move')
 requireMatch(intellijCode, /JButton\("快捷键"\)[\s\S]*showShortcutHelp/, 'JetBrains shortcut-help button is missing')
@@ -183,6 +232,27 @@ requireMatch(intellijCode, /while \(resultLines\.isEmpty\(\) && attempts < 30\)/
 requireMatch(intellijCode, /it\.kind == null \|\| it\.kind == "chapter"/, 'JetBrains non-content chapter filtering is missing')
 requireMatch(intellijCode, /mapIndexed \{ index, chapter -> chapter\.copy\(ordinal = index \+ 1\) \}/, 'JetBrains chapter list must assign sequential readable chapter numbers')
 requireMatch(intellijCode, /timeout\(Duration\.ofSeconds\(5\)\)/, 'JetBrains Bridge timeout must be five seconds')
+requireMatch(intellijCode, /validateLocalConfig[\s\S]*\/v2\/runtime\/status/, 'JetBrains must health-check local Runtime discovery')
+requireMatch(intellijCode, /capabilities\.containsAll[\s\S]*runtime\.diagnostics[\s\S]*epub\.structure\.v2/, 'JetBrains Runtime capability negotiation is incomplete')
+requireMatch(intellijCode, /\/v2\/import-jobs[\s\S]*"completed"/, 'JetBrains local imports must poll background jobs')
+requireMatch(intellijCode, /class ImportFileAction[\s\S]*JFileChooser\(\)[\s\S]*showOpenDialog[\s\S]*selectedFile/, 'JetBrains import action must open a local file picker')
+for (const method of ['deleteBook', 'reparseBook', 'exportLibrary', 'importLibrary', 'diagnostics']) {
+  requireMatch(intellijCode, new RegExp(`fun ${method}\\(`), `JetBrains local maintenance method is missing: ${method}`)
+}
+requireMatch(intellijCode, /migration\.lock/, 'JetBrains local directory migration lock is missing')
+for (const contract of [/runtime-manifest\.json/, /novel-library-runtime\.exe\.sha256/, /MessageDigest\.getInstance\("SHA-256"\)/, /ProcessBuilder\(executable\.toString\(\), "version"\)/]) {
+  requireMatch(intellijCode, contract, 'JetBrains bundled Runtime integrity and version verification is incomplete')
+}
+for (const contract of [/install\.lock/, /active\.json/, /resolve\("versions"\)/, /previousVersion/]) {
+  requireMatch(intellijCode, contract, 'JetBrains shared Runtime installation, activation and rollback metadata are incomplete')
+}
+requireMatch(intellijCode, /import\.idempotency[\s\S]*runtime\.check-database[\s\S]*epub\.structure\.v2/, 'JetBrains Runtime capability negotiation is incomplete')
+requireMatch(intellijCode, /RETAIN_MANAGED_SOURCE[\s\S]*retainSource/, 'JetBrains managed-source retention setting is incomplete')
+requireMatch(intellijCode, /PENDING_PROGRESS[\s\S]*savePendingProgress[\s\S]*replayPendingProgress/, 'JetBrains failed progress writes must persist per provider and replay')
+requireMatch(intellijCode, /progressProviderKey[\s\S]*storageId[\s\S]*::\$bookId/, 'JetBrains pending progress keys must include provider storage identity and book id')
+requireMatch(intellijCode, /minimumClientProtocolVersion[\s\S]*需要更新版插件[\s\S]*不会覆盖或终止它/, 'JetBrains must preserve a Runtime that requires a newer client')
+requireMatch(intellijCode, /progressClientId = "jetbrains-\$\{UUID\.randomUUID\(\)\}"[\s\S]*progressSequence = AtomicLong\(\)[\s\S]*incrementAndGet\(\)/, 'JetBrains progress identity must be isolated per IDE process')
+requireMatch(intellijCode, /validateDesktopConfig[\s\S]*\/v1\/manifest[\s\S]*setOf\("books", "chapters", "progress"\)/, 'JetBrains desktop Bridge capability and session negotiation is incomplete')
 requireMatch(intellijCode, /ProcessHandle\.allProcesses/, 'JetBrains Bridge must resolve the running desktop installation')
 for (const action of ['PreviousLineAction', 'NextLineAction', 'PreviousChapterAction', 'NextChapterAction']) {
   requireMatch(
@@ -200,6 +270,7 @@ const visualAdornment = source('plugins/visual-studio/NovelLibraryAdornment.cs')
 requireMatch(visualProject, /<TargetFramework>net472<\/TargetFramework>/, 'Visual Studio target framework is missing')
 requireMatch(visualProject, /novel-library-visual-studio-\$\(Version\)\.vsix/, 'Official Visual Studio VSIX output is missing')
 requireMatch(visualProject, /<Content Include="Icon\.png"><IncludeInVSIX>true<\/IncludeInVSIX><\/Content>/, 'Visual Studio shared icon must be included in the VSIX')
+requireMatch(visualProject, /runtime\\win32-x64\\novel-library-runtime\.exe/, 'Visual Studio Runtime payload is missing')
 const visualVersion = visualManifest.match(/Identity Id="NovelLibrary\.VisualStudio" Version="([^"]+)"/)?.[1]
 requireValue(semver(visualVersion), 'Visual Studio extension version must be valid SemVer')
 requireMatch(visualManifest, /Microsoft\.VisualStudio\.VsPackage/, 'Visual Studio package asset is missing')
@@ -236,11 +307,38 @@ requireMatch(visualAdornment, /if \(!NovelLibraryReaderSession\.IsReaderVisible\
 requireMatch(visualSession, /ReaderDisplayMode\.LineEnd/, 'Visual Studio original line-end display mode is missing')
 requireMatch(visualSession, /ChapterProgress[\s\S]*LineStartFromProgress/, 'Visual Studio startup must restore the saved chapter progress')
 requireMatch(visualSession, /Gate\.WaitAsync[\s\S]*MoveLineAsync[\s\S]*Gate\.WaitAsync/, 'Visual Studio reader mutations must be serialized')
+requireMatch(visualSession, /ResetForProviderSwitch[\s\S]*FlushProgressAsync/, 'Visual Studio provider switching must flush progress and isolate provider state')
 requireMatch(visualSession, /Bridge\.GetAsync<BookItem>\([\s\S]*Uri\.EscapeDataString\(book\.Id\)[\s\S]*latestBook\.ChapterProgress/, 'Visual Studio book switching must reload persisted progress')
 requireMatch(visualSession, /CurrentBook\.CurrentChapter = chapterNumber[\s\S]*CurrentBook\.ChapterProgress = chapterProgress/, 'Visual Studio must update its in-memory book progress after every move')
 requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /Timeout = TimeSpan\.FromSeconds\(5\)/, 'Visual Studio Bridge timeout must be five seconds')
 requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /ConnectionClose = true/, 'Visual Studio Bridge must close each local HTTP connection')
 requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /GetProcessesByName/, 'Visual Studio Bridge must resolve the running desktop installation')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /Assembly\.Location[\s\S]*runtime[\s\S]*win32-x64/, 'Visual Studio must resolve Runtime relative to the installed extension')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /ValidateLocalRuntimeAsync[\s\S]*\/v2\/runtime\/status/, 'Visual Studio must health-check local Runtime discovery')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /ValidateDesktopBridgeAsync[\s\S]*\/v1\/manifest[\s\S]*"books", "chapters", "progress"/, 'Visual Studio desktop Bridge capability and session negotiation is incomplete')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /required[\s\S]*runtime\.diagnostics[\s\S]*epub\.structure\.v2/, 'Visual Studio Runtime capability negotiation is incomplete')
+for (const contract of [/runtime-manifest\.json/, /\.sha256/, /SHA256\.Create\(\)/, /Arguments = "version"/]) {
+  requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), contract, 'Visual Studio bundled Runtime integrity and version verification is incomplete')
+}
+for (const contract of [/install\.lock/, /active\.json/, /"versions"/, /PreviousVersion/]) {
+  requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), contract, 'Visual Studio shared Runtime installation, activation and rollback metadata are incomplete')
+}
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /import\.idempotency[\s\S]*runtime\.check-database[\s\S]*epub\.structure\.v2/, 'Visual Studio Runtime capability negotiation is incomplete')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /\/v2\/import-jobs[\s\S]*"completed"/, 'Visual Studio local imports must poll background jobs')
+requireMatch(source('plugins/visual-studio/NovelLibraryToolWindow.cs'), /Content = "导入小说"[\s\S]*ImportFileAsync/, 'Visual Studio local import entry is missing')
+for (const method of ['DeleteBookAsync', 'ReparseBookAsync', 'ExportLibraryAsync', 'ImportLibraryAsync', 'GetDiagnosticsAsync']) {
+  requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), new RegExp(method), `Visual Studio local maintenance method is missing: ${method}`)
+}
+requireMatch(source('plugins/visual-studio/NovelLibraryLocalSettings.cs'), /migration\.lock/, 'Visual Studio local directory migration lock is missing')
+requireMatch(source('plugins/visual-studio/NovelLibraryPackage.cs'), /ProvideOptionPage\(typeof\(NovelLibraryOptionsPage\)/, 'Visual Studio application-level local Runtime settings page is missing')
+requireMatch(source('plugins/visual-studio/NovelLibraryOptionsPage.cs'), /UseDesktopLibrary[\s\S]*LocalDataDirectory[\s\S]*LogLevel/, 'Visual Studio local Runtime settings are incomplete')
+requireMatch(source('plugins/visual-studio/NovelLibraryOptionsPage.cs'), /RetainManagedSource/, 'Visual Studio managed-source retention setting is missing')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /retainSource = NovelLibraryLocalSettings\.RetainManagedSource/, 'Visual Studio managed-source retention setting is not sent to Runtime imports')
+requireMatch(source('plugins/visual-studio/NovelLibraryLocalSettings.cs'), /PendingProgress[\s\S]*SavePendingProgress[\s\S]*ClearPendingProgress/, 'Visual Studio failed progress persistence is missing')
+requireMatch(source('plugins/visual-studio/NovelLibraryLocalSettings.cs'), /ProviderStorageIds[\s\S]*ProgressProviderKey[\s\S]*::\{bookId\}/, 'Visual Studio pending progress keys must include provider storage identity and book id')
+requireMatch(source('plugins/visual-studio/NovelLibraryLocalSettings.cs'), /ProgressClientId = \$"visual-studio-[\s\S]*Interlocked\.Increment\(ref ProgressSequence\)/, 'Visual Studio progress identity must be isolated per IDE process')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /ReplayPendingProgressAsync/, 'Visual Studio failed progress replay is missing')
+requireMatch(source('plugins/visual-studio/NovelLibraryBridge.cs'), /MinimumClientProtocolVersion[\s\S]*需要更新版插件[\s\S]*不会覆盖或终止它/, 'Visual Studio must preserve a Runtime that requires a newer client')
 
 const desktopManifest = JSON.parse(source('apps/desktop/src-tauri/resources/ide-plugins/manifest.json'))
 const desktopIdeIntegration = source('apps/desktop/src-tauri/src/ide_integration.rs')
@@ -250,6 +348,8 @@ for (const [command, label] of [['trae.cmd', 'Trae'], ['qoder.cmd', 'Qoder'], ['
   requireValue(desktopManifest.plugins.find(item => item.id === 'vscode')?.supportedIdes?.includes(label), `Desktop manifest Code OSS support is missing: ${label}`)
 }
 requireMatch(desktopIdeIntegration, /install_jetbrains_plugin/, 'JetBrains local ZIP deployment is missing')
+requireMatch(desktopIdeIntegration, /vswhere\.exe[\s\S]*Microsoft\.VisualStudio\.Product\.BuildTools[\s\S]*Common7[\s\S]*VSIXInstaller\.exe|visual_studio_product_has_ide[\s\S]*Common7[\s\S]*VSIXInstaller\.exe/, 'Visual Studio detection must resolve VSIXInstaller from a real IDE instance')
+requireMatch(source('scripts/install-ide-plugins.ps1'), /vswhere\.exe[\s\S]*Product\.BuildTools|vswhere\.exe[\s\S]*Product\.Community[\s\S]*Common7\\IDE\\VSIXInstaller\.exe/, 'CLI Visual Studio installer detection must use a real IDE instance')
 requireValue(!desktopIdeIntegration.includes('cli' + '.js'), 'Desktop plugin installation must never construct a cli.js argument')
 requireMatch(desktopIdeIntegration, /--list-extensions/, 'VS Code installed state must use the IDE CLI')
 requireMatch(desktopIdeIntegration, /parse_vscode_extension_state/, 'VS Code CLI installed-state parser is missing')
@@ -278,6 +378,30 @@ for (const [id, [version, file]] of expectedArtifacts) {
 
 const installer = source('scripts/install-ide-plugins.ps1')
 requireMatch(installer, /Install-JetBrainsLocal/, 'JetBrains local ZIP deployment script is missing')
+requireMatch(source('scripts/verify-ide-plugin-runtime.ps1'), /novel-library-runtime/, 'IDE package Runtime verification is missing')
+requireMatch(source('scripts/verify-ide-plugin-runtime.ps1'), /runtime-manifest\.json[\s\S]*sha256[\s\S]*Get-FileHash[\s\S]*version/, 'IDE package Runtime manifest verification is incomplete')
+for (const contract of [/runtime-manifest\.json/, /Get-FileHash/, /sha256/, /\.sha256/]) {
+  requireMatch(source('scripts/stage-ide-plugin-runtime.ps1'), contract, 'IDE Runtime staging must generate a manifest and SHA-256 sidecar')
+}
+requireMatch(source('scripts/test-local-runtime-e2e.mjs'), /failed replace must preserve the library/, 'Local Runtime destructive-import regression test is missing')
+requireMatch(source('scripts/test-local-runtime-e2e.mjs'), /storageId must survive crash recovery[\s\S]*doctor/, 'Local Runtime identity and doctor E2E coverage is missing')
+requireMatch(source('scripts/test-local-runtime-e2e.mjs'), /epub\.structure\.v2[\s\S]*frontmatter[\s\S]*Real EPUB Runtime parity/, 'Local Runtime EPUB binary parity E2E coverage is missing')
+requireMatch(source('scripts/test-local-runtime-e2e.mjs'), /idempotencyKey must return the original import job[\s\S]*databaseCheck[\s\S]*checksumSha256[\s\S]*tampered/, 'Local Runtime idempotency, database-check and checksum E2E coverage is missing')
+const runtimeSource = source('apps/local-runtime/src/main.rs')
+for (const capability of ['progress.v2', 'import.jobs', 'import.idempotency', 'books.delete', 'books.reparse', 'backup.transfer', 'runtime.diagnostics', 'runtime.check-database', 'epub.structure.v2']) {
+  requireValue(runtimeSource.includes(`"${capability}"`), `Local Runtime capability is missing: ${capability}`)
+}
+requireMatch(runtimeSource, /MAX_EPUB_EXPANDED_BYTES[\s\S]*HTML_DANGEROUS_BLOCK_RE/, 'Local Runtime EPUB safety limits are missing')
+requireMatch(runtimeSource, /parse_epub3_navigation[\s\S]*parse_ncx_navigation[\s\S]*frontmatter[\s\S]*appendix/, 'Local Runtime EPUB structure classification is incomplete')
+requireMatch(runtimeSource, /strip_epub_content_prefix[\s\S]*first_epub_chapter_heading/, 'Local Runtime must remove duplicated EPUB chapter headings')
+requireMatch(runtimeSource, /REAL_EPUB_RUNTIME_RESULT[\s\S]*frontmatter[\s\S]*body/, 'Local Runtime real EPUB parity regression is missing')
+requireMatch(runtimeSource, /ensure_storage_id[\s\S]*storageId/, 'Local Runtime persistent storage identity is missing')
+requireMatch(runtimeSource, /idempotency_key[\s\S]*same-client-request/, 'Local Runtime persisted import idempotency regression is missing')
+requireMatch(runtimeSource, /retain_source[\s\S]*retain_source: Some\(false\)[\s\S]*managed_source_path\.is_none/, 'Local Runtime managed-source retention behavior is missing')
+requireMatch(runtimeSource, /checksumSha256[\s\S]*checksum 校验失败[\s\S]*selected-book package|checksumSha256[\s\S]*checksum 校验失败[\s\S]*selected export/, 'Local Runtime transfer checksum and selected-book boundaries are missing')
+requireMatch(runtimeSource, /check-database[\s\S]*storageIdSuffix[\s\S]*databasePath/, 'Local Runtime database check and diagnostics redaction coverage is missing')
+requireValue(!source('.github/workflows/release-desktop.yml').includes('Reuse unchanged IDE plugin artifacts'), 'Desktop release must build current IDE plugin artifacts')
+requireValue((source('.github/workflows/release-desktop.yml').match(/stage-ide-plugin-runtime\.ps1/g) || []).length >= 3, 'Desktop release must stage the Runtime manifest and checksum for every IDE plugin')
 requireMatch(installer, /\[switch\]\$AllTargets/, 'Non-interactive all-target installation is missing')
 for (const command of ['trae', 'qoder', 'windsurf', 'kiro', 'codium', 'code-oss']) {
   requireValue(installer.includes(`'${command}'`), `Standalone installer Code OSS target is missing: ${command}`)

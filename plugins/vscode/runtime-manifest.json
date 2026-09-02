@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "runtimeVersion": "1.0.1",
+  "protocolVersion": 2,
+  "minimumProtocolVersion": 1,
+  "artifacts": [
+    {
+      "platform": "win32",
+      "arch": "x64",
+      "file": "runtime/win32-x64/novel-library-runtime.exe",
+      "sha256": "f1cb4ae5ba70c15ce99ed478d7f991e4ab4a2c076c9466a76fd23b9ce283a4a2"
+    }
+  ]
+}
