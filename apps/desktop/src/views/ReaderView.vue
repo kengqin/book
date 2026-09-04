@@ -48,7 +48,6 @@ let progressSaveFailed = false
 let unlistenPrivacyResize: (() => void) | undefined
 let unlistenPrivacyMove: (() => void) | undefined
 
-const READER_MIN_SIZE = new LogicalSize(520, 360)
 const APPLICATION_MIN_SIZE = new LogicalSize(760, 560)
 const PRIVACY_DEFAULT_SIZE = new LogicalSize(300, 200)
 const PRIVACY_MIN_SIZE = new LogicalSize(240, 160)
@@ -209,26 +208,6 @@ function restoreApplicationChrome() {
   void setWindowChrome(appearanceWindowTheme())
 }
 
-async function setReaderSizeLimit(reading: boolean) {
-  if (!isTauri()) return
-  const appWindow = getCurrentWindow()
-  try {
-    await appWindow.setMinSize(reading ? READER_MIN_SIZE : APPLICATION_MIN_SIZE)
-    if (!reading) {
-      const [physicalSize, scaleFactor] = await Promise.all([appWindow.innerSize(), appWindow.scaleFactor()])
-      const logicalSize = physicalSize.toLogical(scaleFactor)
-      if (logicalSize.width < APPLICATION_MIN_SIZE.width || logicalSize.height < APPLICATION_MIN_SIZE.height) {
-        await appWindow.setSize(new LogicalSize(
-          Math.max(logicalSize.width, APPLICATION_MIN_SIZE.width),
-          Math.max(logicalSize.height, APPLICATION_MIN_SIZE.height)
-        ))
-      }
-    }
-  } catch (error) {
-    console.warn('window-size-update-failed', error)
-  }
-}
-
 function scrollProgress(element: HTMLElement | null | undefined) {
   if (!element) return 0
   const scrollable = element.scrollHeight - element.clientHeight
@@ -322,7 +301,7 @@ async function restoreReaderWindow() {
   await appWindow.setResizable(snapshot.resizable)
   await appWindow.setMaximizable(snapshot.maximizable)
   await appWindow.setMinimizable(snapshot.minimizable)
-  await appWindow.setMinSize(READER_MIN_SIZE)
+  await appWindow.setMinSize(APPLICATION_MIN_SIZE)
   await appWindow.setSize(snapshot.innerSize)
   await appWindow.setPosition(snapshot.position)
   if (snapshot.maximized) await appWindow.maximize()
@@ -602,7 +581,6 @@ onMounted(() => {
   } catch {}
   savePrivacySettings()
   syncReaderChrome()
-  void setReaderSizeLimit(true)
   scrollRoot = document.querySelector('.app-workspace')
   scrollRoot?.addEventListener('scroll', updateProgress, { passive: true })
   window.addEventListener('keydown', handleReaderKeydown)
@@ -626,7 +604,6 @@ onBeforeUnmount(() => {
   restoreApplicationChrome()
   void privacyRestore
     .catch(error => console.warn('privacy-window-restore-failed', error))
-    .finally(() => setReaderSizeLimit(false))
   scrollRoot?.removeEventListener('scroll', updateProgress)
   window.removeEventListener('keydown', handleReaderKeydown)
   window.removeEventListener('resize', updatePrivacyViewport)
