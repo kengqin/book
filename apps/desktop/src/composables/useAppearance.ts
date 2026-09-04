@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { syncApplicationWindowChrome } from '../services/window-chrome'
 
 export type Appearance = 'system' | 'light' | 'dark'
 
@@ -30,7 +31,12 @@ export function useAppearance() {
     } catch {
       // The selected appearance remains available for the current session.
     }
+    void syncApplicationWindowChrome()
   }
 
   return { appearance, setAppearance }
 }
+
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (appearance.value === 'system') void syncApplicationWindowChrome()
+})

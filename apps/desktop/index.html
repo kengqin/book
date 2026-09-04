@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-starting>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,7 +7,7 @@
     <title>小说书库</title>
     <style>
       html, body { margin: 0; width: 100%; height: 100%; background: #0e1715; }
-      #startup-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; overflow: hidden; color: #f2f0e7; background: radial-gradient(circle at 50% 35%, #294c43 0, #172722 38%, #0e1715 100%); font-family: "Microsoft YaHei", sans-serif; transition: opacity .38s ease, visibility .38s ease; }
+      #startup-splash { position: fixed; inset: 36px 0 0; z-index: 9999; display: grid; place-items: center; overflow: hidden; color: #f2f0e7; background: radial-gradient(circle at 50% 50%, #294c43 0, #172722 34%, #0e1715 70%); font-family: "Microsoft YaHei", sans-serif; transition: opacity .38s ease, visibility .38s ease; }
       #startup-splash::before, #startup-splash::after { content: ""; position: absolute; width: 42vmin; height: 42vmin; border: 1px solid rgba(223, 191, 114, .23); border-radius: 50%; animation: startup-orbit 9s linear infinite; }
       #startup-splash::after { width: 68vmin; height: 68vmin; border-color: rgba(137, 192, 176, .13); animation-duration: 14s; animation-direction: reverse; }
       .startup-splash__content { position: relative; z-index: 1; display: grid; justify-items: center; gap: 20px; padding: 30px 34px; text-align: center; }

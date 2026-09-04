@@ -45,7 +45,7 @@ async function search() {
 </script>
 
 <template>
-  <section class="workspace-view">
+  <section class="workspace-view search-view">
     <PageHeader title="全文搜索" />
     <div class="search-stage">
       <form class="search-control" role="search" @submit.prevent="search"><Search :size="19" /><input v-model="query" aria-label="搜索书库" placeholder="搜索书名、作者、章名或正文" /><button v-if="query" type="button" class="clear-search" title="清空" @click="clearSearch"><X :size="16" /></button><button type="submit" class="primary-command" :disabled="searching || !query.trim()">{{ searching ? '搜索中' : '搜索' }}</button></form>
