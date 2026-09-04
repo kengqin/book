@@ -37,11 +37,26 @@ unsafe fn set_color_attribute(hwnd: *mut std::ffi::c_void, attribute: u32, color
     );
 }
 
-pub fn set_reader_palette(window: &WebviewWindow, palette: Option<&str>) -> Result<(), String> {
+pub fn set_window_palette(window: &WebviewWindow, palette: Option<&str>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let hwnd = window.hwnd().map_err(|error| error.to_string())?;
         let colors = match palette {
+            Some("startup") => (
+                colorref(14, 23, 21),
+                colorref(242, 240, 231),
+                colorref(14, 23, 21),
+            ),
+            Some("app-light") => (
+                colorref(245, 245, 244),
+                colorref(28, 28, 27),
+                colorref(221, 220, 216),
+            ),
+            Some("app-dark") => (
+                colorref(21, 21, 21),
+                colorref(244, 244, 242),
+                colorref(52, 52, 50),
+            ),
             Some("light") => (
                 colorref(255, 255, 255),
                 colorref(41, 48, 44),
@@ -57,7 +72,7 @@ pub fn set_reader_palette(window: &WebviewWindow, palette: Option<&str>) -> Resu
                 colorref(224, 228, 224),
                 colorref(53, 65, 62),
             ),
-            Some(_) => return Err("unsupported reader palette".to_string()),
+            Some(_) => return Err("unsupported window palette".to_string()),
             None => (
                 DWMWA_COLOR_DEFAULT,
                 DWMWA_COLOR_DEFAULT,

@@ -358,11 +358,8 @@ async fn set_code_oss_wheel_injection(
 }
 
 #[tauri::command]
-fn set_reader_window_palette(
-    window: tauri::WebviewWindow,
-    palette: Option<String>,
-) -> Result<(), String> {
-    window_theme::set_reader_palette(&window, palette.as_deref())
+fn set_window_palette(window: tauri::WebviewWindow, palette: Option<String>) -> Result<(), String> {
+    window_theme::set_window_palette(&window, palette.as_deref())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -375,6 +372,10 @@ pub fn run() {
         .setup(|app| {
             if let Some(main_window) = app.get_webview_window("main") {
                 disable_browser_accelerator_keys(&main_window)?;
+                if let Err(error) = window_theme::set_window_palette(&main_window, Some("startup"))
+                {
+                    eprintln!("startup-window-theme-error: {error}");
+                }
             }
             let legacy_directory = legacy_data_directory(app.handle())?;
             let install_directory = installation_directory()?;
@@ -442,7 +443,7 @@ pub fn run() {
             install_ide_plugin,
             uninstall_ide_plugin,
             set_code_oss_wheel_injection,
-            set_reader_window_palette,
+            set_window_palette,
             updater::check_application_update,
             updater::download_application_update,
             updater::cancel_application_update_download,
