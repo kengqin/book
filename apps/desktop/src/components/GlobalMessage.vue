@@ -34,7 +34,7 @@ import { dismissGlobalMessage, globalMessage } from '../services/global-message'
   --message-accent: var(--ui-accent, #315f5a);
   position: fixed;
   z-index: 2400;
-  top: 18px;
+  top: 52px;
   left: 50%;
   display: flex;
   align-items: center;

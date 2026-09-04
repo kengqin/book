@@ -1,8 +1,46 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.17",
+  "latest": "0.6.18",
   "releases": [
+    {
+      "version": "0.6.18",
+      "date": "2026-09-04",
+      "title": "桌面界面与窗口框架重构",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.17",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.18",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.18/NovelLibrary_0.6.18_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": [
+            "Windows 桌面端新增与应用内容融为一体的自绘标题栏，支持窗口拖动、双击最大化、最小化、还原、关闭及四边四角缩放"
+          ]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "重新设计标题栏、侧栏、书架、全文搜索、工具库、设置、本地笔记、书籍详情、章节目录、导入弹窗和更新历史，统一中性色悬浮、圆角、浅分隔与紧凑间距",
+            "阅读工具栏改用轻阴影衔接正文，滚动条、表单、下拉菜单、全局消息和操作按钮同步贴合新版界面风格",
+            "应用外观和阅读配色同步至自绘标题栏及 Windows 窗口框架，减少分层感与启动颜色跳变"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "退出隐私阅读后继续保持自绘窗口框架，不再错误恢复 Windows 原生标题栏而出现双层顶部区域"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记、阅读设置、数据目录和隐私窗口设置无需迁移。"
+      ]
+    },
     {
       "version": "0.6.17",
       "date": "2026-09-04",
@@ -14,7 +52,7 @@
       "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.17",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.17/NovelLibrary_0.6.17_x64-setup.exe",
-      "sha256": "",
+      "sha256": "ae4863babbecc2c23c6a4c369ca3a99467036bf318f1fce872707b13bd567aef",
       "sections": [
         {
           "title": "修复",

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { ArrowRight, Database, Download, FolderOpen, Minimize2, Palette, RefreshCw, RotateCcw, Upload } from 'lucide-vue-next'
+import { ArrowRight, Database, Download, FolderOpen, RotateCcw, Upload } from 'lucide-vue-next'
 import { changeDesktopDatabaseFile, changeDesktopDataDirectory, exportDesktopBackup, getCloseBehavior, getDesktopStorageStatus, importDesktopBackup, resetDesktopDataDirectory, setCloseBehavior, type CloseBehavior, type DesktopStorageStatus } from '../services/desktop-library'
 import { availableUpdate, getCurrentVersion, publishedUpdateVersion } from '../services/release-center'
 import PageHeader from '../components/ui/PageHeader.vue'
@@ -173,7 +173,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="workspace-view">
+  <section class="workspace-view settings-view">
     <PageHeader title="设置" />
     <nav class="settings-tabs" aria-label="设置分类">
       <button type="button" :class="{ active: activeSection === 'general' }" @click="activeSection = 'general'">常规</button>
@@ -181,48 +181,50 @@ onMounted(async () => {
       <button type="button" :class="{ active: activeSection === 'updates' }" @click="activeSection = 'updates'">更新</button>
     </nav>
 
-    <div v-if="activeSection === 'general'" class="settings-panel">
-      <section class="setting-row">
-        <div class="setting-icon"><Palette :size="18" /></div>
-        <div class="setting-copy"><strong>应用外观</strong></div>
-        <UiSelect :model-value="appearance" :options="appearanceOptions" label="应用外观" @update:model-value="updateAppearance($event as 'system' | 'light' | 'dark')" />
-      </section>
-      <section class="setting-row">
-        <div class="setting-icon"><Minimize2 :size="18" /></div>
-        <div class="setting-copy"><strong>关闭窗口时</strong></div>
-        <UiSelect v-model="closeBehavior" :options="closeBehaviorOptions" label="关闭窗口行为" :disabled="busy" @change="saveCloseBehavior" />
-      </section>
-      <section class="setting-row setting-row-status">
-        <div class="setting-icon"><Database :size="18" /></div>
-        <div class="setting-copy"><strong>本地数据库</strong><span>{{ status?.databaseReady ? '已准备就绪' : '等待初始化' }}</span></div>
-        <span class="setting-state" :class="{ ready: status?.databaseReady }">{{ status?.databaseReady ? '正常' : '准备中' }}</span>
-      </section>
+    <div v-if="activeSection === 'general'" class="settings-section">
+      <p class="settings-group-label">应用</p>
+      <div class="settings-panel">
+        <section class="setting-row">
+          <div class="setting-copy"><strong>应用外观</strong><span>选择浅色、深色或跟随系统外观</span></div>
+          <UiSelect :model-value="appearance" :options="appearanceOptions" label="应用外观" @update:model-value="updateAppearance($event as 'system' | 'light' | 'dark')" />
+        </section>
+        <section class="setting-row">
+          <div class="setting-copy"><strong>关闭窗口时</strong><span>设置关闭主窗口时应用采取的操作</span></div>
+          <UiSelect v-model="closeBehavior" :options="closeBehaviorOptions" label="关闭窗口行为" :disabled="busy" @change="saveCloseBehavior" />
+        </section>
+        <section class="setting-row setting-row-status">
+          <div class="setting-copy"><strong>本地数据库</strong><span>{{ status?.databaseReady ? '已准备就绪' : '等待初始化' }}</span></div>
+          <span class="setting-state" :class="{ ready: status?.databaseReady }">{{ status?.databaseReady ? '正常' : '准备中' }}</span>
+        </section>
+      </div>
     </div>
 
-    <div v-else-if="activeSection === 'storage'" class="settings-panel">
-      <section class="setting-row setting-row-wide data-directory-setting">
-        <div class="setting-icon"><FolderOpen :size="18" /></div>
-        <div class="setting-copy"><strong>数据目录</strong><span>{{ status?.dataDirectory || '尚未创建' }}</span></div>
-        <div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="resetDataDirectory"><RotateCcw :size="15" />默认</button><button type="button" class="primary-command" :disabled="busy" @click="chooseDataDirectory"><FolderOpen :size="15" />更改</button></div>
-      </section>
-      <section class="setting-row setting-row-wide database-file-setting">
-        <div class="setting-icon"><Database :size="18" /></div>
-        <div class="setting-copy"><strong>数据库文件</strong><span>{{ status?.databasePath || '尚未创建' }}</span></div>
-        <button type="button" class="primary-command" :disabled="busy" @click="chooseDatabaseFile"><Database :size="15" />更改</button>
-      </section>
-      <section class="setting-row setting-row-wide backup-setting">
-        <div class="setting-icon"><Download :size="18" /></div>
-        <div class="setting-copy"><strong>完整数据备份</strong><span>书籍、章节、阅读进度和笔记</span></div>
-        <div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="importBackup"><Upload :size="15" />恢复</button><button type="button" class="primary-command" :disabled="busy" @click="exportBackup"><Download :size="15" />导出</button></div>
-      </section>
+    <div v-else-if="activeSection === 'storage'" class="settings-section">
+      <p class="settings-group-label">本地数据</p>
+      <div class="settings-panel">
+        <section class="setting-row setting-row-wide data-directory-setting">
+          <div class="setting-copy"><strong>数据目录</strong><span>{{ status?.dataDirectory || '尚未创建' }}</span></div>
+          <div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="resetDataDirectory"><RotateCcw :size="15" />默认</button><button type="button" class="primary-command" :disabled="busy" @click="chooseDataDirectory"><FolderOpen :size="15" />更改</button></div>
+        </section>
+        <section class="setting-row setting-row-wide database-file-setting">
+          <div class="setting-copy"><strong>数据库文件</strong><span>{{ status?.databasePath || '尚未创建' }}</span></div>
+          <button type="button" class="primary-command" :disabled="busy" @click="chooseDatabaseFile"><Database :size="15" />更改</button>
+        </section>
+        <section class="setting-row setting-row-wide backup-setting">
+          <div class="setting-copy"><strong>完整数据备份</strong><span>书籍、章节、阅读进度和笔记</span></div>
+          <div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="importBackup"><Upload :size="15" />恢复</button><button type="button" class="primary-command" :disabled="busy" @click="exportBackup"><Download :size="15" />导出</button></div>
+        </section>
+      </div>
     </div>
 
-    <div v-else class="settings-panel settings-update-panel">
-      <section class="setting-row setting-row-wide">
-        <div class="setting-icon"><RefreshCw :size="18" /></div>
-        <div class="setting-copy"><strong>版本与更新</strong><span v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</span><span v-else-if="publishedUpdateVersion">v{{ publishedUpdateVersion }} 已发布</span><span v-else>当前 v{{ currentVersion || '...' }}</span></div>
-        <RouterLink to="/settings/updates" class="primary-command">打开更新<ArrowRight :size="15" /></RouterLink>
-      </section>
+    <div v-else class="settings-section">
+      <p class="settings-group-label">版本</p>
+      <div class="settings-panel settings-update-panel">
+        <section class="setting-row setting-row-wide">
+          <div class="setting-copy"><strong>版本与更新</strong><span v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</span><span v-else-if="publishedUpdateVersion">v{{ publishedUpdateVersion }} 已发布</span><span v-else>当前 v{{ currentVersion || '...' }}</span></div>
+          <RouterLink to="/settings/updates" class="primary-command">打开更新<ArrowRight :size="15" /></RouterLink>
+        </section>
+      </div>
     </div>
     <UiConfirmDialog :open="Boolean(pendingSettingAction)" :busy="busy" :title="pendingSettingAction?.title || '确认更改设置？'" :description="pendingSettingAction?.description || ''" :confirm-label="pendingSettingAction?.confirmLabel || '确认'" @close="pendingSettingAction = null" @confirm="confirmSettingAction" />
   </section>

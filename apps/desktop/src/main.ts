@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import App from './App.vue'
 import { router } from './router'
+import { syncApplicationWindowChrome } from './services/window-chrome'
 import './styles.css'
 import './styles/editorial.css'
 
@@ -14,9 +15,17 @@ const startupStartedAt = performance.now()
 
 function dismissStartupSplash() {
   const splash = document.getElementById('startup-splash')
-  if (!splash) return
+  if (!splash) {
+    delete document.documentElement.dataset.starting
+    void syncApplicationWindowChrome()
+    return
+  }
   splash.classList.add('startup-splash--leaving')
-  window.setTimeout(() => splash.remove(), 420)
+  window.setTimeout(() => {
+    splash.remove()
+    delete document.documentElement.dataset.starting
+    void syncApplicationWindowChrome()
+  }, 420)
 }
 
 async function waitForStartup() {

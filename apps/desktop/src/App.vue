@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { PanelLeftOpen } from 'lucide-vue-next'
 import { isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useRoute, useRouter } from 'vue-router'
@@ -8,6 +7,7 @@ import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
 import GlobalMessage from './components/GlobalMessage.vue'
 import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
 import AppSidebar from './components/ui/AppSidebar.vue'
+import WindowTitlebar from './components/ui/WindowTitlebar.vue'
 import { useAppearance } from './composables/useAppearance'
 import { availableUpdate, checkForUpdates, configureBackgroundUpdateChecks, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
 import { showGlobalError } from './services/global-message'
@@ -51,13 +51,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'app-shell--reader': immersive, 'app-shell--sidebar-collapsed': sidebarCollapsed && !immersive }">
-    <AppSidebar v-if="!immersive" :has-update="Boolean(availableUpdate || publishedUpdateVersion)" :collapsed="sidebarCollapsed" @toggle="toggleSidebar" />
+  <div class="desktop-frame">
+    <WindowTitlebar :show-sidebar-toggle="!immersive" :sidebar-collapsed="sidebarCollapsed" @toggle-sidebar="toggleSidebar" />
+    <div class="app-shell" :class="{ 'app-shell--reader': immersive, 'app-shell--sidebar-collapsed': sidebarCollapsed && !immersive }">
+      <AppSidebar v-if="!immersive" :has-update="Boolean(availableUpdate || publishedUpdateVersion)" :collapsed="sidebarCollapsed" />
 
-    <main class="app-workspace">
-      <button v-if="sidebarCollapsed && !immersive" type="button" class="workspace-sidebar-toggle" title="展开侧栏" aria-label="展开侧栏" @click="toggleSidebar"><PanelLeftOpen :size="19" /></button>
-      <RouterView />
-    </main>
+      <main class="app-workspace">
+        <RouterView />
+      </main>
+    </div>
   </div>
   <GlobalUpdateStatus />
   <GlobalMessage />

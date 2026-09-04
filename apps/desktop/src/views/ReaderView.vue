@@ -3,13 +3,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AlignJustify, ArrowLeft, ChevronLeft, ChevronRight, EyeOff, LogOut, Minus, Moon, Pin, Plus, RotateCcw, Settings2, Sun, Type } from 'lucide-vue-next'
 import { formatChapterLabel, getCompactReaderWindow, isNumberedChapter } from '@novel-library/reader-core'
-import { invoke, isTauri } from '@tauri-apps/api/core'
+import { isTauri } from '@tauri-apps/api/core'
 import { LogicalSize, PhysicalPosition, type PhysicalSize } from '@tauri-apps/api/dpi'
-import { availableMonitors, getCurrentWindow, type Theme } from '@tauri-apps/api/window'
+import { availableMonitors, getCurrentWindow } from '@tauri-apps/api/window'
 import { getDesktopBook, getDesktopChapter, listDesktopChapters, saveDesktopProgress, type DesktopBook, type DesktopChapter, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 import { showGlobalError } from '../services/global-message'
 import { buildPrivacyReaderText } from '../services/privacy-reader-text'
+import { setWindowChrome, syncApplicationWindowChrome } from '../services/window-chrome'
 
 const route = useRoute()
 const router = useRouter()
@@ -182,21 +183,6 @@ async function togglePrivacyAlwaysOnTop() {
   }
 }
 
-function appearanceWindowTheme(): Theme | null {
-  const appearance = document.documentElement.dataset.appearance
-  return appearance === 'dark' ? 'dark' : appearance === 'light' ? 'light' : null
-}
-
-async function setWindowChrome(theme: Theme | null, readerPalette?: typeof palette.value) {
-  if (!isTauri()) return
-  try {
-    await getCurrentWindow().setTheme(theme)
-    await invoke('set_reader_window_palette', { palette: readerPalette ?? null })
-  } catch (error) {
-    console.warn('window-theme-update-failed', error)
-  }
-}
-
 function syncReaderChrome() {
   const activePalette = privacyMode.value ? privacyPalette.value : palette.value
   document.documentElement.dataset.readerPalette = activePalette
@@ -205,7 +191,7 @@ function syncReaderChrome() {
 
 function restoreApplicationChrome() {
   delete document.documentElement.dataset.readerPalette
-  void setWindowChrome(appearanceWindowTheme())
+  void syncApplicationWindowChrome()
 }
 
 function scrollProgress(element: HTMLElement | null | undefined) {
@@ -296,7 +282,9 @@ async function restoreReaderWindow() {
   const snapshot = readerWindowSnapshot
   await appWindow.setAlwaysOnTop(snapshot.alwaysOnTop)
   await appWindow.setSkipTaskbar(false)
-  await appWindow.setDecorations(true)
+  // The application always uses its own titlebar. Privacy mode must restore the
+  // normal window geometry without re-enabling the native Windows frame.
+  await appWindow.setDecorations(false)
   await appWindow.setShadow(true)
   await appWindow.setResizable(snapshot.resizable)
   await appWindow.setMaximizable(snapshot.maximizable)
