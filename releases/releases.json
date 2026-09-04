@@ -1,8 +1,32 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.16",
+  "latest": "0.6.17",
   "releases": [
+    {
+      "version": "0.6.17",
+      "date": "2026-09-04",
+      "title": "阅读窗口位置稳定性修复",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.16",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.17",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.17/NovelLibrary_0.6.17_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "修复",
+          "items": [
+            "普通阅读和紧凑阅读不再改动桌面窗口的最小尺寸、位置或大小，点击开始阅读及退出阅读时窗口保持稳定；仅隐私模式继续记忆独立的窗口位置和大小"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记、阅读设置和隐私窗口设置无需迁移。"
+      ]
+    },
     {
       "version": "0.6.16",
       "date": "2026-09-02",
