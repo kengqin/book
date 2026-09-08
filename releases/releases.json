@@ -1,8 +1,35 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.18",
+  "latest": "0.6.19",
   "releases": [
+    {
+      "version": "0.6.19",
+      "date": "2026-09-08",
+      "title": "阅读设置与侧栏交互优化",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.18",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.19",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.19/NovelLibrary_0.6.19_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "新增",
+          "items": ["侧栏支持拖动和键盘调整宽度，并自动记忆宽度"]
+        },
+        {
+          "title": "优化",
+          "items": [
+            "阅读设置移至右下角浮动面板，集中调整字号、行距和纸张配色；隐私模式保留独立入口",
+            "阅读顶部突出当前章节标题，统一隐私模式文案，移除独立紧凑阅读模式"
+          ]
+        }
+      ],
+      "upgradeNotes": ["桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记、阅读设置、数据目录和隐私窗口设置无需迁移。"]
+    },
     {
       "version": "0.6.18",
       "date": "2026-09-04",
@@ -14,7 +41,7 @@
       "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.18",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.18/NovelLibrary_0.6.18_x64-setup.exe",
-      "sha256": "",
+      "sha256": "9267ccf4aee000ee292314866923d4a6e1be3ef6ac1d91c491daff35e7ed2e84",
       "sections": [
         {
           "title": "新增",
