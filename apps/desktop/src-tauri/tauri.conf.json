@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NovelLibrary",
-  "version": "0.6.19",
+  "version": "0.6.20",
   "identifier": "com.kengqin.novellibrary",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -20,7 +20,7 @@
         "minHeight": 560,
         "center": true,
         "decorations": false,
-        "backgroundColor": "#0e1715"
+        "backgroundColor": "#f7f3ee"
       }
     ],
     "security": {

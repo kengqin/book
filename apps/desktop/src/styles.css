@@ -318,8 +318,9 @@ button { letter-spacing: 0; }
 .reader-controls output { min-width: 20px; text-align: center; font-size: 10px; }
 .desktop-reader--night .desktop-reader-toolbar { color: #e0e4e0; border-bottom-color: #35413e; background: rgba(24,31,29,.96); }
 .desktop-reader--night .reader-controls label { border-color: #47534f; background: #232c29; }
-.desktop-reader-content { width: min(840px, calc(100% - 56px)); margin: 0 auto; padding: 54px 0 72px; }
-.desktop-reader-content article { width: min(700px, 100%); margin: 0 auto; font-family: "Noto Serif SC", SimSun, serif; }
+.desktop-reader-content { width: min(var(--reader-page-width, 840px), calc(100% - 56px)); margin: 0 auto; padding: 54px 0 72px; }
+.desktop-reader-content article { width: min(var(--reader-text-width, 700px), 100%); margin: 0 auto; font-family: "Noto Serif SC", SimSun, serif; }
+.desktop-reader-content .reader-body-paragraph { text-indent: 2em; overflow-wrap: anywhere; }
 .reader-volume { margin: 0 0 8px !important; color: #7c8177; font-family: Inter, sans-serif !important; font-size: 10px !important; font-weight: 800; }
 .desktop-reader-content h1 { margin: 0 0 40px; font-size: 30px; letter-spacing: 0; }
 .desktop-reader-content article > p { margin: 0 0 1.1em; font-size: var(--reader-font-size); line-height: var(--reader-line-height); text-align: justify; }

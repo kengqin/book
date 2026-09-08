@@ -43,9 +43,9 @@ pub fn set_window_palette(window: &WebviewWindow, palette: Option<&str>) -> Resu
         let hwnd = window.hwnd().map_err(|error| error.to_string())?;
         let colors = match palette {
             Some("startup") => (
-                colorref(14, 23, 21),
-                colorref(242, 240, 231),
-                colorref(14, 23, 21),
+                colorref(247, 243, 238),
+                colorref(85, 83, 79),
+                colorref(247, 243, 238),
             ),
             Some("app-light") => (
                 colorref(245, 245, 244),
@@ -66,6 +66,11 @@ pub fn set_window_palette(window: &WebviewWindow, palette: Option<&str>) -> Resu
                 colorref(238, 233, 220),
                 colorref(45, 48, 44),
                 colorref(198, 192, 179),
+            ),
+            Some("ivory") => (
+                colorref(242, 239, 229),
+                colorref(49, 48, 44),
+                colorref(221, 216, 203),
             ),
             Some("night") => (
                 colorref(23, 28, 27),

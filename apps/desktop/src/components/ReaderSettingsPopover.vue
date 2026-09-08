@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Eye, Minus, Plus, Settings2, X } from 'lucide-vue-next'
+import { Eye, List, Minus, Plus, Settings2, X } from 'lucide-vue-next'
+import { readerFonts, readerWidths, type ReaderWidth, type ReaderFont, type ReaderPalette } from '../services/reader-appearance'
 
-const emit = defineEmits<{ privacy: [] }>()
+const emit = defineEmits<{ privacy: []; catalogue: [] }>()
 
 const fontSize = defineModel<number>('fontSize', { required: true })
 const lineHeight = defineModel<number>('lineHeight', { required: true })
-const palette = defineModel<'light' | 'paper' | 'night'>('palette', { required: true })
+const palette = defineModel<ReaderPalette>('palette', { required: true })
+const font = defineModel<ReaderFont>('font', { required: true })
+const pageWidth = defineModel<ReaderWidth>('pageWidth', { required: true })
 const open = ref(false)
 const dock = ref<HTMLElement>()
 const panel = ref<HTMLElement>()
@@ -20,6 +23,11 @@ function close(restoreFocus = false) {
 function enterPrivacy() {
   close()
   emit('privacy')
+}
+
+function openCatalogue() {
+  close()
+  emit('catalogue')
 }
 
 async function toggle() {
@@ -55,6 +63,12 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', dismissOutside
     <section v-if="open" id="reader-settings-panel" ref="panel" class="reader-settings-panel" role="dialog" aria-label="阅读设置" tabindex="-1">
       <header><strong>阅读设置</strong><button type="button" class="reader-settings-close" aria-label="关闭阅读设置" @click="close(true)"><X :size="15" /></button></header>
       <div class="reader-setting-row">
+        <span id="reader-family-label">字体</span>
+        <div class="reader-setting-segments" role="group" aria-labelledby="reader-family-label">
+          <button v-for="(item, key) in readerFonts" :key="key" type="button" :aria-pressed="font === key" :style="{ fontFamily: item.family }" @click="font = key">{{ item.label }}</button>
+        </div>
+      </div>
+      <div class="reader-setting-row">
         <span id="reader-font-label">字号</span>
         <div class="reader-setting-stepper" role="group" aria-labelledby="reader-font-label">
           <button type="button" aria-label="减小字号" :disabled="fontSize <= 15" @click="fontSize = Math.max(15, fontSize - 1)"><Minus :size="14" /></button>
@@ -71,10 +85,17 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', dismissOutside
       <div class="reader-setting-row">
         <span id="reader-palette-label">纸张</span>
         <div class="reader-setting-segments" role="group" aria-labelledby="reader-palette-label">
-          <button v-for="item in ([['light', '白色'], ['paper', '纸色'], ['night', '夜间']] as const)" :key="item[0]" type="button" :aria-pressed="palette === item[0]" @click="palette = item[0]">{{ item[1] }}</button>
+          <button v-for="item in ([['light', '白色'], ['paper', '纸色'], ['ivory', '米白'], ['night', '夜间']] as const)" :key="item[0]" type="button" :aria-pressed="palette === item[0]" @click="palette = item[0]">{{ item[1] }}</button>
+        </div>
+      </div>
+      <div class="reader-setting-row reader-setting-row--width">
+        <span id="reader-width-label">页面宽度</span>
+        <div class="reader-setting-segments" role="group" aria-labelledby="reader-width-label">
+          <button v-for="width in readerWidths" :key="width" type="button" :aria-pressed="pageWidth === width" @click="pageWidth = width">{{ width === 'auto' ? '自动' : width }}</button>
         </div>
       </div>
     </section>
+    <button type="button" class="reader-settings-trigger" title="目录" aria-label="目录" aria-haspopup="dialog" @click="openCatalogue"><List :size="19" /></button>
     <button type="button" class="reader-settings-trigger reader-privacy-trigger" title="进入隐私模式" aria-label="进入隐私模式" @click="enterPrivacy"><Eye :size="19" /></button>
     <button ref="trigger" type="button" class="reader-settings-trigger" title="阅读设置" aria-label="阅读设置" aria-haspopup="dialog" aria-controls="reader-settings-panel" :aria-expanded="open" @click="toggle"><Settings2 :size="19" /></button>
   </div>
@@ -83,12 +104,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', dismissOutside
 <style scoped>
 .reader-settings-dock { --settings-surface: #fff; position: fixed; z-index: 10; right: 24px; bottom: 20px; display: grid; gap: 8px; color: inherit; }
 :global(.desktop-reader--paper .reader-settings-dock) { --settings-surface: #f6f2e8; }
+:global(.desktop-reader--ivory .reader-settings-dock) { --settings-surface: #faf8f2; }
 :global(.desktop-reader--night .reader-settings-dock) { --settings-surface: #202725; }
 .reader-settings-trigger { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: 12px; box-shadow: 0 4px 16px #0000000c; }
-.reader-settings-panel { position: absolute; right: 0; bottom: 96px; width: 280px; max-width: calc(100vw - 48px); max-height: calc(100dvh - 176px); display: grid; gap: 15px; overflow-y: auto; padding: 16px; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: 14px; background: var(--settings-surface); box-shadow: 0 12px 38px #00000020; outline: none; }
+.reader-settings-panel { position: absolute; right: 0; bottom: 142px; width: 350px; box-sizing: border-box; max-width: calc(100vw - 48px); max-height: calc(100dvh - 222px); display: grid; gap: 15px; overflow-y: auto; padding: 16px; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: 14px; background: var(--settings-surface); box-shadow: 0 12px 38px #00000020; outline: none; }
 .reader-settings-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
 .reader-settings-panel strong { font-size: 13px; font-weight: 650; }
-.reader-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.reader-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .reader-setting-row > span { flex-shrink: 0; font-size: 12px; opacity: .7; }
 .reader-settings-dock button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: inherit; background: var(--settings-surface); cursor: pointer; }
 .reader-settings-dock button:hover:not(:disabled), .reader-settings-trigger[aria-expanded="true"] { background: color-mix(in srgb, currentColor 8%, var(--settings-surface)); }
@@ -100,4 +122,10 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', dismissOutside
 .reader-setting-stepper output { min-width: 27px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .reader-setting-stepper button { padding-inline: 6px; }
 .reader-setting-stepper button:disabled { opacity: .3; cursor: default; }
+.reader-setting-row--width .reader-setting-segments { flex-wrap: nowrap; min-width: 0; overflow-x: auto; box-sizing: border-box; }
+.reader-setting-row--width button { padding-inline: 8px; white-space: nowrap; }
+.reader-settings-dock .reader-settings-trigger { background: color-mix(in srgb, var(--settings-surface) 65%, #fff); border-color: color-mix(in srgb, currentColor 5%, transparent); box-shadow: 0 2px 8px #00000005; }
+.reader-settings-dock .reader-settings-trigger:hover,
+.reader-settings-dock .reader-settings-trigger[aria-expanded="true"] { background: color-mix(in srgb, currentColor 5%, var(--settings-surface)); }
+:global(.desktop-reader--night .reader-settings-dock .reader-settings-trigger) { background: #252c2a; }
 </style>
