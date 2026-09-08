@@ -10,8 +10,11 @@ import { getDesktopBook, getDesktopChapter, listDesktopChapters, saveDesktopProg
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 import { showGlobalError } from '../services/global-message'
 import { buildPrivacyReaderText } from '../services/privacy-reader-text'
-import { setWindowChrome, syncApplicationWindowChrome } from '../services/window-chrome'
+import { setReaderWindowPalette, syncApplicationWindowChrome } from '../services/window-chrome'
 import ReaderSettingsPopover from '../components/ReaderSettingsPopover.vue'
+import ReaderCatalogueDialog from '../components/ReaderCatalogueDialog.vue'
+import { normalizeReaderFont, normalizeReaderWidth, readerFonts, type ReaderWidth, type ReaderFont, type ReaderPalette } from '../services/reader-appearance'
+import { normalizeParagraphStart, prepareReaderParagraphs } from '../services/reader-paragraphs'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,9 +22,12 @@ const book = ref<DesktopBook>()
 const chapter = ref<DesktopChapter>()
 const chapters = ref<DesktopChapterSummary[]>([])
 const loading = ref(true)
+const catalogue = ref<InstanceType<typeof ReaderCatalogueDialog>>()
 const fontSize = ref(18)
 const lineHeight = ref(2.05)
-const palette = ref<'light' | 'paper' | 'night'>('paper')
+const palette = ref<ReaderPalette>('paper')
+const font = ref<ReaderFont>('original')
+const pageWidth = ref<ReaderWidth>(800)
 const privacyAnchor = ref(0)
 const privacyMode = ref(false)
 type PrivacyPalette = 'light' | 'night'
@@ -82,13 +88,10 @@ const chapterNumber = computed(() => Number(route.params.chapterNumber))
 const chapterIndex = computed(() => chapters.value.findIndex(item => item.number === chapter.value?.number))
 const previous = computed(() => chapters.value[chapterIndex.value - 1])
 const next = computed(() => chapters.value[chapterIndex.value + 1])
-const volumeChapters = computed(() => chapter.value && isNumberedChapter(chapter.value)
-  ? chapters.value.filter(item => isNumberedChapter(item) && item.volume === chapter.value?.volume)
-  : [])
-const volumeChapterIndex = computed(() => volumeChapters.value.findIndex(item => item.number === chapter.value?.number))
-const paragraphs = computed(() => chapter.value?.content.split(/\n{2,}/).filter(Boolean) ?? [])
+const paragraphs = computed(() => chapter.value?.content.split(/\r?\n/).map(normalizeParagraphStart).filter(text => text.trim()) ?? [])
 const isRichContent = computed(() => chapter.value?.contentFormat === 'html')
 const safeRichContent = computed(() => isRichContent.value ? sanitizeReaderHtml(chapter.value?.content || '') : '')
+const formattedRichContent = computed(() => prepareReaderParagraphs(safeRichContent.value))
 const privacyText = computed(() => {
   if (!chapter.value) return ''
   return buildPrivacyReaderText(
@@ -120,25 +123,26 @@ function chapterDisplayLabel() {
   return ''
 }
 
-function chapterPositionLabel() {
-  if (!chapter.value) return ''
-  if (isNumberedChapter(chapter.value)) {
-    const label = chapterDisplayLabel()
-    return (label ? label + ' · ' : '') + '本卷 ' + (volumeChapterIndex.value + 1) + ' / ' + volumeChapters.value.length
-  }
-  const kindLabel = chapter.value.kind === 'volume' ? '分卷' : chapter.value.kind === 'frontmatter' ? '前置内容' : '附加内容'
-  return kindLabel + ' · 全书 ' + (chapterIndex.value + 1) + ' / ' + chapters.value.length + ' 项'
-}
-
 function chapterHeading() {
   if (!chapter.value) return ''
   if (!isNumberedChapter(chapter.value)) return chapter.value.title
   const label = chapterDisplayLabel()
-  return label ? `${label} ${chapter.value.title}` : chapter.value.title
+  if (/^第[零〇一二两三四五六七八九十百千万\d]+[章节回]/u.test(chapter.value.title)) return chapter.value.title
+  const ordinal = chapters.value.filter(isNumberedChapter).findIndex(item => item.number === chapter.value?.number) + 1
+  return `${label || `第${Math.max(1, ordinal)}章`} ${chapter.value.title}`
 }
 
+const chapterMetadata = computed(() => {
+  if (!book.value || !chapter.value) return ''
+  return [
+    book.value.title,
+    book.value.author?.trim() || '',
+    `${chapter.value.wordCount.toLocaleString('zh-CN')} 字`,
+  ].filter(Boolean).join('\u2002·\u2002')
+})
+
 function saveSettings() {
-  localStorage.setItem('desktop-reader-settings', JSON.stringify({ fontSize: fontSize.value, lineHeight: lineHeight.value, palette: palette.value }))
+  localStorage.setItem('desktop-reader-settings', JSON.stringify({ fontSize: fontSize.value, lineHeight: lineHeight.value, palette: palette.value, font: font.value, pageWidth: pageWidth.value }))
 }
 
 function savePrivacySettings() {
@@ -181,7 +185,7 @@ async function togglePrivacyAlwaysOnTop() {
 function syncReaderChrome() {
   const activePalette = privacyMode.value ? privacyPalette.value : palette.value
   document.documentElement.dataset.readerPalette = activePalette
-  void setWindowChrome(activePalette === 'night' ? 'dark' : 'light', activePalette)
+  void setReaderWindowPalette(activePalette)
 }
 
 function restoreApplicationChrome() {
@@ -530,7 +534,9 @@ onMounted(() => {
     const stored = JSON.parse(localStorage.getItem('desktop-reader-settings') || '{}')
     if (stored.fontSize) fontSize.value = stored.fontSize
     if (stored.lineHeight) lineHeight.value = stored.lineHeight
-    if (stored.palette) palette.value = stored.palette
+    if (['light', 'paper', 'ivory', 'night'].includes(stored.palette)) palette.value = stored.palette
+    font.value = normalizeReaderFont(stored.font)
+    pageWidth.value = normalizeReaderWidth(stored.pageWidth)
   } catch {}
   privacyPalette.value = localStorage.getItem('desktop-reader-privacy-palette') === 'night' ? 'night' : 'light'
   try {
@@ -578,7 +584,7 @@ onBeforeUnmount(() => {
   window.clearTimeout(progressTimer)
   window.clearTimeout(privacyBoundsTimer)
 })
-watch([fontSize, lineHeight, palette], saveSettings)
+watch([fontSize, lineHeight, palette, font, pageWidth], saveSettings)
 watch([palette, privacyPalette], syncReaderChrome)
 watch(privacyPalette, value => localStorage.setItem('desktop-reader-privacy-palette', value))
 watch([privacyFontSize, privacyLineHeight, privacyCustomTextColor], savePrivacySettings)
@@ -595,6 +601,9 @@ watch(() => route.params.chapterNumber, load)
     :style="{
       '--reader-font-size': `${privacyMode ? privacyFontSize : fontSize}px`,
       '--reader-line-height': privacyMode ? privacyLineHeight : lineHeight,
+      '--reader-font-family': readerFonts[font].family,
+      '--reader-page-width': pageWidth === 'auto' ? '840px' : `${pageWidth}px`,
+      '--reader-text-width': pageWidth === 'auto' ? '700px' : `${pageWidth - 64}px`,
       '--privacy-visible-lines': privacyLines,
       '--privacy-text-color': privacyTextColor
     }"
@@ -698,28 +707,33 @@ watch(() => route.params.chapterNumber, load)
         <button type="button" class="icon-button" title="返回目录" aria-label="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button>
         <div v-if="book && chapter" class="reader-chapter-heading">
           <strong :title="chapterHeading()">{{ chapterHeading() }}</strong>
-          <span :title="`${book.title} · ${chapterPositionLabel()}`">{{ book.title }} · {{ chapterPositionLabel() }}</span>
+          <span :title="chapterMetadata">{{ chapterMetadata }}</span>
         </div>
       </header>
       <ReaderSettingsPopover
         v-model:font-size="fontSize"
         v-model:line-height="lineHeight"
         v-model:palette="palette"
+        v-model:font="font"
+        v-model:page-width="pageWidth"
         @privacy="enterPrivacyMode()"
+        @catalogue="catalogue?.show()"
       />
       <div v-if="loading" class="view-status" role="status">正在加载章节...</div>
       <main v-else-if="book && chapter" class="desktop-reader-content">
-        <article>
+        <article :class="{ 'reader-custom-font': font !== 'original' }">
           <p v-if="chapter.kind !== 'volume'" class="reader-volume">{{ chapter.volume || book.title }}</p>
           <h1>{{ chapterHeading() }}</h1>
-          <div v-if="isRichContent" class="epub-content" v-html="safeRichContent" />
-          <template v-else><p v-for="(paragraph, index) in paragraphs" :key="index">{{ paragraph }}</p></template>
+          <div v-if="isRichContent" class="epub-content" v-html="formattedRichContent" />
+          <template v-else><p v-for="(paragraph, index) in paragraphs" :key="index" class="reader-body-paragraph">{{ paragraph }}</p></template>
         </article>
-        <footer>
-          <button type="button" :disabled="!previous" @click="previous && openChapter(previous.number)"><ChevronLeft :size="18" /><span><small>上一章</small>{{ previous?.title || '已经是第一章' }}</span></button>
-          <button type="button" :disabled="!next" @click="next && openChapter(next.number)"><span><small>下一章</small>{{ next?.title || '已经是最后一章' }}</span><ChevronRight :size="18" /></button>
-        </footer>
+        <nav class="reader-chapter-nav" aria-label="章节导航">
+          <button type="button" :disabled="!previous || loading" :title="previous?.title || '已经是第一章'" @click="previous && openChapter(previous.number)"><ChevronLeft :size="18" /><span>上一章</span></button>
+          <button type="button" aria-haspopup="dialog" @click="catalogue?.show()">目录</button>
+          <button type="button" :disabled="!next || loading" :title="next?.title || '已经是最后一章'" @click="next && openChapter(next.number)"><span>下一章</span><ChevronRight :size="18" /></button>
+        </nav>
       </main>
+      <ReaderCatalogueDialog ref="catalogue" :chapters="chapters" :current="chapterNumber" @select="openChapter" />
     </template>
   </section>
 </template>

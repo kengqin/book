@@ -1,8 +1,26 @@
 {
   "schemaVersion": 1,
   "repository": "kengqin/book",
-  "latest": "0.6.19",
+  "latest": "0.6.20",
   "releases": [
+    {
+      "version": "0.6.20",
+      "date": "2026-09-08",
+      "title": "阅读排版与目录交互优化",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.19",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.20",
+      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.20/NovelLibrary_0.6.20_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        { "title": "新增", "items": ["阅读设置新增米白配色、字体选择和页面宽度，默认宽度为 800，并记忆个人设置", "阅读页新增双列目录弹框，支持章节搜索、倒序与当前章节定位"] },
+        { "title": "优化", "items": ["正文统一首行缩进，避免重复空格缩进；优化章节标题、作者与字数信息展示", "章末采用上一章、目录、下一章一体式导航，右下角集中目录、隐私与设置入口", "统一阅读弹框、悬浮控件与窗口配色，优化启动翻页动画与加载衔接"] }
+      ],
+      "upgradeNotes": ["数据库 Schema 保持为 6，书库、阅读进度、笔记和数据目录无需迁移。已有字体与宽度选择继续保留。"]
+    },
     {
       "version": "0.6.19",
       "date": "2026-09-08",

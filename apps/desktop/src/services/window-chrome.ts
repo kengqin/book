@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow, type Theme } from '@tauri-apps/api/window'
 
-export type WindowPalette = 'startup' | 'app-light' | 'app-dark' | 'light' | 'paper' | 'night'
+export type WindowPalette = 'startup' | 'app-light' | 'app-dark' | 'light' | 'paper' | 'ivory' | 'night'
 
 export function applicationWindowTheme(): Theme {
   const appearance = document.documentElement.dataset.appearance
@@ -16,6 +16,17 @@ export async function setWindowChrome(theme: Theme | null, palette: WindowPalett
     await invoke('set_window_palette', { palette })
   } catch (error) {
     console.warn('window-theme-update-failed', error)
+  }
+}
+
+// Reader colors are temporary. setTheme also changes the WebView's
+// prefers-color-scheme, which would leak this choice into application appearance.
+export async function setReaderWindowPalette(palette: 'light' | 'paper' | 'ivory' | 'night') {
+  if (!isTauri()) return
+  try {
+    await invoke('set_window_palette', { palette })
+  } catch (error) {
+    console.warn('reader-window-palette-update-failed', error)
   }
 }
 
