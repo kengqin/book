@@ -3,45 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#18211f" />
+    <meta name="theme-color" content="#f7f3ee" />
     <title>小说书库</title>
     <style>
-      html, body { margin: 0; width: 100%; height: 100%; background: #0e1715; }
-      #startup-splash { position: fixed; inset: 36px 0 0; z-index: 9999; display: grid; place-items: center; overflow: hidden; color: #f2f0e7; background: radial-gradient(circle at 50% 50%, #294c43 0, #172722 34%, #0e1715 70%); font-family: "Microsoft YaHei", sans-serif; transition: opacity .38s ease, visibility .38s ease; }
-      #startup-splash::before, #startup-splash::after { content: ""; position: absolute; width: 42vmin; height: 42vmin; border: 1px solid rgba(223, 191, 114, .23); border-radius: 50%; animation: startup-orbit 9s linear infinite; }
-      #startup-splash::after { width: 68vmin; height: 68vmin; border-color: rgba(137, 192, 176, .13); animation-duration: 14s; animation-direction: reverse; }
-      .startup-splash__content { position: relative; z-index: 1; display: grid; justify-items: center; gap: 20px; padding: 30px 34px; text-align: center; }
-      .startup-splash__content::before { content: ""; position: absolute; inset: 12px -22px; z-index: -1; border: 1px solid rgba(137, 192, 176, .1); background: radial-gradient(ellipse at center, rgba(52, 93, 80, .18), transparent 68%); box-shadow: 0 22px 80px rgba(4, 13, 11, .2); }
-      .startup-splash__mark { position: relative; width: 82px; height: 82px; display: grid; place-items: center; color: #f3dfac; border: 1px solid rgba(243, 223, 172, .7); box-shadow: 0 0 0 8px rgba(243, 223, 172, .06), 0 0 42px rgba(223, 191, 114, .16); animation: startup-breathe 2.6s ease-in-out infinite; }
-      .startup-splash__mark::before, .startup-splash__mark::after { content: ""; position: absolute; width: 7px; height: 7px; border: 1px solid #dfbf72; transform: rotate(45deg); }
-      .startup-splash__mark::before { top: -5px; left: -5px; }
-      .startup-splash__mark::after { right: -5px; bottom: -5px; }
-      .startup-splash__book { width: 27px; height: 31px; position: relative; border: 2px solid currentColor; border-radius: 2px 4px 4px 2px; }
-      .startup-splash__book::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; border-left: 1px solid currentColor; }
-      .startup-splash__brand { display: grid; justify-items: center; }
-      .startup-splash__title { margin: 0; font-family: "Noto Serif SC", SimSun, serif; font-size: 29px; line-height: 1.15; letter-spacing: .18em; text-indent: .18em; }
-      .startup-splash__loading { min-width: 166px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 2px; padding: 9px 14px; color: #d9c58d; border: 1px solid rgba(223, 191, 114, .2); background: rgba(8, 20, 17, .2); font-size: 11px; line-height: 1.2; letter-spacing: .12em; }
-      .startup-splash__dots { display: inline-flex; gap: 4px; }
-      .startup-splash__dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: startup-dot 1.2s ease-in-out infinite; }
-      .startup-splash__dots i:nth-child(2) { animation-delay: .16s; }
-      .startup-splash__dots i:nth-child(3) { animation-delay: .32s; }
+      html, body { margin: 0; width: 100%; height: 100%; background: #f7f3ee; }
+      #startup-splash { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; overflow: hidden; background: radial-gradient(ellipse at 0% 0%, #e6f7f7 0, transparent 42%), radial-gradient(ellipse at 85% 95%, #faf0f4 0, transparent 55%), #f7f3ee; transition: opacity .38s ease, visibility .38s ease; }
+      .startup-splash__mark { width: 64px; height: 64px; animation: startup-appear .5s ease-out both; }
+      .startup-splash__icon { display: block; width: 100%; height: 100%; overflow: visible; }
       #startup-splash.startup-splash--leaving { opacity: 0; visibility: hidden; pointer-events: none; }
-      @keyframes startup-orbit { to { transform: rotate(360deg); } }
-      @keyframes startup-breathe { 50% { transform: translateY(-4px) scale(1.03); box-shadow: 0 0 0 12px rgba(243, 223, 172, .04), 0 0 56px rgba(223, 191, 114, .24); } }
-      @keyframes startup-dot { 0%, 60%, 100% { opacity: .28; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
-      @media (max-height: 620px) { .startup-splash__content { gap: 13px; padding: 20px 26px; transform: scale(.88); } }
-      @media (max-width: 520px) { .startup-splash__content { padding-inline: 22px; } .startup-splash__title { font-size: 25px; } }
-      @media (prefers-reduced-motion: reduce) { #startup-splash::before, #startup-splash::after, .startup-splash__mark, .startup-splash__dots i { animation: none; } }
+      @keyframes startup-appear { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+      @media (prefers-reduced-motion: reduce) { .startup-splash__mark, .startup-splash__sheet { animation: none; } .startup-splash__sheet { display: none; } #startup-splash { transition: none; } }
     </style>
   </head>
   <body>
-    <div id="startup-splash" role="status" aria-live="polite" aria-label="正在启动小说书库">
-      <div class="startup-splash__content">
-        <div class="startup-splash__mark" aria-hidden="true"><span class="startup-splash__book"></span></div>
-        <div class="startup-splash__brand">
-          <p class="startup-splash__title">小说书库</p>
-        </div>
-        <div class="startup-splash__loading">正在启动 <span class="startup-splash__dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
+    <div id="startup-splash" role="status" aria-live="polite" aria-label="正在启动小说书库" aria-busy="true">
+      <div class="startup-splash__mark" aria-hidden="true">
+        <svg class="startup-splash__icon" viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <defs>
+            <!-- One shared paper material: the landed sheet and page below match. -->
+            <linearGradient id="paper" x1="32" y1="16" x2="32" y2="50" gradientUnits="userSpaceOnUse"><stop stop-color="#f8f5ef"/><stop offset="1" stop-color="#efebe4"/></linearGradient>
+          </defs>
+          <!-- Quiet cover and page block remain fixed throughout the turn. -->
+          <path d="M7 22 Q20 18 32 25 Q44 21 57 22 L57 50 Q44 50 32 54 Q20 48 7 51 Z" fill="#d6d2cc" stroke="#b9b4ad" stroke-width="1.2"/>
+          <!-- A slightly fuller stack on the left, without changing the turning surface. -->
+          <path d="M8 48 Q20 45 31 52" stroke="#eeeae4" stroke-width=".8"/>
+          <path class="startup-splash__left-page" d="M32 22 C25 18 16 17 8 19 C8 27 8 37 8 46 C17 44 24 46 32 50 Z" fill="url(#paper)" stroke="#bdb6ac" stroke-width=".85"/>
+          <path class="startup-splash__right-page" d="M32 22 C40 20 48 19 56 20 C56 28 56 38 56 48 C48 47 40 48 32 50 Z" fill="url(#paper)" stroke="#bdb6ac" stroke-width=".85"/>
+          <path class="startup-splash__sheet" d="M32 22 C40 20 48 19 56 20 C56 28 56 38 56 48 C48 47 40 48 32 50 Z" fill="url(#paper)" stroke="#bdb6ac" stroke-width=".85"/>
+          <!-- Fixed logo bookmark: paint above the animated sheet so it never blinks out. -->
+          <path class="startup-splash__bookmark" d="M46 19.5 L50 19.5 L50 29 L48 27.5 L46 29 Z" fill="#b6aaa1"/>
+        </svg>
       </div>
     </div>
     <div id="app"></div>

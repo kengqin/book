@@ -170,12 +170,12 @@ a:focus-visible {
 .window-resize-handle--south-east { right: 0; bottom: 0; cursor: se-resize; }
 .window-resize-handle--south-west { bottom: 0; left: 0; cursor: sw-resize; }
 
-html[data-starting] .window-titlebar { color: #f2f0e7; background: #0e1715; }
-html[data-starting] .window-titlebar::after { background: #0e1715; }
-html[data-starting] .window-titlebar-main { color: #f2f0e7; border-color: #0e1715; background: #0e1715; }
+html[data-starting] .window-titlebar { color: #55534f; background: transparent !important; }
+html[data-starting] .window-titlebar::after { background: transparent !important; }
+html[data-starting] .window-titlebar-main { color: #55534f; border-color: transparent; background: transparent !important; }
 html[data-starting] .window-controls button,
-html[data-starting] .window-sidebar-toggle { color: #d7dfdc; }
-html[data-starting] .window-titlebar-brand strong { color: #f2f0e7; }
+html[data-starting] .window-sidebar-toggle { color: #55534f; }
+html[data-starting] .window-titlebar-brand { visibility: hidden; }
 
 html[data-reader-palette="light"] .window-titlebar,
 html[data-reader-palette="light"] .window-titlebar-main { color: #29302c; background: #fff; }
@@ -678,6 +678,27 @@ html[data-reader-privacy] .window-titlebar { display: none; }
 
 .app-shell--reader .app-workspace { height: 100%; }
 .app-shell--reader .desktop-reader { min-height: 100%; }
+.reader-chapter-nav { display: grid; grid-template-columns: 1fr .65fr 1fr; width: min(var(--reader-text-width, 700px), 100%); margin: 48px auto 0; padding: 5px; box-sizing: border-box; border-radius: 999px; background: color-mix(in srgb, currentColor 6%, transparent); }
+.reader-chapter-nav button { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 50px; color: inherit; font: inherit; font-size: 15px; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
+.reader-chapter-nav button:hover:not(:disabled) { background: color-mix(in srgb, currentColor 8%, transparent); }
+.reader-chapter-nav button:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.reader-chapter-nav button:disabled { opacity: .3; cursor: default; }
+/* Keep the original mixed typography unless the reader explicitly chooses a font. */
+.desktop-reader-content article.reader-custom-font,
+.desktop-reader-content article.reader-custom-font :where(p, h1, h2, h3, h4, h5, h6, div, span, li, blockquote, a, em, strong, pre, code) {
+  font-family: var(--reader-font-family) !important;
+}
+.desktop-reader--ivory { color: #31302c; background: #f2efe5; }
+.desktop-reader--ivory .desktop-reader-toolbar { color: #31302c; background: rgba(242, 239, 229, .96); }
+html[data-reader-palette="ivory"] .window-titlebar,
+html[data-reader-palette="ivory"] .window-titlebar-main { color: #31302c; background: #f2efe5; }
+html[data-reader-palette="ivory"] .window-titlebar::after { background: #f2efe5; }
+html[data-reader-palette="ivory"] {
+  --reader-scrollbar-track: #f2efe5;
+  --reader-scrollbar-thumb: rgba(49, 48, 44, .32);
+  --reader-scrollbar-thumb-hover: rgba(49, 48, 44, .46);
+  color-scheme: light;
+}
 html[data-reader-palette="light"] {
   --reader-scrollbar-track: #fff;
   --reader-scrollbar-thumb: rgba(37, 41, 37, .34);
@@ -725,8 +746,9 @@ html[data-reader-palette] .app-workspace::-webkit-scrollbar-button { width: 0; h
   box-shadow: 0 12px 24px -21px rgba(0, 0, 0, .9);
 }
 .desktop-reader-toolbar { backdrop-filter: blur(12px); }
-.desktop-reader-toolbar span { font-size: 10.5px; }
-.reader-chapter-heading > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desktop-reader-toolbar .reader-chapter-heading { gap: 6px; }
+.reader-chapter-heading > strong { font-size: 22px; line-height: 1.25; font-weight: 400; }
+.reader-chapter-heading > span { color: color-mix(in srgb, currentColor 60%, transparent); font-size: 12px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-reader-toolbar .icon-button { color: inherit; border: 0; border-radius: 8px; background: transparent; }
 .desktop-reader-toolbar .icon-button:hover:not(:disabled) { background: color-mix(in srgb, currentColor 5%, transparent); }
 .reader-controls { gap: 4px !important; }
