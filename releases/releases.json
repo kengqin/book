@@ -32,11 +32,13 @@
       "requiresBackup": false,
       "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.19",
       "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.19/NovelLibrary_0.6.19_x64-setup.exe",
-      "sha256": "",
+      "sha256": "0f626b9dd5e269f380f9fa5627c4f30c9eb4483614bd3a8a8e158befd7102175",
       "sections": [
         {
           "title": "新增",
-          "items": ["侧栏支持拖动和键盘调整宽度，并自动记忆宽度"]
+          "items": [
+            "侧栏支持拖动和键盘调整宽度，并自动记忆宽度"
+          ]
         },
         {
           "title": "优化",
@@ -46,7 +48,9 @@
           ]
         }
       ],
-      "upgradeNotes": ["桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记、阅读设置、数据目录和隐私窗口设置无需迁移。"]
+      "upgradeNotes": [
+        "桌面端数据库 Schema 保持为 6，现有书库、阅读进度、笔记、阅读设置、数据目录和隐私窗口设置无需迁移。"
+      ]
     },
     {
       "version": "0.6.18",
