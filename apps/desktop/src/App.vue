@@ -9,6 +9,7 @@ import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
 import AppSidebar from './components/ui/AppSidebar.vue'
 import WindowTitlebar from './components/ui/WindowTitlebar.vue'
 import { useAppearance } from './composables/useAppearance'
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useSidebarResize } from './composables/useSidebarResize'
 import { availableUpdate, checkForUpdates, configureBackgroundUpdateChecks, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
 import { showGlobalError } from './services/global-message'
 
@@ -16,6 +17,9 @@ const router = useRouter()
 const route = useRoute()
 const immersive = computed(() => route.meta.layout === 'reader')
 const sidebarCollapsed = ref(localStorage.getItem('novel-library-sidebar-collapsed') === 'true')
+const { sidebarWidth, sidebarResizing, startSidebarResize, resizeSidebarWithKeyboard } = useSidebarResize(
+  computed(() => !immersive.value && !sidebarCollapsed.value)
+)
 useAppearance()
 let unlistenImport: UnlistenFn | undefined
 let unlistenOpen: UnlistenFn | undefined
@@ -53,8 +57,17 @@ onBeforeUnmount(() => {
 <template>
   <div class="desktop-frame">
     <WindowTitlebar :show-sidebar-toggle="!immersive" :sidebar-collapsed="sidebarCollapsed" @toggle-sidebar="toggleSidebar" />
-    <div class="app-shell" :class="{ 'app-shell--reader': immersive, 'app-shell--sidebar-collapsed': sidebarCollapsed && !immersive }">
-      <AppSidebar v-if="!immersive" :has-update="Boolean(availableUpdate || publishedUpdateVersion)" :collapsed="sidebarCollapsed" />
+    <div class="app-shell" :class="{ 'app-shell--reader': immersive, 'app-shell--sidebar-collapsed': sidebarCollapsed && !immersive, 'app-shell--resizing': sidebarResizing }" :style="{ '--sidebar-width': `${sidebarWidth}px` }">
+      <AppSidebar
+        v-if="!immersive"
+        :has-update="Boolean(availableUpdate || publishedUpdateVersion)"
+        :collapsed="sidebarCollapsed"
+        :width="sidebarWidth"
+        :min-width="SIDEBAR_MIN_WIDTH"
+        :max-width="SIDEBAR_MAX_WIDTH"
+        @resize-start="startSidebarResize"
+        @resize-keydown="resizeSidebarWithKeyboard"
+      />
 
       <main class="app-workspace">
         <RouterView />

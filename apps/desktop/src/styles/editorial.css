@@ -190,12 +190,16 @@ html[data-reader-palette] .window-controls button { color: inherit; }
 html[data-reader-privacy] .desktop-frame { grid-template-rows: minmax(0, 1fr); }
 html[data-reader-privacy] .window-titlebar { display: none; }
 
-.app-shell { grid-template-columns: 218px minmax(0, 1fr); min-height: 0; background: var(--ui-titlebar-background); transition: grid-template-columns 180ms ease; }
+.app-shell { grid-template-columns: var(--sidebar-width, 218px) minmax(0, 1fr); min-height: 0; background: var(--ui-titlebar-background); transition: grid-template-columns 180ms ease; }
+.app-shell--resizing { transition: none; }
+.app-shell--resizing, .app-shell--resizing * { cursor: col-resize !important; user-select: none !important; }
 .app-shell--reader { grid-template-columns: minmax(0, 1fr); }
 .app-shell--sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
 .app-shell:not(.app-shell--reader):not(.app-shell--sidebar-collapsed) .app-workspace { border-top-left-radius: 14px; }
 
 .app-sidebar {
+  position: relative;
+  min-width: 0;
   padding: 6px 12px 6px;
   color: var(--ui-text-2);
   background: var(--ui-sidebar-background);
@@ -214,6 +218,9 @@ html[data-reader-privacy] .window-titlebar { display: none; }
 .app-sidebar .sidebar-secondary a.router-link-active { color: var(--ui-text); border: 0; background: var(--ui-selected); font-weight: 500; }
 .update-badge { right: 11px; background: var(--ui-warning); box-shadow: 0 0 0 2px var(--ui-sidebar); }
 .app-sidebar--collapsed { min-width: 0; width: 0; overflow: hidden; padding: 0; border: 0; opacity: 0; pointer-events: none; transition: opacity 60ms ease; }
+.sidebar-resize-handle { position: absolute; z-index: 8; top: 0; right: -4px; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; outline: none; }
+.sidebar-resize-handle::after { content: ''; position: absolute; top: 12px; bottom: 12px; left: 3px; width: 2px; border-radius: 2px; background: var(--ui-accent); opacity: 0; transition: opacity 120ms ease; }
+.sidebar-resize-handle:hover::after, .sidebar-resize-handle:focus-visible::after, .app-shell--resizing .sidebar-resize-handle::after { opacity: .55; }
 .app-workspace { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; color: var(--ui-text); background: var(--ui-app); scrollbar-color: var(--ui-scrollbar-thumb) transparent; scrollbar-width: thin; }
 .app-workspace::-webkit-scrollbar { width: 10px; background: transparent; }
 .app-workspace::-webkit-scrollbar-track { background: transparent; }
@@ -703,7 +710,7 @@ html[data-reader-palette] .app-workspace::-webkit-scrollbar-thumb {
 }
 html[data-reader-palette] .app-workspace::-webkit-scrollbar-thumb:hover { background: var(--reader-scrollbar-thumb-hover); }
 html[data-reader-palette] .app-workspace::-webkit-scrollbar-button { width: 0; height: 0; background: var(--reader-scrollbar-track); }
-.desktop-reader-toolbar { height: 62px; gap: 11px; padding: 0 20px; border: 0; box-shadow: 0 12px 24px -21px rgba(28, 31, 29, .48); transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease; }
+.desktop-reader-toolbar { height: 62px; grid-template-columns: 42px minmax(0, 1fr); gap: 11px; padding: 0 20px; border: 0; box-shadow: 0 12px 24px -21px rgba(28, 31, 29, .48); transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease; }
 .desktop-reader--light .desktop-reader-toolbar {
   color: #29302c;
   background: rgba(255, 255, 255, .96);
@@ -719,6 +726,7 @@ html[data-reader-palette] .app-workspace::-webkit-scrollbar-button { width: 0; h
 }
 .desktop-reader-toolbar { backdrop-filter: blur(12px); }
 .desktop-reader-toolbar span { font-size: 10.5px; }
+.reader-chapter-heading > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-reader-toolbar .icon-button { color: inherit; border: 0; border-radius: 8px; background: transparent; }
 .desktop-reader-toolbar .icon-button:hover:not(:disabled) { background: color-mix(in srgb, currentColor 5%, transparent); }
 .reader-controls { gap: 4px !important; }
@@ -733,12 +741,6 @@ html[data-reader-palette] .app-workspace::-webkit-scrollbar-button { width: 0; h
   box-shadow: none;
 }
 .reader-controls output { color: inherit; opacity: .76; }
-.desktop-reader-compact-content footer { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 42px; padding-top: 18px; border-top: 1px solid currentColor; opacity: .82; }
-.desktop-reader-compact-content footer button { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; color: inherit; text-align: left; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); background: transparent; cursor: pointer; }
-.desktop-reader-compact-content footer button:last-child { text-align: right; }
-.desktop-reader-compact-content footer button span { display: grid; gap: 4px; }
-.desktop-reader-compact-content footer small { opacity: .65; }
-.desktop-reader-compact-content footer button:disabled { opacity: .35; cursor: not-allowed; }
 
 .reader-privacy-toggle { display: inline-flex !important; grid-auto-flow: column; gap: 4px; padding-inline: 7px !important; }
 .reader-privacy-toggle span { color: inherit; font-size: 10.5px; }
@@ -947,7 +949,7 @@ html[data-reader-privacy] .app-workspace::-webkit-scrollbar { display: none; }
   html[data-reader-palette] body,
   html[data-reader-palette] #app { min-width: 500px; }
   .desktop-reader-toolbar {
-    grid-template-columns: 38px minmax(72px, 1fr) auto;
+    grid-template-columns: 38px minmax(0, 1fr);
     gap: 8px;
     padding-inline: 14px;
   }
