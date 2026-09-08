@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlignJustify, ArrowLeft, ChevronLeft, ChevronRight, EyeOff, LogOut, Minus, Moon, Pin, Plus, RotateCcw, Settings2, Sun, Type } from 'lucide-vue-next'
+import { ArrowLeft, ChevronLeft, ChevronRight, LogOut, Minus, Moon, Pin, Plus, RotateCcw, Settings2, Sun } from 'lucide-vue-next'
 import { formatChapterLabel, getCompactReaderWindow, isNumberedChapter } from '@novel-library/reader-core'
 import { isTauri } from '@tauri-apps/api/core'
 import { LogicalSize, PhysicalPosition, type PhysicalSize } from '@tauri-apps/api/dpi'
@@ -11,6 +11,7 @@ import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 import { showGlobalError } from '../services/global-message'
 import { buildPrivacyReaderText } from '../services/privacy-reader-text'
 import { setWindowChrome, syncApplicationWindowChrome } from '../services/window-chrome'
+import ReaderSettingsPopover from '../components/ReaderSettingsPopover.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,10 +22,6 @@ const loading = ref(true)
 const fontSize = ref(18)
 const lineHeight = ref(2.05)
 const palette = ref<'light' | 'paper' | 'night'>('paper')
-const compactMode = ref(false)
-const compactLines = ref(5)
-const compactColumns = ref(36)
-const compactAnchor = ref(0)
 const privacyAnchor = ref(0)
 const privacyMode = ref(false)
 type PrivacyPalette = 'light' | 'night'
@@ -92,7 +89,6 @@ const volumeChapterIndex = computed(() => volumeChapters.value.findIndex(item =>
 const paragraphs = computed(() => chapter.value?.content.split(/\n{2,}/).filter(Boolean) ?? [])
 const isRichContent = computed(() => chapter.value?.contentFormat === 'html')
 const safeRichContent = computed(() => isRichContent.value ? sanitizeReaderHtml(chapter.value?.content || '') : '')
-const compactText = computed(() => chapter.value?.contentText || chapter.value?.content.replace(/<[^>]+>/gu, ' ') || '')
 const privacyText = computed(() => {
   if (!chapter.value) return ''
   return buildPrivacyReaderText(
@@ -100,7 +96,6 @@ const privacyText = computed(() => {
     chapter.value.contentFormat
   )
 })
-const compactWindow = computed(() => getCompactReaderWindow(compactText.value, compactAnchor.value, compactLines.value, compactColumns.value))
 const privacyColumns = computed(() => Math.max(12, Math.floor(
   (privacyViewportWidth.value - PRIVACY_HORIZONTAL_PADDING) / (privacyFontSize.value * 1.02)
 )))
@@ -300,8 +295,6 @@ async function enterPrivacyMode(progressOverride?: number) {
   if (privacyMode.value) return
   const progress = typeof progressOverride === 'number'
     ? Math.min(1, Math.max(0, progressOverride))
-    : compactMode.value && compactText.value.length
-    ? compactAnchor.value / compactText.value.length
     : scrollProgress(scrollRoot)
   privacyAnchor.value = Math.floor(privacyText.value.length * progress)
   privacyAlwaysOnTop.value = false
@@ -372,7 +365,6 @@ async function enterPrivacyMode(progressOverride?: number) {
 async function leavePrivacyMode() {
   if (!privacyMode.value) return
   const progress = privacyText.value.length ? privacyAnchor.value / privacyText.value.length : 0
-  compactAnchor.value = Math.floor(compactText.value.length * progress)
   void persistProgress(progress * 100)
   try {
     await persistPrivacyWindowBounds()
@@ -389,7 +381,7 @@ async function leavePrivacyMode() {
   } catch (cause) {
     showGlobalError(cause, '普通阅读窗口恢复失败，请重启应用后重试')
   }
-  if (!compactMode.value && scrollRoot && compactText.value.length) {
+  if (scrollRoot) {
     await nextTick()
     window.requestAnimationFrame(() => {
       if (!scrollRoot) return
@@ -419,21 +411,19 @@ function updateProgress() {
   progressTimer = window.setTimeout(() => void persistProgress(progress), 450)
 }
 
-function saveCompactProgress() {
+function savePrivacyProgress() {
   if (!chapter.value) return
-  const activeText = privacyMode.value ? privacyText.value : compactText.value
-  const activeAnchor = privacyMode.value ? privacyAnchor.value : compactAnchor.value
-  const progress = activeText.length ? activeAnchor / activeText.length * 100 : 0
+  const progress = privacyText.value.length ? privacyAnchor.value / privacyText.value.length * 100 : 0
   window.clearTimeout(progressTimer)
   progressTimer = window.setTimeout(() => void persistProgress(progress), 300)
 }
 
-function moveCompactWindow(direction: -1 | 1, page = false) {
-  if ((!compactMode.value && !privacyMode.value) || (!compactText.value.length && !privacyText.value.length)) return
-  const activeWindow = privacyMode.value ? privacyWindow.value : compactWindow.value
-  const activeText = privacyMode.value ? privacyText.value : compactText.value
-  const visibleLines = privacyMode.value ? privacyLines.value : compactLines.value
-  const columns = privacyMode.value ? privacyColumns.value : compactColumns.value
+function movePrivacyWindow(direction: -1 | 1, page = false) {
+  if (!privacyMode.value || !privacyText.value.length) return
+  const activeWindow = privacyWindow.value
+  const activeText = privacyText.value
+  const visibleLines = privacyLines.value
+  const columns = privacyColumns.value
   if (!activeWindow.lines.length) return
   const step = page ? visibleLines : 1
   const target = activeWindow.startLine + direction * step
@@ -442,15 +432,14 @@ function moveCompactWindow(direction: -1 | 1, page = false) {
   const targetLine = Math.min(maxLine, Math.max(0, target))
   const line = getCompactReaderWindow(activeText, 0, maxLine + 1, columns).lines[targetLine]
   if (line) {
-    if (privacyMode.value) privacyAnchor.value = line.start
-    else compactAnchor.value = line.start
-    saveCompactProgress()
+    privacyAnchor.value = line.start
+    savePrivacyProgress()
   }
 }
 
 function handlePrivacyWheel(event: WheelEvent) {
   if (!event.deltaY) return
-  moveCompactWindow(event.deltaY > 0 ? 1 : -1)
+  movePrivacyWindow(event.deltaY > 0 ? 1 : -1)
 }
 
 function handleReaderKeydown(event: KeyboardEvent) {
@@ -489,22 +478,12 @@ function handleReaderKeydown(event: KeyboardEvent) {
       if (previous.value) openChapter(previous.value.number)
     } else if (event.key === 'ArrowDown' || directionCode === 'KeyS' || event.key === 'PageDown' || event.key === ' ') {
       event.preventDefault()
-      moveCompactWindow(1, event.key === 'PageDown' || event.key === ' ')
+      movePrivacyWindow(1, event.key === 'PageDown' || event.key === ' ')
     } else if (event.key === 'ArrowUp' || directionCode === 'KeyW' || event.key === 'PageUp') {
       event.preventDefault()
-      moveCompactWindow(-1, event.key === 'PageUp')
+      movePrivacyWindow(-1, event.key === 'PageUp')
     }
     return
-  }
-  if (!compactMode.value) return
-  if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') {
-    event.preventDefault()
-    moveCompactWindow(1, event.key !== 'ArrowDown')
-  } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
-    event.preventDefault()
-    moveCompactWindow(-1, event.key !== 'ArrowUp')
-  } else if (event.key === 'Escape' && compactMode.value) {
-    compactMode.value = false
   }
 }
 
@@ -521,7 +500,6 @@ async function load() {
     chapters.value = nextChapters
     chapter.value = nextChapter
     const restoredProgress = nextBook.currentChapter === nextChapter.number ? nextBook.chapterProgress : 0
-    compactAnchor.value = Math.floor(compactText.value.length * restoredProgress / 100)
     privacyAnchor.value = Math.floor(privacyText.value.length * restoredProgress / 100)
     await nextTick()
     if (route.query.privacy === '1' && !privacyMode.value) {
@@ -612,7 +590,7 @@ watch(() => route.params.chapterNumber, load)
     class="desktop-reader"
     :class="[
       `desktop-reader--${privacyMode ? privacyPalette : palette}`,
-      { 'desktop-reader--compact': compactMode, 'desktop-reader--privacy': privacyMode }
+      { 'desktop-reader--privacy': privacyMode }
     ]"
     :style="{
       '--reader-font-size': `${privacyMode ? privacyFontSize : fontSize}px`,
@@ -621,7 +599,7 @@ watch(() => route.params.chapterNumber, load)
       '--privacy-text-color': privacyTextColor
     }"
   >
-    <main v-if="privacyMode" class="privacy-reader" aria-label="隐私阅读模式" @mousedown.left="startPrivacyDragging" @mouseleave="privacySettingsOpen = false" @wheel.prevent="handlePrivacyWheel">
+    <main v-if="privacyMode" class="privacy-reader" aria-label="隐私模式" @mousedown.left="startPrivacyDragging" @mouseleave="privacySettingsOpen = false" @wheel.prevent="handlePrivacyWheel">
       <span class="privacy-resize-handle privacy-resize-handle--north" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('North')" />
       <span class="privacy-resize-handle privacy-resize-handle--south" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('South')" />
       <span class="privacy-resize-handle privacy-resize-handle--east" aria-hidden="true" @mousedown.left.stop.prevent="startPrivacyResize('East')" />
@@ -656,7 +634,7 @@ watch(() => route.params.chapterNumber, load)
           <ChevronRight :size="14" />
         </button>
       </div>
-      <div v-if="privacySettingsOpen" class="privacy-reader-settings" role="dialog" aria-label="隐私阅读设置" @mousedown.stop="preventPrivacyPointerFocus" @wheel.stop>
+      <div v-if="privacySettingsOpen" class="privacy-reader-settings" role="dialog" aria-label="隐私模式设置" @mousedown.stop="preventPrivacyPointerFocus" @wheel.stop>
         <div class="privacy-setting-row">
           <span>字号</span>
           <div class="privacy-setting-stepper">
@@ -683,8 +661,8 @@ watch(() => route.params.chapterNumber, load)
         <button
           type="button"
           :class="{ active: privacySettingsOpen }"
-          title="隐私阅读设置"
-          aria-label="隐私阅读设置"
+          title="隐私模式设置"
+          aria-label="隐私模式设置"
           :aria-expanded="privacySettingsOpen"
           @click="privacySettingsOpen = !privacySettingsOpen"
         >
@@ -716,9 +694,32 @@ watch(() => route.params.chapterNumber, load)
     </main>
 
     <template v-else>
-      <header class="desktop-reader-toolbar"><button type="button" class="icon-button" title="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button><div v-if="book && chapter"><strong>{{ book.title }}</strong><span>{{ chapterPositionLabel() }}</span></div><div class="reader-controls"><button type="button" class="reader-privacy-toggle" title="进入隐私模式" @click="enterPrivacyMode()"><EyeOff :size="14" /><span>隐私</span></button><button type="button" :class="{ active: compactMode }" title="紧凑阅读模式" @click="compactMode = !compactMode">{{ compactMode ? '完整' : '紧凑' }}</button><label v-if="compactMode" class="reader-compact-lines" title="显示行数"><button v-for="value in [4, 5, 8]" :key="value" type="button" :class="{ active: compactLines === value }" @click="compactLines = value">{{ value }} 行</button></label><label class="reader-font-size" title="字号"><Type :size="16" /><button type="button" @click="fontSize = Math.max(15, fontSize - 1)"><Minus :size="14" /></button><output>{{ fontSize }}</output><button type="button" @click="fontSize = Math.min(26, fontSize + 1)"><Plus :size="14" /></button></label><label class="reader-line-height" title="行距"><AlignJustify :size="16" /><button v-for="value in [1.8, 2.05, 2.3]" :key="value" type="button" :class="{ active: lineHeight === value }" @click="lineHeight = value">{{ value === 1.8 ? '紧' : value === 2.05 ? '中' : '松' }}</button></label><label class="reader-palette" title="纸张"><Sun :size="16" /><button v-for="item in ([['light','白'],['paper','纸'],['night','夜']] as const)" :key="item[0]" type="button" :class="{ active: palette === item[0] }" @click="palette = item[0]">{{ item[1] }}</button></label></div></header>
+      <header class="desktop-reader-toolbar">
+        <button type="button" class="icon-button" title="返回目录" aria-label="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button>
+        <div v-if="book && chapter" class="reader-chapter-heading">
+          <strong :title="chapterHeading()">{{ chapterHeading() }}</strong>
+          <span :title="`${book.title} · ${chapterPositionLabel()}`">{{ book.title }} · {{ chapterPositionLabel() }}</span>
+        </div>
+      </header>
+      <ReaderSettingsPopover
+        v-model:font-size="fontSize"
+        v-model:line-height="lineHeight"
+        v-model:palette="palette"
+        @privacy="enterPrivacyMode()"
+      />
       <div v-if="loading" class="view-status" role="status">正在加载章节...</div>
-      <main v-else-if="book && chapter" :class="compactMode ? 'desktop-reader-compact-content' : 'desktop-reader-content'"><article><p v-if="chapter.kind !== 'volume'" class="reader-volume">{{ chapter.volume || book.title }}</p><h1>{{ chapterHeading() }}</h1><section v-if="compactMode" class="compact-reader-window"><p v-for="line in compactWindow.lines" :key="line.start">{{ line.text || ' ' }}</p><small>{{ compactWindow.startLine + 1 }} - {{ compactWindow.endLine }} / {{ compactWindow.totalLines }} 行</small></section><template v-else><div v-if="isRichContent" class="epub-content" v-html="safeRichContent" /><template v-else><p v-for="(paragraph, index) in paragraphs" :key="index">{{ paragraph }}</p></template></template></article><footer><button type="button" :disabled="!previous" @click="previous && openChapter(previous.number)"><ChevronLeft :size="18" /><span><small>上一章</small>{{ previous?.title || '已经是第一章' }}</span></button><button type="button" :disabled="!next" @click="next && openChapter(next.number)"><span><small>下一章</small>{{ next?.title || '已经是最后一章' }}</span><ChevronRight :size="18" /></button></footer></main>
+      <main v-else-if="book && chapter" class="desktop-reader-content">
+        <article>
+          <p v-if="chapter.kind !== 'volume'" class="reader-volume">{{ chapter.volume || book.title }}</p>
+          <h1>{{ chapterHeading() }}</h1>
+          <div v-if="isRichContent" class="epub-content" v-html="safeRichContent" />
+          <template v-else><p v-for="(paragraph, index) in paragraphs" :key="index">{{ paragraph }}</p></template>
+        </article>
+        <footer>
+          <button type="button" :disabled="!previous" @click="previous && openChapter(previous.number)"><ChevronLeft :size="18" /><span><small>上一章</small>{{ previous?.title || '已经是第一章' }}</span></button>
+          <button type="button" :disabled="!next" @click="next && openChapter(next.number)"><span><small>下一章</small>{{ next?.title || '已经是最后一章' }}</span><ChevronRight :size="18" /></button>
+        </footer>
+      </main>
     </template>
   </section>
 </template>
