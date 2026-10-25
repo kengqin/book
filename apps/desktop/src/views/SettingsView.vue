@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { isTauri } from '@tauri-apps/api/core'
+import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { useRoute } from 'vue-router'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { ArrowRight, Database, Download, FolderOpen, RotateCcw, Upload } from 'lucide-vue-next'
+import { ArrowRight, Database, Download, Settings } from 'lucide-vue-next'
+import UpdatesView from './UpdatesView.vue'
 import { changeDesktopDatabaseFile, changeDesktopDataDirectory, exportDesktopBackup, getCloseBehavior, getDesktopStorageStatus, importDesktopBackup, resetDesktopDataDirectory, setCloseBehavior, type CloseBehavior, type DesktopStorageStatus } from '../services/desktop-library'
 import { availableUpdate, getCurrentVersion, publishedUpdateVersion } from '../services/release-center'
 import PageHeader from '../components/ui/PageHeader.vue'
@@ -23,7 +27,13 @@ const currentVersion = ref('')
 const closeBehavior = ref<CloseBehavior>('ask')
 const pendingSettingAction = ref<PendingSettingAction | null>(null)
 const { appearance, setAppearance } = useAppearance()
-const activeSection = ref<'general' | 'storage' | 'updates'>('general')
+const props = defineProps<{ windowed?: boolean }>()
+const route = useRoute()
+const selectedSection = (value: unknown): 'general' | 'storage' | 'updates' => value === 'storage' || value === 'updates' ? value : 'general'
+const activeSection = ref(selectedSection(route.query.section))
+watch(() => route.path, path => { if (props.windowed && path.endsWith('/updates')) activeSection.value = 'updates' })
+let unlistenSection: UnlistenFn | undefined
+const notifyDataChange = () => props.windowed && isTauri() ? emitTo('main', 'settings-data-changed') : Promise.resolve()
 
 const appearanceOptions: UiSelectOption[] = [
   { value: 'system', label: '跟随系统' },
@@ -57,6 +67,7 @@ async function confirmSettingAction() {
   busy.value = true
   try {
     await action.run()
+    await notifyDataChange()
     pendingSettingAction.value = null
   } catch (cause) {
     showError(cause)
@@ -99,6 +110,7 @@ async function importBackup() {
   busy.value = true
   try {
     const result = await importDesktopBackup(source)
+    await notifyDataChange()
     showGlobalMessage(`备份已恢复：${result.books} 本书、${result.chapters} 章、${result.notes} 篇笔记`)
   } catch (cause) {
     showError(cause, '备份恢复失败，请检查文件后重试')
@@ -164,21 +176,23 @@ async function saveCloseBehavior() {
 }
 
 onMounted(async () => {
+  if (props.windowed && isTauri()) unlistenSection = await listen<string>('settings-section', event => { activeSection.value = selectedSection(event.payload) })
   await Promise.all([
     refreshStatus(),
     getCurrentVersion().then(version => { currentVersion.value = version }).catch(cause => showError(cause, '无法读取当前版本')),
     getCloseBehavior().then(behavior => { closeBehavior.value = behavior }).catch(cause => showError(cause, '无法读取关闭窗口方式'))
   ])
 })
+onBeforeUnmount(() => unlistenSection?.())
 </script>
 
 <template>
-  <section class="workspace-view settings-view">
-    <PageHeader title="设置" />
+  <section class="workspace-view settings-view" :class="{ 'settings-view--windowed': windowed }">
+    <PageHeader v-if="!windowed" title="设置" />
     <nav class="settings-tabs" aria-label="设置分类">
-      <button type="button" :class="{ active: activeSection === 'general' }" @click="activeSection = 'general'">常规</button>
-      <button type="button" :class="{ active: activeSection === 'storage' }" @click="activeSection = 'storage'">数据</button>
-      <button type="button" :class="{ active: activeSection === 'updates' }" @click="activeSection = 'updates'">更新</button>
+      <button type="button" :class="{ active: activeSection === 'general' }" @click="activeSection = 'general'"><Settings v-if="windowed" :size="17" />常规</button>
+      <button type="button" :class="{ active: activeSection === 'storage' }" @click="activeSection = 'storage'"><Database v-if="windowed" :size="17" />{{ windowed ? '数据存储' : '数据' }}</button>
+      <button type="button" :class="{ active: activeSection === 'updates' }" @click="activeSection = 'updates'"><Download v-if="windowed" :size="17" />{{ windowed ? '版本与更新' : '更新' }}</button>
     </nav>
 
     <div v-if="activeSection === 'general'" class="settings-section">
@@ -203,20 +217,21 @@ onMounted(async () => {
       <p class="settings-group-label">本地数据</p>
       <div class="settings-panel">
         <section class="setting-row setting-row-wide data-directory-setting">
-          <div class="setting-copy"><strong>数据目录</strong><span>{{ status?.dataDirectory || '尚未创建' }}</span></div>
-          <div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="resetDataDirectory"><RotateCcw :size="15" />默认</button><button type="button" class="primary-command" :disabled="busy" @click="chooseDataDirectory"><FolderOpen :size="15" />更改</button></div>
+          <div class="setting-copy"><strong>数据目录</strong><span :title="status?.dataDirectory">{{ status?.dataDirectory || '尚未创建' }}</span></div>
+          <div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="resetDataDirectory">默认</button><button type="button" class="primary-command" :disabled="busy" @click="chooseDataDirectory">更改</button></div>
         </section>
         <section class="setting-row setting-row-wide database-file-setting">
-          <div class="setting-copy"><strong>数据库文件</strong><span>{{ status?.databasePath || '尚未创建' }}</span></div>
-          <button type="button" class="primary-command" :disabled="busy" @click="chooseDatabaseFile"><Database :size="15" />更改</button>
+          <div class="setting-copy"><strong>数据库文件</strong><span :title="status?.databasePath">{{ status?.databasePath || '尚未创建' }}</span></div>
+          <button type="button" class="primary-command" :disabled="busy" @click="chooseDatabaseFile">更改</button>
         </section>
         <section class="setting-row setting-row-wide backup-setting">
           <div class="setting-copy"><strong>完整数据备份</strong><span>书籍、章节、阅读进度和笔记</span></div>
-          <div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="importBackup"><Upload :size="15" />恢复</button><button type="button" class="primary-command" :disabled="busy" @click="exportBackup"><Download :size="15" />导出</button></div>
+          <div class="header-actions"><button type="button" class="secondary-command" :disabled="busy" @click="importBackup">恢复</button><button type="button" class="primary-command" :disabled="busy" @click="exportBackup">导出</button></div>
         </section>
       </div>
     </div>
 
+    <UpdatesView v-else-if="windowed" embedded class="settings-window-updates" />
     <div v-else class="settings-section">
       <p class="settings-group-label">版本</p>
       <div class="settings-panel settings-update-panel">
@@ -229,3 +244,24 @@ onMounted(async () => {
     <UiConfirmDialog :open="Boolean(pendingSettingAction)" :busy="busy" :title="pendingSettingAction?.title || '确认更改设置？'" :description="pendingSettingAction?.description || ''" :confirm-label="pendingSettingAction?.confirmLabel || '确认'" @close="pendingSettingAction = null" @confirm="confirmSettingAction" />
   </section>
 </template>
+
+<style scoped>
+.settings-view--windowed { display: grid; grid-template-columns: 160px minmax(0,1fr); gap: 0; width: 100%; max-width: none; height: 100%; min-height: 0; padding: 0; margin: 0; }
+.settings-view--windowed .settings-tabs { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; width: 100%; gap: 3px; padding: 24px 9px; margin: 0; border: 0; border-right: 1px solid var(--ui-border); border-radius: 0; background: var(--ui-surface-2); }
+.settings-view--windowed .settings-tabs > button { display: flex; align-items: center; gap: 11px; min-height: 40px; padding: 0 15px; border: 0; border-radius: 6px; text-align: left; font-size: 13px; color: var(--ui-text-2); background: transparent; }
+.settings-view--windowed .settings-tabs > button.active { color: var(--ui-accent); background: var(--ui-selected); font-weight: 600; }
+.settings-view--windowed .settings-tabs > button:hover { background: var(--ui-hover); }
+.settings-view--windowed > .settings-section,.settings-view--windowed > .settings-window-updates { grid-column: 2; grid-row: 1; overflow: auto; min-height: 0; padding: 27px 32px; margin: 0; }
+.settings-view--windowed .settings-panel { border: 0; background: transparent; box-shadow: none; }
+.settings-view--windowed .setting-row { grid-template-columns: minmax(0, 1fr) auto; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--ui-border); border-radius: 0; }
+.settings-view--windowed .setting-row > .ui-select,.settings-view--windowed .setting-row > .setting-state,.settings-view--windowed .setting-row > .primary-command,.settings-view--windowed .setting-row > .header-actions { grid-column: 2; justify-self: end; width: auto; }
+.settings-view--windowed .setting-row > .ui-select { width: 158px; }
+.settings-view--windowed .settings-group-label { margin-top: 2px; margin-bottom: 9px; font-size: 15px; color: var(--ui-text); }
+.settings-view--windowed .setting-copy strong { font-weight: 500; }
+.settings-view--windowed .setting-copy span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.settings-view--windowed .setting-row > .ui-select { min-width: 0; width: max-content; }
+.settings-view--windowed :deep(.ui-select-trigger) { min-width: 128px; height: 26px; border-radius: 5px; }
+.settings-view--windowed :deep(.ui-select-menu) { min-width: 158px; }
+.settings-view--windowed .setting-copy > span { font-size: 11px; }
+.settings-view--windowed :deep(.workspace-header h1) { font-size: 21px; }
+</style>

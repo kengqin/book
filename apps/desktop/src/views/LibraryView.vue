@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { BookOpen, FilePlus2, FileText, RefreshCw } from 'lucide-vue-next'
+import { BookOpen, FilePlus2, FileText, Globe, RefreshCw } from 'lucide-vue-next'
 import { defaultParseOptions, defaultTheme } from '@novel-library/reader-core'
 import { deleteDesktopBook, getCachedDesktopBooks, listDesktopBooks, readDesktopExternalFile, saveDesktopBook, type DesktopBookSummary } from '../services/desktop-library'
 import BookCard from '../components/library/BookCard.vue'
@@ -193,6 +193,7 @@ onBeforeUnmount(() => window.removeEventListener('novel-library-import', importE
   <section class="workspace-view">
     <PageHeader title="我的书架">
       <template #actions>
+        <button type="button" class="secondary-command" @click="router.push('/online')"><Globe :size="17" />在线找书</button>
         <button type="button" class="icon-button" title="刷新书架" :disabled="loading || refreshing" @click="loadBooks"><RefreshCw :size="18" :class="{ spinning: refreshing }" /></button>
         <button type="button" class="primary-command primary-command--core" :disabled="importing" @click="openImportDialog"><FilePlus2 :size="18" />{{ importing ? '正在导入' : '导入书籍' }}</button>
         <input ref="fileInput" type="file" accept=".txt,.epub,text/plain,application/epub+zip" multiple hidden @change="selectImportFile" />

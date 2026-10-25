@@ -20,7 +20,7 @@ defineEmits<{
       <button type="button" class="book-card-cover" :class="{ 'book-card-cover--image': book.coverDataUrl }" @click="$emit('open')">
         <img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" />
         <span v-else>{{ book.title.slice(0, 1) }}</span>
-        <i class="format-badge">{{ book.sourceFormat.toUpperCase() }}</i>
+        <i class="format-badge">{{ book.sourceFormat === 'web' ? '在线' : book.sourceFormat.toUpperCase() }}</i>
       </button>
       <button type="button" class="book-card-delete" :aria-label="`删除《${book.title}》`" title="删除书籍" @click="$emit('requestDelete')"><Trash2 :size="15" /></button>
     </div>

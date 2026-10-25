@@ -11,9 +11,10 @@ export function applicationWindowTheme(): Theme {
 
 export async function setWindowChrome(theme: Theme | null, palette: WindowPalette | null) {
   if (!isTauri()) return
+  if (['app-message', 'app-tooltip', 'app-progress'].includes(getCurrentWindow().label)) return
   try {
     await getCurrentWindow().setTheme(theme)
-    await invoke('set_window_palette', { palette })
+    if (!getCurrentWindow().label?.startsWith('web-browser')) await invoke('set_window_palette', { palette })
   } catch (error) {
     console.warn('window-theme-update-failed', error)
   }

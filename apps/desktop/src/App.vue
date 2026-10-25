@@ -1,37 +1,49 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { isTauri } from '@tauri-apps/api/core'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useRoute, useRouter } from 'vue-router'
 import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
 import GlobalMessage from './components/GlobalMessage.vue'
+import OnlineVerificationStatus from './components/OnlineVerificationStatus.vue'
 import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
 import AppSidebar from './components/ui/AppSidebar.vue'
 import WindowTitlebar from './components/ui/WindowTitlebar.vue'
 import { useAppearance } from './composables/useAppearance'
-import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useSidebarResize } from './composables/useSidebarResize'
 import { availableUpdate, checkForUpdates, configureBackgroundUpdateChecks, initializeUpdateEvents, isAutoCheckEnabled, publishedUpdateVersion } from './services/release-center'
 import { showGlobalError } from './services/global-message'
+import { initializeOnlineLibrary } from './services/online-library'
+import { initializeWebBrowser, webBrowser } from './services/web-browser'
+import WebBrowserPanel from './components/WebBrowserPanel.vue'
+import SettingsWindowView from './views/SettingsWindowView.vue'
 
 const router = useRouter()
 const route = useRoute()
+const browserShell = isTauri() && getCurrentWindow().label.startsWith('web-browser')
+const settingsShell = isTauri() && getCurrentWindow().label === 'settings'
+const historyShell = isTauri() && getCurrentWindow().label === 'release-history'
+const overlayShell = isTauri() && ['app-message', 'app-tooltip', 'app-progress'].includes(getCurrentWindow().label)
+const auxiliaryShell = browserShell || settingsShell || overlayShell || historyShell
+const workspaceVersion = ref(0)
 const immersive = computed(() => route.meta.layout === 'reader')
-const sidebarCollapsed = ref(localStorage.getItem('novel-library-sidebar-collapsed') === 'true')
-const { sidebarWidth, sidebarResizing, startSidebarResize, resizeSidebarWithKeyboard } = useSidebarResize(
-  computed(() => !immersive.value && !sidebarCollapsed.value)
-)
+watch(immersive, suspended => {
+  if (isTauri() && !auxiliaryShell) void invoke('set_web_browser_suspended', { suspended }).catch(cause => showGlobalError(cause, '网页侧栏状态更新失败'))
+}, { immediate: true })
 useAppearance()
 let unlistenImport: UnlistenFn | undefined
 let unlistenOpen: UnlistenFn | undefined
+let unlistenSettings: UnlistenFn | undefined
 
-function toggleSidebar() {
-  sidebarCollapsed.value = !sidebarCollapsed.value
-  localStorage.setItem('novel-library-sidebar-collapsed', String(sidebarCollapsed.value))
-}
 
 onMounted(async () => {
   if (!isTauri()) return
+  if (browserShell || overlayShell || historyShell) return
+  if (settingsShell) { void initializeUpdateEvents().catch(cause => showGlobalError(cause, '更新服务初始化失败')); return }
+  void initializeWebBrowser().catch(cause => showGlobalError(cause, '网页浏览器初始化失败'))
+  void initializeOnlineLibrary().catch(cause => showGlobalError(cause, '在线书架初始化失败'))
   try {
+    unlistenSettings = await listen('settings-data-changed', async () => { await router.push('/library'); workspaceVersion.value++ })
     unlistenImport = await listen<{ path: string; existingId?: string }>('bridge-import-requested', async event => {
       await router.push('/library')
       window.setTimeout(() => window.dispatchEvent(new CustomEvent('novel-library-import', { detail: event.payload })), 0)
@@ -51,30 +63,37 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   unlistenImport?.()
   unlistenOpen?.()
+  unlistenSettings?.()
 })
 </script>
 
 <template>
-  <div class="desktop-frame">
-    <WindowTitlebar :show-sidebar-toggle="!immersive" :sidebar-collapsed="sidebarCollapsed" @toggle-sidebar="toggleSidebar" />
-    <div class="app-shell" :class="{ 'app-shell--reader': immersive, 'app-shell--sidebar-collapsed': sidebarCollapsed && !immersive, 'app-shell--resizing': sidebarResizing }" :style="{ '--sidebar-width': `${sidebarWidth}px` }">
+  <RouterView v-if="overlayShell || historyShell" />
+  <SettingsWindowView v-else-if="settingsShell" />
+  <RouterView v-else-if="browserShell" />
+  <div v-else class="desktop-frame">
+    <WindowTitlebar :show-brand="!immersive" />
+    <div class="app-shell" :class="{ 'app-shell--reader': immersive, 'app-shell--sidebar-collapsed': !immersive }">
       <AppSidebar
         v-if="!immersive"
         :has-update="Boolean(availableUpdate || publishedUpdateVersion)"
-        :collapsed="sidebarCollapsed"
-        :width="sidebarWidth"
-        :min-width="SIDEBAR_MIN_WIDTH"
-        :max-width="SIDEBAR_MAX_WIDTH"
-        @resize-start="startSidebarResize"
-        @resize-keydown="resizeSidebarWithKeyboard"
       />
 
-      <main class="app-workspace">
-        <RouterView />
-      </main>
+      <div class="desktop-content-area">
+        <main class="app-workspace"><RouterView :key="workspaceVersion" /></main>
+        <WebBrowserPanel v-if="!immersive && webBrowser.open && webBrowser.mode === 'side'" />
+      </div>
     </div>
   </div>
-  <GlobalUpdateStatus />
-  <GlobalMessage />
-  <CloseBehaviorDialog />
+  <GlobalUpdateStatus v-if="!browserShell && !overlayShell && !historyShell" />
+  <template v-if="!overlayShell"><GlobalMessage /></template>
+  <OnlineVerificationStatus v-if="!auxiliaryShell" />
+  <CloseBehaviorDialog v-if="!auxiliaryShell" />
 </template>
+
+<style scoped>
+.desktop-content-area { display: flex; min-width: 0; min-height: 0; overflow: hidden; padding: 0 6px 6px 0; }
+.desktop-content-area > .app-workspace { flex: 1; min-width: 0; border-radius: 10px; }
+.app-shell--reader .desktop-content-area { padding: 0; }
+.app-shell--reader .app-workspace { border-radius: 0; }
+</style>

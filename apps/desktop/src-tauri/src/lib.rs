@@ -1,9 +1,15 @@
 mod bridge;
 mod close_behavior;
 mod database;
+mod floating_layer;
 mod ide_integration;
 mod models;
+mod online;
+mod search_browser;
+mod settings_window;
+mod site_browser;
 mod updater;
+mod web_browser;
 mod window_theme;
 
 use std::{
@@ -19,6 +25,25 @@ use models::{
 };
 use tauri::{Manager, State};
 use updater::UpdateDownloadState;
+
+pub(crate) fn background_ui_test() -> bool {
+    cfg!(debug_assertions)
+        && std::env::var_os("NOVEL_LIBRARY_TEST_DATA_DIRECTORY").is_some()
+        && std::env::var_os("NOVEL_LIBRARY_TEST_BACKGROUND").is_some()
+}
+pub(crate) fn show_auxiliary_window(window: &tauri::Window) -> Result<(), String> {
+    if background_ui_test() {
+        window
+            .set_position(tauri::PhysicalPosition::new(-20000, -20000))
+            .map_err(|e| e.to_string())?;
+    }
+    window.show().map_err(|e| e.to_string())?;
+    let _ = window.unminimize();
+    if !background_ui_test() {
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 
 #[cfg(windows)]
 fn disable_browser_accelerator_keys(window: &tauri::WebviewWindow) -> tauri::Result<()> {
@@ -358,20 +383,33 @@ async fn set_code_oss_wheel_injection(
 }
 
 #[tauri::command]
-fn set_window_palette(window: tauri::WebviewWindow, palette: Option<String>) -> Result<(), String> {
+fn set_window_palette(window: tauri::Window, palette: Option<String>) -> Result<(), String> {
     window_theme::set_window_palette(&window, palette.as_deref())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mut context = tauri::generate_context!();
+    #[cfg(debug_assertions)]
+    if let Some(directory) = std::env::var_os("NOVEL_LIBRARY_TEST_DATA_DIRECTORY") {
+        // Keep automated desktop checks separate from the user's cookies and settings.
+        for window in &mut context.config_mut().app.windows {
+            window.data_directory = Some(PathBuf::from(&directory).join("webview"));
+            window.visible = false;
+        }
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        // Remote pages open managed tabs through on_new_window. The opener's global
+        // click script would swallow those links and attempt a denied remote IPC call.
+        .plugin(tauri_plugin_opener::Builder::new().open_js_links_on_click(false).build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             if let Some(main_window) = app.get_webview_window("main") {
                 disable_browser_accelerator_keys(&main_window)?;
+            }
+            if let Some(main_window) = app.get_window("main") {
                 if let Err(error) = window_theme::set_window_palette(&main_window, Some("startup"))
                 {
                     eprintln!("startup-window-theme-error: {error}");
@@ -379,10 +417,16 @@ pub fn run() {
             }
             let legacy_directory = legacy_data_directory(app.handle())?;
             let install_directory = installation_directory()?;
-            let data_directory = default_data_directory(&install_directory)?;
+            let isolated = cfg!(debug_assertions)
+                .then(|| std::env::var_os("NOVEL_LIBRARY_TEST_DATA_DIRECTORY"))
+                .flatten()
+                .map(PathBuf::from);
+            let data_directory = isolated
+                .clone()
+                .unwrap_or(default_data_directory(&install_directory)?);
             let old_settings = legacy_directory.join("app-settings.json");
             let new_settings = data_directory.join("app-settings.json");
-            if !new_settings.exists() && old_settings.is_file() {
+            if isolated.is_none() && !new_settings.exists() && old_settings.is_file() {
                 fs::create_dir_all(&data_directory)?;
                 let _ = fs::copy(&old_settings, &new_settings);
                 let _ = fs::remove_file(old_settings);
@@ -391,15 +435,26 @@ pub fn run() {
                 data_directory.join("app-settings.json"),
             ));
             close_behavior::setup_tray(app)?;
-            let database = DatabaseState::prepare_for_installation(
-                data_directory.clone(),
-                install_directory.join("NovelLibrary.storage.json"),
-                &legacy_directory,
-            )?;
+            let database = if isolated.is_some() {
+                if let Some(window) = app.get_window("main") {
+                    window.set_title("小说书库 · 联网验证")?;
+                    if background_ui_test() { window.set_position(tauri::PhysicalPosition::new(-20000, -20000))?; }
+                }
+                DatabaseState::initialize(data_directory.clone())?
+            } else {
+                DatabaseState::prepare_for_installation(
+                    data_directory.clone(),
+                    install_directory.join("NovelLibrary.storage.json"),
+                    &legacy_directory,
+                )?
+            };
             app.manage(database);
             app.manage(UpdateDownloadState::default());
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
+                if isolated.is_some() {
+                    return;
+                }
                 let state = app_handle.state::<DatabaseState>();
                 if let Err(error) = state.initialize_for_installation_background(&legacy_directory)
                 {
@@ -412,51 +467,101 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            list_books,
-            list_book_summaries,
-            get_book,
-            list_chapters,
-            get_chapter,
-            save_imported_book,
-            save_reading_progress,
-            delete_book,
-            search_library,
-            list_notes,
-            get_note,
-            create_note,
-            save_note,
-            set_note_pinned,
-            duplicate_note,
-            delete_note,
-            export_notes,
-            import_notes,
-            write_note_export,
-            get_storage_status,
-            change_data_directory,
-            reset_data_directory,
-            change_database_file,
-            export_backup,
-            import_backup,
-            read_external_file,
-            get_ide_integration_status,
-            install_ide_plugin,
-            uninstall_ide_plugin,
-            set_code_oss_wheel_injection,
-            set_window_palette,
-            updater::check_application_update,
-            updater::download_application_update,
-            updater::cancel_application_update_download,
-            updater::install_downloaded_application_update,
-            updater::dismiss_application_update,
-            close_behavior::get_close_behavior,
-            close_behavior::set_close_behavior,
-            close_behavior::cancel_close_behavior_prompt,
-            close_behavior::resolve_close_behavior,
-            wait_for_startup
-        ])
-        .on_window_event(close_behavior::handle_window_event)
-        .run(tauri::generate_context!())
+        .invoke_handler(|invoke| {
+            if floating_layer::is_layer(invoke.message.webview_ref().label()) {
+                let layer_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![floating_layer::get_floating_layer, floating_layer::resize_floating_layer, floating_layer::hide_floating_layer];
+                return layer_handler(invoke);
+            }
+            if invoke.message.webview_ref().label() == "release-history" {
+                let history_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![set_window_palette, floating_layer::show_floating_layer, floating_layer::hide_floating_layer];
+                return history_handler(invoke);
+            }
+            if matches!(invoke.message.webview_ref().label(), "web-browser" | "web-browser-menu") {
+                let browser_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![floating_layer::show_floating_layer, floating_layer::hide_floating_layer, web_browser::open_web_browser, web_browser::get_web_browser_state, web_browser::set_web_browser_mode, web_browser::set_web_browser_bounds, web_browser::web_browser_action, web_browser::set_web_browser_zoom, web_browser::close_web_browser, web_browser::switch_web_browser_tab, web_browser::close_web_browser_tab, web_browser::show_web_browser_menu, web_browser::close_web_browser_menu];
+                return browser_handler(invoke);
+            }
+            if !matches!(invoke.message.webview_ref().label(), "main" | "settings") {
+                invoke.resolver.reject("网页窗口没有本地数据访问权限");
+                return true;
+            }
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
+                floating_layer::show_floating_layer,
+                floating_layer::hide_floating_layer,
+                settings_window::open_settings_window,
+                settings_window::open_release_history_window,
+                web_browser::set_web_browser_suspended,
+                web_browser::open_web_browser,
+                web_browser::get_web_browser_state,
+                web_browser::set_web_browser_mode,
+                web_browser::set_web_browser_bounds,
+                web_browser::web_browser_action,
+                web_browser::set_web_browser_zoom,
+                web_browser::close_web_browser,
+                web_browser::switch_web_browser_tab,
+                web_browser::close_web_browser_tab,
+                web_browser::show_web_browser_menu,
+                web_browser::close_web_browser_menu,
+                search_browser::fetch_search_browser,
+                search_browser::cancel_search_browser,
+                site_browser::fetch_online_browser,
+                site_browser::cancel_online_browser,
+                site_browser::show_online_browser,
+                online::fetch_online_page,
+                online::search_online_books,
+                online::save_online_catalog,
+                online::list_online_books,
+                online::store_online_chapter,
+                online::set_online_state,
+                list_books,
+                list_book_summaries,
+                get_book,
+                list_chapters,
+                get_chapter,
+                save_imported_book,
+                save_reading_progress,
+                delete_book,
+                search_library,
+                list_notes,
+                get_note,
+                create_note,
+                save_note,
+                set_note_pinned,
+                duplicate_note,
+                delete_note,
+                export_notes,
+                import_notes,
+                write_note_export,
+                get_storage_status,
+                change_data_directory,
+                reset_data_directory,
+                change_database_file,
+                export_backup,
+                import_backup,
+                read_external_file,
+                get_ide_integration_status,
+                install_ide_plugin,
+                uninstall_ide_plugin,
+                set_code_oss_wheel_injection,
+                set_window_palette,
+                updater::check_application_update,
+                updater::download_application_update,
+                updater::cancel_application_update_download,
+                updater::install_downloaded_application_update,
+                updater::dismiss_application_update,
+                close_behavior::get_close_behavior,
+                close_behavior::set_close_behavior,
+                close_behavior::cancel_close_behavior_prompt,
+                close_behavior::resolve_close_behavior,
+                wait_for_startup
+            ];
+            handler(invoke)
+        })
+        .on_window_event(|window, event| {
+            web_browser::handle_window_event(window, event);
+            floating_layer::handle_window_event(window, event);
+            close_behavior::handle_window_event(window, event);
+        })
+        .run(context)
         .expect("failed to run novel library desktop application");
 }
 

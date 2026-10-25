@@ -1,4 +1,4 @@
-use tauri::WebviewWindow;
+use tauri::Window;
 
 #[cfg(target_os = "windows")]
 const DWMWA_BORDER_COLOR: u32 = 34;
@@ -37,7 +37,7 @@ unsafe fn set_color_attribute(hwnd: *mut std::ffi::c_void, attribute: u32, color
     );
 }
 
-pub fn set_window_palette(window: &WebviewWindow, palette: Option<&str>) -> Result<(), String> {
+pub fn set_window_palette(window: &Window, palette: Option<&str>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let hwnd = window.hwnd().map_err(|error| error.to_string())?;
@@ -48,12 +48,12 @@ pub fn set_window_palette(window: &WebviewWindow, palette: Option<&str>) -> Resu
                 colorref(247, 243, 238),
             ),
             Some("app-light") => (
-                colorref(245, 245, 244),
+                colorref(243, 242, 241),
                 colorref(28, 28, 27),
                 colorref(221, 220, 216),
             ),
             Some("app-dark") => (
-                colorref(21, 21, 21),
+                colorref(29, 29, 31),
                 colorref(244, 244, 242),
                 colorref(52, 52, 50),
             ),

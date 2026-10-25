@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { Copy, Minus, PanelLeftClose, PanelLeftOpen, Square, X } from 'lucide-vue-next'
+import { Copy, Minus, Square, X } from 'lucide-vue-next'
 import { isTauri } from '@tauri-apps/api/core'
 import { type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -8,12 +8,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 type WindowResizeDirection = 'East' | 'North' | 'NorthEast' | 'NorthWest' | 'South' | 'SouthEast' | 'SouthWest' | 'West'
 
 defineProps<{
-  showSidebarToggle?: boolean
-  sidebarCollapsed?: boolean
-}>()
-
-defineEmits<{
-  toggleSidebar: []
+  showBrand?: boolean
 }>()
 
 const maximized = ref(false)
@@ -71,18 +66,7 @@ onBeforeUnmount(() => unlistenResize?.())
 <template>
   <header class="window-titlebar" @mousedown.left="startWindowDragging" @dblclick="toggleMaximizeWindow">
     <div class="window-titlebar-main">
-      <div v-if="showSidebarToggle" class="window-titlebar-brand">
-        <button
-          type="button"
-          class="window-sidebar-toggle"
-          :title="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
-          :aria-label="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
-          @dblclick.stop
-          @click.stop="$emit('toggleSidebar')"
-        >
-          <PanelLeftOpen v-if="sidebarCollapsed" :size="16" />
-          <PanelLeftClose v-else :size="16" />
-        </button>
+      <div v-if="showBrand" class="window-titlebar-brand">
         <strong>小说书库</strong>
       </div>
       <div class="window-controls">

@@ -7,7 +7,7 @@ export interface DesktopBookSummary {
   id: string
   title: string
   author: string
-  sourceFormat: 'txt' | 'epub'
+  sourceFormat: 'txt' | 'epub' | 'web'
   coverDataUrl?: string
   chapterCount: number
   totalWords: number
@@ -160,8 +160,17 @@ export function listDesktopChapters(bookId: string) {
   return invoke<DesktopChapterSummary[]>('list_chapters', { bookId })
 }
 
-export function getDesktopChapter(bookId: string, number: number) {
-  return invoke<DesktopChapter | null>('get_chapter', { bookId, number })
+export async function getDesktopChapter(bookId: string, number: number) {
+  const chapter = await invoke<DesktopChapter | null>('get_chapter', { bookId, number })
+  if (chapter && !chapter.content.trim()) {
+    const book = await getDesktopBook(bookId)
+    if (book?.sourceFormat === 'web') {
+      const { ensureOnlineChapter } = await import('./online-library')
+      await ensureOnlineChapter(bookId, number)
+      return invoke<DesktopChapter | null>('get_chapter', { bookId, number })
+    }
+  }
+  return chapter
 }
 
 export function saveDesktopBook(input: {
@@ -182,10 +191,12 @@ export function saveDesktopProgress(bookId: string, chapterNumber: number, chapt
   })
 }
 
-export function deleteDesktopBook(bookId: string) {
-  return invoke<void>('delete_book', { bookId }).then(() => {
-    invalidateDesktopBookCache()
-  })
+export async function deleteDesktopBook(bookId: string) {
+  const online = await import('./online-library')
+  await online.pauseOnlineBook(bookId, true)
+  await invoke<void>('delete_book', { bookId })
+  invalidateDesktopBookCache()
+  await online.refreshOnlineBooks()
 }
 
 export function searchDesktopLibrary(query: string) {

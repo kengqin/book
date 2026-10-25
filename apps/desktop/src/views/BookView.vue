@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, BookOpen, ChevronRight, EyeOff, Trash2 } from 'lucide-vue-next'
+import { ArrowLeft, BookOpen, ChevronRight, EyeOff, RefreshCw, Trash2 } from 'lucide-vue-next'
 import { formatChapterLabel, isNumberedChapter } from '@novel-library/reader-core'
 import { deleteDesktopBook, getDesktopBook, listDesktopChapters, type DesktopBook, type DesktopChapterSummary } from '../services/desktop-library'
 import { sanitizeReaderHtml } from '../services/sanitize-reader-html'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 import { showGlobalError, showGlobalMessage } from '../services/global-message'
+import { checkOnlineUpdates, downloadOnlineBook, onlineBooks, refreshOnlineBooks } from '../services/online-library'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,7 +16,10 @@ const chapters = ref<DesktopChapterSummary[]>([])
 const loading = ref(true)
 const deleteDialogOpen = ref(false)
 const deleting = ref(false)
-const bookId = computed(() => String(route.params.bookId))
+const checkingBooks = ref(new Set<string>())
+const bookId = computed(() => String(route.params.bookId || ''))
+const checkingUpdates = computed(() => checkingBooks.value.has(bookId.value))
+const downloading = computed(() => onlineBooks.value.some(item => item.bookId === bookId.value && item.state === 'downloading'))
 const safeDescription = computed(() => sanitizeReaderHtml(book.value?.description || '', { preserveStyles: true }))
 const chapterGroups = computed(() => {
   const groups = new Map<string, DesktopChapterSummary[]>()
@@ -39,6 +43,7 @@ const currentChapterTitle = computed(() => {
 })
 
 function chapterMetaLabel(chapter: DesktopChapterSummary) {
+  if (book.value?.sourceFormat === 'web') return ''
   if (chapter.kind === 'chapter') {
     const label = formatChapterLabel(chapter)
     if (label !== chapter.title) return label
@@ -49,17 +54,39 @@ function chapterMetaLabel(chapter: DesktopChapterSummary) {
   return chapter.kind === 'volume' ? '分卷' : chapter.kind === 'frontmatter' ? '前置' : '附加'
 }
 
-async function load() {
+async function refreshBook(id = bookId.value) {
+  const [nextBook, nextChapters] = await Promise.all([getDesktopBook(id), listDesktopChapters(id)])
+  if (!nextBook) throw new Error('书籍不存在或已被删除')
+  if (bookId.value !== id) return
+  book.value = nextBook
+  chapters.value = nextChapters
+}
+
+async function load(id = bookId.value) {
   loading.value = true
   try {
-    const [nextBook, nextChapters] = await Promise.all([getDesktopBook(bookId.value), listDesktopChapters(bookId.value)])
-    if (!nextBook) throw new Error('书籍不存在或已被删除')
-    book.value = nextBook
-    chapters.value = nextChapters
+    await refreshBook(id)
   } catch (cause) {
-    showGlobalError(cause, '书籍加载失败，请返回书架后重试')
+    if (bookId.value === id) showGlobalError(cause, '书籍加载失败，请返回书架后重试')
   } finally {
-    loading.value = false
+    if (bookId.value === id) loading.value = false
+  }
+}
+
+async function checkUpdates() {
+  if (!book.value || book.value.sourceFormat !== 'web' || checkingUpdates.value || deleting.value || downloading.value) return
+  const id = book.value.id
+  checkingBooks.value.add(id)
+  try {
+    if (!onlineBooks.value.some(item => item.bookId === id)) await refreshOnlineBooks()
+    const count = await checkOnlineUpdates(id)
+    if (count) void downloadOnlineBook(id)
+    await refreshBook(id)
+    if (bookId.value === id) showGlobalMessage(count ? `新增 ${count} 章，已开始下载` : '目录已是最新')
+  } catch (cause) {
+    if (bookId.value === id && !(cause instanceof DOMException && cause.name === 'AbortError')) showGlobalError(cause, '检查更新失败')
+  } finally {
+    checkingBooks.value.delete(id)
   }
 }
 
@@ -79,7 +106,7 @@ async function removeBook() {
   }
 }
 
-onMounted(load)
+watch(bookId, id => { if (id) void load(id) }, { immediate: true })
 </script>
 
 <template>
@@ -90,7 +117,18 @@ onMounted(load)
       <header class="book-detail-header" :style="{ '--book-accent': book.theme.accent }">
         <div class="book-detail-seal" :class="{ 'book-detail-seal--image': book.coverDataUrl }"><img v-if="book.coverDataUrl" :src="book.coverDataUrl" alt="" /><template v-else>{{ book.title.slice(0, 1) }}</template></div>
         <div class="book-detail-copy"><h1>{{ book.title }}</h1><span>{{ book.author || '佚名' }}</span><blockquote v-if="book.description" v-html="safeDescription" /><blockquote v-else>暂无简介</blockquote></div>
-        <aside class="book-detail-side"><div class="book-detail-stats"><span>{{ book.sourceFormat.toUpperCase() }}</span><span>{{ numberedChapterCount }} 章</span><span>{{ book.totalWords.toLocaleString() }} 字</span></div><div class="book-action-panel"><dl><div><dt>阅读进度</dt><dd>{{ book.progress.toFixed(0) }}%</dd></div><div><dt>当前章节</dt><dd :title="currentChapterTitle">{{ currentChapterTitle }}</dd></div></dl><div class="book-action-buttons"><button type="button" class="primary-command" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" />{{ book.progress ? '继续阅读' : '开始阅读' }}</button><button type="button" class="book-privacy-button" @click="router.push({ path: `/read/${book.id}/${book.currentChapter}`, query: { privacy: '1' } })"><EyeOff :size="15" />隐私模式</button><button type="button" class="book-delete-button" @click="deleteDialogOpen = true"><Trash2 :size="15" />删除书籍</button></div></div></aside>
+        <aside class="book-detail-side">
+          <div class="book-detail-stats"><button v-if="book.sourceFormat === 'web'" type="button" class="text-command" @click="router.push({ path: '/online', query: { book: book.id } })">在线 · 下载管理</button><span v-else>{{ book.sourceFormat.toUpperCase() }}</span><span>{{ numberedChapterCount }} 章</span><span>{{ book.totalWords.toLocaleString() }} 字</span></div>
+          <div class="book-action-panel">
+            <dl><div><dt>阅读进度</dt><dd>{{ book.progress.toFixed(0) }}%</dd></div><div><dt>当前章节</dt><dd :title="currentChapterTitle">{{ currentChapterTitle }}</dd></div></dl>
+            <div class="book-action-buttons" :class="{ 'book-action-buttons--online': book.sourceFormat === 'web' }">
+              <button type="button" class="primary-command" @click="router.push(`/read/${book.id}/${book.currentChapter}`)"><BookOpen :size="17" />{{ book.progress ? '继续阅读' : '开始阅读' }}</button>
+              <button v-if="book.sourceFormat === 'web'" type="button" class="book-update-button" :disabled="checkingUpdates || deleting || downloading" :aria-busy="checkingUpdates" :title="downloading ? '下载完成或暂停后可检查更新' : undefined" @click="checkUpdates"><RefreshCw :size="15" :class="{ spinning: checkingUpdates }" />{{ checkingUpdates ? '检查中' : '检查更新' }}</button>
+              <button type="button" class="book-privacy-button" @click="router.push({ path: `/read/${book.id}/${book.currentChapter}`, query: { privacy: '1' } })"><EyeOff :size="15" />隐私模式</button>
+              <button type="button" class="book-delete-button" @click="deleteDialogOpen = true"><Trash2 :size="15" />删除书籍</button>
+            </div>
+          </div>
+        </aside>
       </header>
 
       <section class="chapter-catalogue">
