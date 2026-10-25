@@ -1,8 +1,11 @@
 import { createApp } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import App from './App.vue'
 import { router } from './router'
 import { syncApplicationWindowChrome } from './services/window-chrome'
+import { initializeTooltips } from './services/tooltips'
+import { initializeScrollbars } from './services/scrollbars'
 import { PAGE_TURN_DURATION, startPageTurn } from './services/startup-animation'
 import './styles.css'
 import './styles/editorial.css'
@@ -10,8 +13,13 @@ import './styles/editorial.css'
 window.addEventListener('contextmenu', event => event.preventDefault(), true)
 
 const app = createApp(App).use(router)
-const stopPageTurn = startPageTurn()
+const overlayShell = isTauri() && ['app-message', 'app-tooltip', 'app-progress'].includes(getCurrentWindow().label)
+const browserShell = isTauri() && (getCurrentWindow().label.startsWith('web-browser') || ['settings', 'release-history'].includes(getCurrentWindow().label) || overlayShell)
+if (browserShell) document.documentElement.dataset.windowKind = getCurrentWindow().label
+const stopPageTurn = browserShell ? () => {} : startPageTurn()
 app.mount('#app')
+if (!overlayShell) { initializeTooltips(); initializeScrollbars() }
+if (browserShell) { document.getElementById('startup-splash')?.remove(); delete document.documentElement.dataset.starting }
 
 function dismissStartupSplash() {
   const splash = document.getElementById('startup-splash')
@@ -32,6 +40,7 @@ function dismissStartupSplash() {
 
 async function waitForStartup() {
   if (!isTauri()) return
+  if (browserShell) return
   try {
     let timedOut = false
     const timeout = new Promise<void>(resolve => {

@@ -2,17 +2,18 @@ import { readonly, ref } from 'vue'
 
 export type GlobalMessageType = 'success' | 'info' | 'warning' | 'error'
 
-interface GlobalMessageState {
+export interface GlobalMessageState {
   id: number
   text: string
   type: GlobalMessageType
 }
 
 const message = ref<GlobalMessageState>()
-let nextId = 0
+let nextId = Date.now() * 1000 + Math.floor(Math.random() * 1000)
 let dismissTimer: number | undefined
 
 export const globalMessage = readonly(message)
+export function acceptFloatingMessage(value?: GlobalMessageState) { message.value = value }
 
 export function dismissGlobalMessage(id?: number) {
   if (id !== undefined && message.value?.id !== id) return

@@ -15,6 +15,7 @@ import ReaderSettingsPopover from '../components/ReaderSettingsPopover.vue'
 import ReaderCatalogueDialog from '../components/ReaderCatalogueDialog.vue'
 import { normalizeReaderFont, normalizeReaderWidth, readerFonts, type ReaderWidth, type ReaderFont, type ReaderPalette } from '../services/reader-appearance'
 import { normalizeParagraphStart, prepareReaderParagraphs } from '../services/reader-paragraphs'
+import { onlineSearchSession } from '../services/online-search-state'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,8 @@ const book = ref<DesktopBook>()
 const chapter = ref<DesktopChapter>()
 const chapters = ref<DesktopChapterSummary[]>([])
 const loading = ref(true)
+const loadError = ref('')
+let loadGeneration = 0
 const catalogue = ref<InstanceType<typeof ReaderCatalogueDialog>>()
 const fontSize = ref(18)
 const lineHeight = ref(2.05)
@@ -125,6 +128,7 @@ function chapterDisplayLabel() {
 
 function chapterHeading() {
   if (!chapter.value) return ''
+  if (book.value?.sourceFormat === 'web') return chapter.value.title
   if (!isNumberedChapter(chapter.value)) return chapter.value.title
   const label = chapterDisplayLabel()
   if (/^第[零〇一二两三四五六七八九十百千万\d]+[章节回]/u.test(chapter.value.title)) return chapter.value.title
@@ -492,13 +496,17 @@ function handleReaderKeydown(event: KeyboardEvent) {
 }
 
 async function load() {
+  const generation = ++loadGeneration
   loading.value = true
+  loadError.value = ''
+  chapter.value = undefined
   try {
     const [nextBook, nextChapters, nextChapter] = await Promise.all([
       getDesktopBook(bookId.value),
       listDesktopChapters(bookId.value),
       getDesktopChapter(bookId.value, chapterNumber.value)
     ])
+    if (generation !== loadGeneration) return
     if (!nextBook || !nextChapter) throw new Error('章节不存在或已被删除')
     book.value = nextBook
     chapters.value = nextChapters
@@ -519,17 +527,35 @@ async function load() {
       scrollRoot.scrollTo({ top: scrollable * restoredProgress / 100 })
     })
   } catch (cause) {
+    if (generation !== loadGeneration) return
+    loadError.value = cause instanceof Error ? cause.message : String(cause)
     showGlobalError(cause, '章节加载失败，请返回目录后重试')
   } finally {
-    loading.value = false
+    if (generation === loadGeneration) loading.value = false
   }
 }
 
 function openChapter(number: number) {
-  router.push(`/read/${bookId.value}/${number}`)
+  router.push({ path: `/read/${bookId.value}/${number}`, query: route.query })
+}
+
+async function syncOnlineCatalog(event: Event) {
+  if ((event as CustomEvent<{ bookId: string }>).detail?.bookId !== bookId.value) return
+  const id = bookId.value
+  const latest = await listDesktopChapters(id)
+  if (bookId.value === id) chapters.value = latest
+}
+
+function returnFromReader() {
+  if (route.query.from === 'online') {
+    onlineSearchSession.preview = false
+    if (onlineSearchSession.pages.length) onlineSearchSession.query = onlineSearchSession.submittedQuery
+    void router.push('/online')
+  } else void router.push(`/book/${bookId.value}`)
 }
 
 onMounted(() => {
+  window.addEventListener('online-catalog-updated', syncOnlineCatalog)
   try {
     const stored = JSON.parse(localStorage.getItem('desktop-reader-settings') || '{}')
     if (stored.fontSize) fontSize.value = stored.fontSize
@@ -568,6 +594,8 @@ onMounted(() => {
   void load()
 })
 onBeforeUnmount(() => {
+  loadGeneration++
+  window.removeEventListener('online-catalog-updated', syncOnlineCatalog)
   const privacyRestore = privacyMode.value
     ? persistPrivacyWindowBounds().catch(error => console.warn('privacy-window-bounds-save-failed', error)).then(restoreReaderWindow)
     : Promise.resolve()
@@ -588,7 +616,7 @@ watch([fontSize, lineHeight, palette, font, pageWidth], saveSettings)
 watch([palette, privacyPalette], syncReaderChrome)
 watch(privacyPalette, value => localStorage.setItem('desktop-reader-privacy-palette', value))
 watch([privacyFontSize, privacyLineHeight, privacyCustomTextColor], savePrivacySettings)
-watch(() => route.params.chapterNumber, load)
+watch(() => [route.params.bookId, route.params.chapterNumber], load)
 </script>
 
 <template>
@@ -704,7 +732,7 @@ watch(() => route.params.chapterNumber, load)
 
     <template v-else>
       <header class="desktop-reader-toolbar">
-        <button type="button" class="icon-button" title="返回目录" aria-label="返回目录" @click="router.push(`/book/${bookId}`)"><ArrowLeft :size="18" /></button>
+        <button type="button" class="icon-button" :title="route.query.from === 'online' ? '返回搜索结果' : '返回目录'" :aria-label="route.query.from === 'online' ? '返回搜索结果' : '返回目录'" @click="returnFromReader"><ArrowLeft :size="18" /></button>
         <div v-if="book && chapter" class="reader-chapter-heading">
           <strong :title="chapterHeading()">{{ chapterHeading() }}</strong>
           <span :title="chapterMetadata">{{ chapterMetadata }}</span>
@@ -720,6 +748,7 @@ watch(() => route.params.chapterNumber, load)
         @catalogue="catalogue?.show()"
       />
       <div v-if="loading" class="view-status" role="status">正在加载章节...</div>
+      <div v-else-if="loadError" class="view-status" role="alert"><p>{{ loadError }}</p><button class="secondary-command" @click="load">重试加载</button><button class="text-command" @click="router.push(`/book/${bookId}`)">返回目录</button></div>
       <main v-else-if="book && chapter" class="desktop-reader-content">
         <article :class="{ 'reader-custom-font': font !== 'original' }">
           <p v-if="chapter.kind !== 'volume'" class="reader-volume">{{ chapter.volume || book.title }}</p>

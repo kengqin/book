@@ -708,7 +708,7 @@ fn ensure_book_description_backfill(connection: &Connection, force: bool) -> Res
     }
 }
 
-fn migrate(connection: &Connection) -> Result<(), String> {
+pub(crate) fn migrate(connection: &Connection) -> Result<(), String> {
     let previous_version = connection
         .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
         .map_err(|error| error.to_string())?;
@@ -724,6 +724,7 @@ fn migrate(connection: &Connection) -> Result<(), String> {
         )
         .map_err(|error| error.to_string())?;
     storage_id(connection)?;
+    crate::online::migrate(connection)?;
     if previous_version == CURRENT_SCHEMA_VERSION {
         ensure_epub_volume_backfill(connection, false)?;
         // Re-evaluate legacy EPUB chapter kinds so unnumbered entries nested
@@ -786,6 +787,7 @@ fn migrate(connection: &Connection) -> Result<(), String> {
             );
 
             CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(is_pinned DESC, updated_at DESC);
+
             "#,
         )
         .map_err(|error| error.to_string())?;
@@ -1584,6 +1586,7 @@ pub fn export_backup(connection: &Connection, target_path: &Path) -> Result<Back
         books,
         chapters,
         notes,
+        online_books: crate::online::list_books(connection)?,
         checksum_sha256: None,
     };
     let mut value = serde_json::to_value(&payload).map_err(|error| error.to_string())?;
@@ -1715,6 +1718,13 @@ pub fn import_backup_with_strategy(
             if chapter_fingerprint(&current)? != chapter_fingerprint(&incoming)? {
                 let previous_id = book.id.clone();
                 let replacement_id = Uuid::new_v4().to_string();
+                for online in payload
+                    .online_books
+                    .iter_mut()
+                    .filter(|online| online.book_id == previous_id)
+                {
+                    online.book_id = replacement_id.clone();
+                }
                 book.id = replacement_id.clone();
                 book.title = format!("{}（导入副本）", book.title);
                 for chapter in payload
@@ -1825,6 +1835,7 @@ pub fn import_backup_with_strategy(
     }
 
     repair_epub_chapter_structure(&transaction, payload.version <= 3)?;
+    crate::online::restore_books(&transaction, &payload.online_books)?;
     upsert_notes(&transaction, &payload.notes)?;
 
     transaction.commit().map_err(|error| error.to_string())?;
