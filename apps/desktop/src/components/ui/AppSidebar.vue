@@ -1,46 +1,24 @@
 <script setup lang="ts">
-import { LibraryBig, Search, Settings, Wrench } from 'lucide-vue-next'
+import { Globe, LibraryBig, Search, Settings, Wrench } from 'lucide-vue-next'
+import { openSettingsWindow } from '../../services/settings-window'
+import { showGlobalError } from '../../services/global-message'
 
 defineProps<{
   hasUpdate?: boolean
-  collapsed?: boolean
-  width: number
-  minWidth: number
-  maxWidth: number
-}>()
-
-defineEmits<{
-  'resize-start': [event: PointerEvent]
-  'resize-keydown': [event: KeyboardEvent]
 }>()
 </script>
 
 <template>
-  <aside class="app-sidebar" :class="{ 'app-sidebar--collapsed': collapsed }">
+  <aside class="app-sidebar app-sidebar--collapsed">
     <nav id="sidebar-navigation" class="sidebar-primary" aria-label="主导航">
-      <RouterLink to="/library" title="书架"><LibraryBig :size="18" /><span>书架</span></RouterLink>
-      <RouterLink to="/search" title="搜索"><Search :size="18" /><span>搜索</span></RouterLink>
-      <RouterLink to="/tools" title="工具"><Wrench :size="18" /><span>工具</span></RouterLink>
+      <RouterLink to="/library" title="书架" aria-label="书架"><LibraryBig :size="18" :stroke-width="1.65" /><span>书架</span></RouterLink>
+      <RouterLink to="/search" title="搜索" aria-label="搜索"><Search :size="18" :stroke-width="1.65" /><span>搜索</span></RouterLink>
+      <RouterLink to="/online" title="在线找书" aria-label="在线找书"><Globe :size="18" :stroke-width="1.65" /><span>在线找书</span></RouterLink>
+      <RouterLink to="/tools" title="工具" aria-label="工具"><Wrench :size="18" :stroke-width="1.65" /><span>工具</span></RouterLink>
     </nav>
 
     <nav class="sidebar-secondary" aria-label="应用设置">
-      <RouterLink to="/settings" title="设置"><Settings :size="18" /><span>设置</span><i v-if="hasUpdate" class="update-badge" /></RouterLink>
+      <button type="button" title="设置" aria-label="设置" @click="openSettingsWindow().catch(cause => showGlobalError(cause, '设置打开失败'))"><Settings :size="18" :stroke-width="1.65" /><span>设置</span><i v-if="hasUpdate" class="update-badge" /></button>
     </nav>
-    <div
-      v-if="!collapsed"
-      class="sidebar-resize-handle"
-      role="separator"
-      tabindex="0"
-      aria-label="调整侧栏宽度"
-      aria-controls="sidebar-navigation"
-      aria-orientation="vertical"
-      :aria-valuemin="minWidth"
-      :aria-valuemax="maxWidth"
-      :aria-valuenow="width"
-      :aria-valuetext="`${width} 像素`"
-      title="拖动调整侧栏宽度，也可使用左右方向键"
-      @pointerdown="$emit('resize-start', $event)"
-      @keydown="$emit('resize-keydown', $event)"
-    />
   </aside>
 </template>

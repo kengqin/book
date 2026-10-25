@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "floating-layer",
+  "description": "Events for local message and tooltip overlays; no remote page or library access.",
+  "webviews": ["app-message", "app-tooltip", "app-progress"],
+  "permissions": ["core:event:default"]
+}

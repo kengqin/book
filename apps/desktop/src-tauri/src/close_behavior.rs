@@ -70,7 +70,7 @@ impl CloseBehaviorState {
 }
 
 pub(crate) fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -179,7 +179,7 @@ pub fn resolve_close_behavior(
     state.prompt_open.store(false, Ordering::SeqCst);
     match behavior {
         CloseBehavior::MinimizeToTray => {
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_window("main") {
                 window.hide().map_err(|error| error.to_string())?;
             }
         }

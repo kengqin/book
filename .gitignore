@@ -26,6 +26,9 @@ apps/desktop/src-tauri/resources/ide-plugins/*.zip
 .release-local/
 .release-local/android-signing/
 .playwright-cli/
+.test-fixtures/online-*
+.test-fixtures/inspect-search.cjs
+apps/desktop/src-tauri/debug.log
 .tools/
 *.key
 *.key.pub
@@ -38,3 +41,5 @@ apps/web/书库/雪中悍刀行/原文/
 apps/web/书库/雪中悍刀行/正文/
 apps/web/书库/永恒道途/参考资料/*.txt
 apps/web/书库/*剑来
+# Local desktop QA profiles, screenshots, downloaded pages, and temporary scripts.
+/.test-fixtures/

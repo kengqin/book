@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { ArrowUpRight, CheckCircle2, Download, History, RefreshCw, ShieldAlert } from 'lucide-vue-next'
+import { ArrowUpRight, Download, RefreshCw, ShieldAlert } from 'lucide-vue-next'
 import {
   availableUpdate,
   checkForUpdates,
@@ -35,6 +36,13 @@ import UiSwitch from '../components/ui/UiSwitch.vue'
 import { showGlobalMessage } from '../services/global-message'
 
 const initialManifest = getCachedReleaseManifest()
+const props = defineProps<{ embedded?: boolean; historyOnly?: boolean }>()
+async function openHistoryWindow() {
+  try {
+    if (isTauri()) await invoke('open_release_history_window')
+    else window.open(`${location.origin}${location.pathname}#/settings/history`, '_blank')
+  } catch { showGlobalMessage('更新历史打开失败，请稍后重试', 'error') }
+}
 const currentVersion = ref('0.0.0')
 const releases = ref<ReleaseEntry[]>(initialManifest.manifest.releases)
 const manifestSource = ref<ReleaseManifestSource>(initialManifest.source)
@@ -133,7 +141,6 @@ async function checkForUpdatesFromView() {
   checkingFromView.value = true
   try {
     await checkForUpdates(false)
-    await refreshReleaseHistory()
   } finally {
     checkingFromView.value = false
   }
@@ -141,37 +148,30 @@ async function checkForUpdatesFromView() {
 
 onMounted(async () => {
   currentVersion.value = await getCurrentVersion()
-  const initialHistoryRefresh = refreshReleaseHistory()
-  await checkForUpdates(true)
-  await initialHistoryRefresh
-  // The update check may have refreshed a stale cache with a newly published release.
-  await refreshReleaseHistory()
+  if (props.historyOnly) await refreshReleaseHistory()
+  else await checkForUpdates(true)
 })
 </script>
 
 <template>
-  <section class="workspace-view updates-view">
-    <PageHeader title="版本与更新" />
+  <section class="workspace-view updates-view" :class="{ 'updates-view--embedded': embedded && !historyOnly }">
+    <template v-if="!historyOnly">
+    <PageHeader v-if="!embedded" title="版本与更新" />
 
     <section class="update-status-panel">
       <div class="version-identity">
-        <span>当前版本</span>
-        <strong>v{{ currentVersion }}</strong>
-      </div>
-      <div class="update-status-copy">
-        <strong v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</strong>
-        <strong v-else-if="publishedUpdateVersion"><RefreshCw :size="17" />发现新版本 v{{ publishedUpdateVersion }}</strong>
-        <strong v-else-if="updateError"><ShieldAlert :size="17" />更新状态暂不可用</strong>
-        <strong v-else><CheckCircle2 :size="17" />{{ updateMessage || '版本状态正常' }}</strong>
-        <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
+        <strong>版本信息</strong>
+        <span>v{{ currentVersion }}</span>
       </div>
       <div class="header-actions">
-        <button type="button" class="secondary-command" :disabled="checkingFromView || updateChecking || ['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateStage)" @click="checkForUpdatesFromView"><RefreshCw :size="16" :class="{ spinning: updateChecking || checkingFromView }" />检查</button>
-        <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'download-error')" type="button" class="primary-command" @click="requestDownload"><Download :size="16" />下载更新</button>
+        <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'download-error')" type="button" class="primary-command" @click="requestDownload">下载更新</button>
         <button v-else-if="updateStage === 'downloading'" type="button" class="secondary-command" @click="cancelUpdateDownload">取消下载</button>
-        <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate"><RefreshCw :size="16" />安装并重启</button>
+        <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate">安装并重启</button>
+        <button v-else type="button" class="secondary-command" :disabled="checkingFromView || updateChecking || ['cancelling', 'installing'].includes(updateStage)" @click="checkForUpdatesFromView">{{ checkingFromView || updateChecking ? '正在检查' : '检查更新' }}</button>
       </div>
     </section>
+    <p class="update-feedback" role="status"><template v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</template><template v-else-if="publishedUpdateVersion">新版本 v{{ publishedUpdateVersion }} 已发布</template><template v-else-if="updateError">暂时无法检查更新，请稍后重试</template><template v-else>{{ updateMessage }}</template></p>
+    <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
 
     <div class="auto-update-list">
       <div class="auto-update-setting">
@@ -188,8 +188,10 @@ onMounted(async () => {
       </div>
     </div>
 
-    <section class="release-history">
-      <header><div><History :size="18" /><strong>历史更新</strong></div><small class="manifest-status"><RefreshCw v-if="historyRefreshing" :size="11" class="spinning" />{{ historyRefreshing ? '正在同步...' : manifestSource === 'remote' ? '在线记录' : manifestSource === 'cached' ? '本地缓存' : '内置记录' }}</small></header>
+    <footer class="update-footer"><button type="button" class="text-command update-history-link" @click="openHistoryWindow">更新历史</button></footer>
+    </template>
+    <section v-if="historyOnly" class="release-history">
+      <header><small class="manifest-status">{{ historyRefreshing ? '正在同步...' : manifestSource === 'remote' ? '在线记录' : manifestSource === 'cached' ? '本地缓存' : '内置记录' }}</small><button type="button" class="text-command" :disabled="historyRefreshing" @click="refreshReleaseHistory"><RefreshCw :size="13" :class="{ spinning: historyRefreshing }" />刷新</button></header>
       <article v-for="release in visibleReleases" :key="release.version" class="release-entry">
         <div class="release-rail"><span /><i /></div>
         <div class="release-content">
@@ -215,3 +217,13 @@ onMounted(async () => {
     <UiConfirmDialog :open="Boolean(downgradeRelease)" danger title="安装历史版本？" :description="`将从 ${currentVersion} 降级到 ${downgradeRelease?.version || ''}。旧版本可能无法读取新版数据库，请先在设置中导出完整备份。`" confirm-label="继续安装" @close="downgradeRelease = null" @confirm="confirmHistoricalInstall" />
   </section>
 </template>
+<style scoped>
+.release-history { margin-top: 0; }
+.release-history > header { min-height: 32px; margin-bottom: 4px; }
+.release-history > header button { font-size: 12px; }
+.release-content { padding-inline: 4px; }
+.auto-update-copy small { max-width: 350px; }
+.updates-view--embedded { display: flex; flex-direction: column; }
+.update-footer { display: flex; justify-content: center; margin-top: auto; padding-top: 28px; }
+.update-history-link { margin-top: 0; }
+</style>

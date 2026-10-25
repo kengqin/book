@@ -1,16 +1,37 @@
 <script setup lang="ts">
 import { AlertTriangle, CheckCircle2, CircleAlert, Info, X } from 'lucide-vue-next'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { dismissGlobalMessage, globalMessage } from '../services/global-message'
+const props = defineProps<{ embedded?: boolean }>()
+const native = ref(false)
+let unlisten: UnlistenFn | undefined
+let nativeQueue = Promise.resolve()
+const enqueue = (work: () => Promise<unknown>) => { nativeQueue = nativeQueue.then(work).then(() => {}, () => {}) }
+watch(globalMessage, (value, previous) => {
+  if (props.embedded || !isTauri()) return
+  if (!value) { native.value = false; if (previous) enqueue(() => invoke('hide_floating_layer', { kind: 'message', id: previous.id })); return }
+  native.value = true
+  enqueue(async () => {
+    if (globalMessage.value?.id !== value.id) return
+    try { await invoke('show_floating_layer', { kind: 'message', input: { id: value.id, text: value.text, tone: value.type } }) }
+    catch { if (globalMessage.value?.id === value.id) native.value = false }
+  })
+}, { flush: 'sync', immediate: true })
+function close() { const id = globalMessage.value?.id; if (props.embedded && isTauri()) void invoke('hide_floating_layer', { kind: 'message', id }); else dismissGlobalMessage(id) }
+onMounted(async () => { if (!props.embedded && isTauri()) unlisten = await listen<number>('floating-message-dismissed', event => dismissGlobalMessage(event.payload)) })
+onBeforeUnmount(() => unlisten?.())
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="global-message">
+  <Teleport to="body" :disabled="embedded">
+    <Transition name="global-message" :css="!embedded">
       <div
-        v-if="globalMessage"
+        v-if="globalMessage && !native"
         :key="globalMessage.id"
         class="global-message"
-        :class="`global-message--${globalMessage.type}`"
+        :class="[`global-message--${globalMessage.type}`, { 'global-message--floating': embedded }]"
         :role="globalMessage.type === 'error' ? 'alert' : 'status'"
         aria-live="polite"
       >
@@ -21,7 +42,7 @@ import { dismissGlobalMessage, globalMessage } from '../services/global-message'
           <Info v-else :size="17" />
         </span>
         <span class="global-message__content">{{ globalMessage.text }}</span>
-        <button type="button" aria-label="关闭提示" title="关闭" @click="dismissGlobalMessage(globalMessage.id)">
+        <button type="button" aria-label="关闭提示" @click="close">
           <X :size="16" />
         </button>
       </div>
@@ -33,7 +54,7 @@ import { dismissGlobalMessage, globalMessage } from '../services/global-message'
 .global-message {
   --message-accent: var(--ui-accent, #315f5a);
   position: fixed;
-  z-index: 2400;
+  z-index: 24000;
   top: 52px;
   left: 50%;
   display: flex;
@@ -48,7 +69,7 @@ import { dismissGlobalMessage, globalMessage } from '../services/global-message'
   border-radius: 12px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--message-accent) 5%, var(--ui-surface, #fff)), var(--ui-surface, #fff) 58%);
-  box-shadow: 0 18px 48px rgb(20 31 27 / 16%), 0 3px 10px rgb(20 31 27 / 7%);
+  box-shadow: none;
   backdrop-filter: blur(18px) saturate(1.08);
   transform: translateX(-50%);
 }
@@ -98,6 +119,7 @@ import { dismissGlobalMessage, globalMessage } from '../services/global-message'
   color: var(--ui-text, #202624);
   background: color-mix(in srgb, var(--ui-text, #202624) 7%, transparent);
 }
+.global-message--floating { position: relative; top: auto; left: auto; max-width: min(600px,calc(100vw - 24px)); transform: none; }
 
 .global-message-enter-active { transition: opacity 180ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1); }
 .global-message-leave-active { transition: opacity 130ms ease, transform 150ms ease; }

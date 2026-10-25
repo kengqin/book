@@ -21,6 +21,9 @@ function applyAppearance(value: Appearance) {
 }
 
 applyAppearance(appearance.value)
+window.addEventListener('storage', event => {
+  if (event.key === STORAGE_KEY) { appearance.value = readAppearance(); applyAppearance(appearance.value); void syncApplicationWindowChrome() }
+})
 
 export function useAppearance() {
   function setAppearance(value: Appearance) {
