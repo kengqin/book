@@ -31,6 +31,7 @@ const props = defineProps<{ windowed?: boolean }>()
 const route = useRoute()
 const selectedSection = (value: unknown): 'general' | 'storage' | 'updates' => value === 'storage' || value === 'updates' ? value : 'general'
 const activeSection = ref(selectedSection(route.query.section))
+watch(() => route.query.section, value => { if (props.windowed) activeSection.value = selectedSection(value) })
 watch(() => route.path, path => { if (props.windowed && path.endsWith('/updates')) activeSection.value = 'updates' })
 let unlistenSection: UnlistenFn | undefined
 const notifyDataChange = () => props.windowed && isTauri() ? emitTo('main', 'settings-data-changed') : Promise.resolve()
