@@ -11,6 +11,14 @@ vi.mock('@tauri-apps/api/app', () => ({ getVersion: getVersionMock }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: relaunchMock }))
+vi.mock('../../../../releases/releases.json', () => ({ default: {
+  schemaVersion: 1, repository: 'kengqin/book', latest: '0.3.0',
+  releases: [{ version: '0.3.0', date: '2026-07-16', title: 'Bundled', channel: 'stable', databaseSchema: 5,
+    published: true, minimumSupportedVersion: '0.1.0', requiresBackup: false,
+    releaseUrl: 'https://github.com/kengqin/book/releases/tag/v0.3.0',
+    installerUrl: 'https://github.com/kengqin/book/releases/download/v0.3.0/NovelLibrary_0.3.0_x64-setup.exe',
+    sha256: '', sections: [{ title: 'Bundled', items: ['Current version'] }], upgradeNotes: [] }]
+} }))
 vi.stubGlobal('localStorage', {
   getItem: (key: string) => localStorageStore.get(key) || null,
   setItem: (key: string, value: string) => localStorageStore.set(key, value),
@@ -21,6 +29,7 @@ import {
   availableUpdate,
   checkForUpdates,
   compareVersions,
+  getCachedReleaseManifest,
   installDownloadedUpdate,
   isReleaseManifest,
   latestReadyVersion,
@@ -111,6 +120,23 @@ describe('release center update consistency', () => {
     expect(second.source).toBe('cached')
     expect(fetchMock).not.toHaveBeenCalled()
     expect(second.manifest.latest).toBe(first.manifest.latest)
+  })
+
+  it('keeps bundled release notes when a previous app cached older history', async () => {
+    localStorageStore.set('novel-library:release-manifest-cache', JSON.stringify({ fetchedAt: Date.now(), manifest: remoteManifest('0.2.9') }))
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    expect(getCachedReleaseManifest().manifest.latest).toBe('0.3.0')
+    const result = await loadReleaseManifest()
+    expect(result.source).toBe('local')
+    expect(result.manifest.latest).toBe('0.3.0')
+  })
+
+  it('does not replace bundled history with a stale remote response after upgrading', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => remoteManifest('0.2.9') }))
+    const result = await loadReleaseManifest({ forceRefresh: true })
+    expect(result.source).toBe('local')
+    expect(result.manifest.latest).toBe('0.3.0')
+    expect(localStorageStore.has('novel-library:release-manifest-cache')).toBe(false)
   })
 
   it('uses the signed updater version instead of a newer catalog entry', async () => {

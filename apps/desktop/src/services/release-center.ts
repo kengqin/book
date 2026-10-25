@@ -267,6 +267,7 @@ function readManifestCache() {
     if (!raw) return null
     const cached = JSON.parse(raw) as Partial<ReleaseManifestCache>
     if (!Number.isFinite(cached.fetchedAt) || !isReleaseManifest(cached.manifest)) return null
+    if (compareVersions(cached.manifest.latest, localManifest.latest) < 0) return null
     return cached as ReleaseManifestCache
   } catch {
     return null
@@ -293,6 +294,7 @@ async function fetchRemoteReleaseManifest(): Promise<ReleaseManifestResult> {
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   const manifest: unknown = await response.json()
   if (!isReleaseManifest(manifest)) throw new Error('版本清单格式无效')
+  if (compareVersions(manifest.latest, localManifest.latest) < 0) throw new Error('版本清单尚未同步到当前应用版本')
   writeManifestCache(manifest)
   return { manifest, remote: true, source: 'remote' }
 }
