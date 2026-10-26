@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ArrowLeft, CheckCircle2, ChevronDown, Code2, Download, MousePointer2, RefreshCw, RotateCcw, Search, Trash2 } from 'lucide-vue-next'
-import { useRouter } from 'vue-router'
+import { CheckCircle2, ChevronDown, Code2, Download, MousePointer2, RefreshCw, RotateCcw, Search, Trash2 } from 'lucide-vue-next'
 import { getIdeIntegrationStatus, installIdePlugin, setCodeOssWheelInjection, uninstallIdePlugin, type BundledIdePlugin, type IdeIntegrationStatus, type IdeTarget } from '../services/desktop-library'
 import { idePluginUpdateAvailable } from '../services/ide-plugin-update'
 import { showGlobalError, showGlobalMessage } from '../services/global-message'
 import PageHeader from '../components/ui/PageHeader.vue'
 import UiConfirmDialog from '../components/ui/UiConfirmDialog.vue'
 
-const router = useRouter()
 const fallbackPlugins: BundledIdePlugin[] = [
   { id: 'vscode', label: '小说书库 · VS Code 阅读器', kind: 'vscode', version: '0.4.15', identifier: 'novel-library.novel-library-reader', description: '面向 VS Code、Cursor、Trae、Qoder、Windsurf、Kiro 等编辑器的配套扩展，支持书架与章节浏览、五行只读正文、自动跨章、固定进度栏及桌面端进度同步。', packageType: 'VSIX', supportedIdes: ['Visual Studio Code', 'VS Code Insiders', 'Cursor', 'Trae', 'Qoder', 'Windsurf', 'Kiro', 'VSCodium', 'Void', 'Code - OSS', 'Positron', 'PearAI'], available: false },
   { id: 'intellij', label: '小说书库 · JetBrains 阅读器', kind: 'jetbrains', version: '0.4.15', identifier: 'com.kengqin.novellibrary.reader', description: '面向 IntelliJ IDEA、PyCharm、WebStorm、Android Studio 等 JetBrains IDE 的配套插件，支持五行只读正文、自动跨章、固定进度栏、悬停滚轮及桌面端进度同步。', packageType: 'ZIP', supportedIdes: ['IntelliJ IDEA', 'PyCharm', 'WebStorm', 'Android Studio', 'Rider', 'CLion', 'GoLand', 'RubyMine'], available: false },
@@ -175,8 +173,6 @@ onMounted(refresh)
     <PageHeader title="IDE 插件">
       <template #actions><button type="button" class="icon-button" title="重新检测本机 IDE" :disabled="detecting" @click="refresh"><RefreshCw :size="18" :class="{ spinning: detecting }" /></button></template>
     </PageHeader>
-    <button type="button" class="text-command" @click="router.push('/tools')"><ArrowLeft :size="16" />返回工具库</button>
-
     <div class="ide-plugin-toolbar">
       <label class="ide-plugin-search"><Search :size="16" /><input v-model="query" type="search" placeholder="搜索支持的 IDE 或插件" /></label>
       <span>{{ detecting ? '正在校验插件包与本机 IDE' : error ? '检测失败' : `${visiblePlugins.length} 个插件包` }}</span>

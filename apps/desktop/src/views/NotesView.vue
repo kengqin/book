@@ -2,13 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
-import { useRouter } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import TurndownService from 'turndown'
 import {
   Bold,
-  ArrowLeft,
   Braces,
   ChevronDown,
   Code2,
@@ -58,7 +57,6 @@ import { showGlobalError, showGlobalMessage } from '../services/global-message'
 
 type ExportFormat = 'markdown' | 'html' | 'json'
 
-const router = useRouter()
 const notes = ref<NoteSummary[]>([])
 const selectedNote = ref<NoteRecord | null>(null)
 const title = ref('')
@@ -74,6 +72,18 @@ let hydrating = false
 let saveTimer = 0
 let searchTimer = 0
 let activeSave: Promise<boolean> | null = null
+
+onBeforeRouteLeave(async () => {
+  await persistCurrentNote()
+  return !dirty.value
+})
+
+// Capture pending content before useEditor registers its editor teardown hook.
+onBeforeUnmount(() => {
+  window.clearTimeout(saveTimer)
+  window.clearTimeout(searchTimer)
+  void persistCurrentNote()
+})
 
 const editor = useEditor({
   content: '<p></p>',
@@ -355,18 +365,13 @@ onMounted(async () => {
   if (notes.value[0]) await selectNote(notes.value[0].id)
 })
 
-onBeforeUnmount(() => {
-  window.clearTimeout(saveTimer)
-  window.clearTimeout(searchTimer)
-  void persistCurrentNote()
-})
 </script>
 
 <template>
   <section class="notes-workspace">
     <section class="note-index" aria-label="笔记列表">
       <header>
-        <div class="note-index-heading"><button type="button" class="icon-button" title="返回工具库" @click="router.push('/tools')"><ArrowLeft :size="16" /></button><strong>本地笔记</strong><span>{{ notes.length }}</span></div>
+        <div class="note-index-heading"><strong>本地笔记</strong><span>{{ notes.length }}</span></div>
         <div class="note-index-actions">
           <button type="button" class="icon-button" title="导入笔记 JSON" @click="importAllNotes"><Import :size="15" /></button>
           <button type="button" class="icon-button" title="导出全部笔记 JSON" @click="exportAllNotes"><FileJson :size="15" /></button>

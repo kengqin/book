@@ -379,28 +379,6 @@ html[data-reader-privacy] .window-titlebar { display: none; }
 .search-results strong { font-family: inherit; font-size: 13.5px; font-weight: 650; }
 .search-results p { font-size: 11.5px; line-height: 1.5; }
 
-.tools-library-grid { gap: 12px; }
-.tool-library-item {
-  min-height: 82px;
-  grid-template-columns: 36px minmax(0, 1fr) 18px;
-  gap: 12px;
-  padding: 13px 14px;
-  color: var(--ui-text);
-  border-color: color-mix(in srgb, var(--ui-text-2) 12%, transparent);
-  border-radius: 11px;
-  background: transparent;
-  box-shadow: none;
-  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
-}
-.tool-library-item:hover,
-.tool-library-item:focus-visible { border-color: color-mix(in srgb, var(--ui-text-2) 12%, transparent); background: color-mix(in srgb, var(--ui-text-2) 2.5%, transparent); box-shadow: none; }
-.tool-library-item:active { background: color-mix(in srgb, var(--ui-text-2) 2.5%, transparent); }
-.tool-library-icon { width: 36px; height: 36px; color: var(--ui-text-2); background: transparent; }
-.tool-library-icon svg { width: 22px; height: 22px; }
-.tool-library-copy { gap: 0; }
-.tool-library-copy strong { font-family: inherit; font-size: 14px; font-weight: 620; }
-.tool-library-item > svg { width: 16px; height: 16px; color: var(--ui-text-3); opacity: .72; }
-
 .ide-plugin-toolbar { color: var(--ui-text-3); border: 0; }
 .ide-plugin-search { color: var(--ui-text-3); border-color: var(--ui-border); border-radius: 8px; background: var(--ui-surface); }
 .ide-plugin-search:focus-within { border-color: var(--ui-border-strong); box-shadow: none; }
