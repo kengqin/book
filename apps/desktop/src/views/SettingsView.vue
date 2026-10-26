@@ -250,18 +250,19 @@ onBeforeUnmount(() => unlistenSection?.())
 .settings-view--windowed { display: grid; grid-template-columns: 160px minmax(0,1fr); gap: 0; width: 100%; max-width: none; height: 100%; min-height: 0; padding: 0; margin: 0; }
 .settings-view--windowed .settings-tabs { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; width: 100%; gap: 3px; padding: 24px 9px; margin: 0; border: 0; border-right: 1px solid var(--ui-border); border-radius: 0; background: var(--ui-surface-2); }
 .settings-view--windowed .settings-tabs > button { display: flex; align-items: center; gap: 11px; min-height: 40px; padding: 0 15px; border: 0; border-radius: 6px; text-align: left; font-size: 13px; color: var(--ui-text-2); background: transparent; }
-.settings-view--windowed .settings-tabs > button.active { color: var(--ui-accent); background: var(--ui-selected); font-weight: 600; }
+.settings-view--windowed .settings-tabs > button.active { color: var(--ui-text); background: var(--ui-selected); font-weight: 500; }
 .settings-view--windowed .settings-tabs > button:hover { background: var(--ui-hover); }
 .settings-view--windowed > .settings-section,.settings-view--windowed > .settings-window-updates { grid-column: 2; grid-row: 1; overflow: auto; min-height: 0; padding: 27px 32px; margin: 0; }
-.settings-view--windowed .settings-panel { border: 0; background: transparent; box-shadow: none; }
-.settings-view--windowed .setting-row { grid-template-columns: minmax(0, 1fr) auto; gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--ui-border); border-radius: 0; }
+.settings-view--windowed .settings-panel { padding: 0 14px; border: 1px solid color-mix(in srgb, var(--ui-text-2) 14%, transparent); border-radius: 14px; background: transparent; box-shadow: none; }
+.settings-view--windowed .setting-row { grid-template-columns: minmax(0, 1fr) auto; gap: 20px; padding: 14px 0; border-bottom: 1px solid color-mix(in srgb, var(--ui-text-2) 11%, transparent); border-radius: 0; }
+.settings-view--windowed .setting-row:last-child { border-bottom: 0; }
 .settings-view--windowed .setting-row > .ui-select,.settings-view--windowed .setting-row > .setting-state,.settings-view--windowed .setting-row > .primary-command,.settings-view--windowed .setting-row > .header-actions { grid-column: 2; justify-self: end; width: auto; }
 .settings-view--windowed .setting-row > .ui-select { width: 158px; }
-.settings-view--windowed .settings-group-label { margin-top: 2px; margin-bottom: 9px; font-size: 15px; color: var(--ui-text); }
+.settings-view--windowed .settings-group-label { margin-top: 2px; margin-bottom: 12px; font-size: 13px; color: var(--ui-text); }
 .settings-view--windowed .setting-copy strong { font-weight: 500; }
 .settings-view--windowed .setting-copy span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .settings-view--windowed .setting-row > .ui-select { min-width: 0; width: max-content; }
-.settings-view--windowed :deep(.ui-select-trigger) { min-width: 128px; height: 26px; border-radius: 5px; }
+.settings-view--windowed :deep(.ui-select-trigger) { min-width: 128px; height: 28px; border-radius: 9px; }
 .settings-view--windowed :deep(.ui-select-menu) { min-width: 158px; }
 .settings-view--windowed .setting-copy > span { font-size: 11px; }
 .settings-view--windowed :deep(.workspace-header h1) { font-size: 21px; }

@@ -5,12 +5,12 @@
     style.id = 'novel-library-scrollbars';
     style.textContent = `
       * { scrollbar-width: auto !important; scrollbar-color: auto !important; }
-      *::-webkit-scrollbar { width: 8px !important; height: 8px !important; background: transparent !important; }
+      *::-webkit-scrollbar { width: 6px !important; height: 6px !important; background: transparent !important; }
       *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent !important; }
       *::-webkit-scrollbar-track { margin-block: 4px; }
       *::-webkit-scrollbar-thumb {
         min-height: 30px !important;
-        border: 2px solid transparent !important;
+        border: 1px solid transparent !important;
         border-radius: 999px !important;
         background-color: #b7b8bb !important;
         background-clip: padding-box !important;

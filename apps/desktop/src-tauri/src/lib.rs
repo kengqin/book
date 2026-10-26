@@ -477,7 +477,7 @@ pub fn run() {
                 return history_handler(invoke);
             }
             if matches!(invoke.message.webview_ref().label(), "web-browser" | "web-browser-menu") {
-                let browser_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![floating_layer::show_floating_layer, floating_layer::hide_floating_layer, web_browser::open_web_browser, web_browser::get_web_browser_state, web_browser::set_web_browser_mode, web_browser::set_web_browser_bounds, web_browser::web_browser_action, web_browser::set_web_browser_zoom, web_browser::close_web_browser, web_browser::switch_web_browser_tab, web_browser::close_web_browser_tab, web_browser::show_web_browser_menu, web_browser::close_web_browser_menu];
+                let browser_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![floating_layer::show_floating_layer, floating_layer::hide_floating_layer, web_browser::open_web_browser, web_browser::get_web_browser_state, web_browser::set_web_browser_mode, web_browser::set_web_browser_bounds, web_browser::web_browser_action, web_browser::set_web_browser_zoom, web_browser::close_web_browser, web_browser::switch_web_browser_tab, web_browser::close_web_browser_tab, web_browser::show_web_browser_menu, web_browser::close_web_browser_menu, web_browser::web_browser_menu_ready];
                 return browser_handler(invoke);
             }
             if invoke.message.webview_ref().label() == "app-update" {

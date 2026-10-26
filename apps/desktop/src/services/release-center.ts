@@ -338,7 +338,7 @@ export async function getCurrentVersion() {
 
 export async function openUpdateWindow(check = true) {
   if (isTauri()) await invoke('open_application_update_window', { check })
-  else window.open(`${location.origin}${location.pathname}#/application-update?check=${check ? 1 : 0}`, 'novel-library-update', 'width=500,height=280')
+  else window.open(`${location.origin}${location.pathname}#/application-update?check=${check ? 1 : 0}`, 'novel-library-update', 'width=480,height=180')
 }
 
 function applyNativeUpdateState(snapshot: NativeUpdateState) {

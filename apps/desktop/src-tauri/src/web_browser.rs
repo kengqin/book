@@ -40,6 +40,10 @@ pub struct BrowserState {
     #[serde(skip)]
     bounds: Option<BrowserBounds>,
     #[serde(skip)]
+    menu_bounds: Option<BrowserBounds>,
+    #[serde(skip)]
+    menu_ready: bool,
+    #[serde(skip)]
     viewport_visible: bool,
 }
 
@@ -225,6 +229,19 @@ fn create_page(
             let handler = webview2_com::FocusChangedEventHandler::create(Box::new(move |_, _| {
                 let current = snapshot();
                 if current.active_tab == Some(id) {
+                    #[link(name = "user32")]
+                    extern "system" {
+                        fn GetAsyncKeyState(key: i32) -> i16;
+                        fn GetForegroundWindow() -> *mut std::ffi::c_void;
+                    }
+                    // Page scripts and controller creation can focus the page without a user click.
+                    let owner_is_foreground = focus_app
+                        .get_window(host(current.mode))
+                        .and_then(|window| window.hwnd().ok())
+                        .is_some_and(|hwnd| hwnd.0 == GetForegroundWindow());
+                    if current.menu_open && owner_is_foreground && GetAsyncKeyState(1) < 0 {
+                        hide_menu(&focus_app);
+                    }
                     let _ = focus_app.emit_to(host(current.mode), "web-browser-page-focused", ());
                 }
                 Ok(())
@@ -463,6 +480,9 @@ pub async fn set_web_browser_mode(app: AppHandle, mode: BrowserMode) -> Result<(
     let _guard = mutations().lock().await;
     hide_menu(&app);
     ensure_shell(&app, mode)?;
+    if snapshot().mode == mode {
+        return display_active(&app);
+    }
     reparent_pages(&app, mode)?;
     update(&app, |s| {
         s.mode = mode;
@@ -734,16 +754,20 @@ pub async fn close_web_browser_tab(app: AppHandle, tab_id: u64) -> Result<(), St
 }
 
 pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
-    if window.label() == MENU {
-        match event {
-            tauri::WindowEvent::Focused(false) => hide_menu(window.app_handle()),
-            tauri::WindowEvent::CloseRequested { api, .. } => {
-                api.prevent_close();
-                hide_menu(window.app_handle());
-            }
-            _ => {}
-        }
-        return;
+    if snapshot().menu_open
+        && window
+            .app_handle()
+            .get_webview(MENU)
+            .is_some_and(|menu| menu.window().label() == window.label())
+        && matches!(
+            event,
+            tauri::WindowEvent::Focused(false)
+                | tauri::WindowEvent::Moved(_)
+                | tauri::WindowEvent::Resized(_)
+                | tauri::WindowEvent::CloseRequested { .. }
+        )
+    {
+        hide_menu(window.app_handle());
     }
     if window.label() != SHELL {
         return;
@@ -757,8 +781,18 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     }
 }
 
+#[cfg_attr(debug_assertions, track_caller)]
 fn hide_menu(app: &AppHandle) {
-    if let Some(menu) = app.get_window(MENU) {
+    #[cfg(debug_assertions)]
+    if snapshot().menu_open {
+        if let Some(directory) = std::env::var_os("NOVEL_LIBRARY_TEST_DATA_DIRECTORY") {
+            let _ = std::fs::write(
+                std::path::PathBuf::from(directory).join("last-browser-menu-close.txt"),
+                std::panic::Location::caller().to_string(),
+            );
+        }
+    }
+    if let Some(menu) = app.get_webview(MENU) {
         let _ = menu.hide();
     }
     update(app, |s| s.menu_open = false);
@@ -767,6 +801,83 @@ fn hide_menu(app: &AppHandle) {
 #[tauri::command]
 pub fn close_web_browser_menu(app: AppHandle) {
     hide_menu(&app);
+}
+
+async fn display_menu(app: &AppHandle) -> Result<(), String> {
+    let current = snapshot();
+    if !current.menu_open || !current.menu_ready {
+        return Ok(());
+    }
+    let menu = app.get_webview(MENU).ok_or("网页菜单尚未就绪")?;
+    let bounds = current.menu_bounds.ok_or("网页菜单位置无效")?;
+    menu.set_bounds(bounds.rect())
+        .map_err(|error| error.to_string())?;
+    menu.show().map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        menu.with_webview(move |view| unsafe {
+            #[link(name = "user32")]
+            extern "system" {
+                fn SetWindowPos(
+                    hwnd: *mut std::ffi::c_void,
+                    after: *mut std::ffi::c_void,
+                    x: i32,
+                    y: i32,
+                    width: i32,
+                    height: i32,
+                    flags: u32,
+                ) -> i32;
+            }
+            let mut hwnd = Default::default();
+            let result = view
+                .controller()
+                .ParentWindow(&mut hwnd)
+                .map_err(|error| error.to_string())
+                .and_then(|_| {
+                    // Raise only this child above the page, without activating or restyling the owner window.
+                    if SetWindowPos(hwnd.0, std::ptr::null_mut(), 0, 0, 0, 0, 0x0213) == 0 {
+                        Err("无法显示网页菜单".to_string())
+                    } else {
+                        Ok(())
+                    }
+                });
+            let _ = sender.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+        tokio::time::timeout(std::time::Duration::from_secs(3), receiver)
+            .await
+            .map_err(|_| "网页菜单显示超时")?
+            .map_err(|_| "网页菜单已关闭")??;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn web_browser_menu_ready(app: AppHandle, webview: Webview) -> Result<(), String> {
+    if webview.label() != MENU {
+        return Err("网页菜单来源无效".into());
+    }
+    let _guard = mutations().lock().await;
+    update(&app, |state| state.menu_ready = true);
+    display_menu(&app).await
+}
+
+fn menu_bounds(viewport: &BrowserBounds, x: f64, y: f64) -> BrowserBounds {
+    let width = viewport.width.min(368.0);
+    let height = viewport.height.min(224.0);
+    BrowserBounds {
+        x: x.clamp(
+            viewport.x,
+            (viewport.x + viewport.width - width).max(viewport.x),
+        ),
+        y: y.clamp(
+            viewport.y,
+            (viewport.y + viewport.height - height).max(viewport.y),
+        ),
+        width,
+        height,
+    }
 }
 
 #[tauri::command]
@@ -779,65 +890,74 @@ pub async fn show_web_browser_menu(
     if !x.is_finite() || !y.is_finite() {
         return Err("菜单位置无效".into());
     }
-    if snapshot().menu_open {
+    let _guard = mutations().lock().await;
+    let current = snapshot();
+    if current.menu_open {
         hide_menu(&app);
         return Ok(());
     }
     let parent = webview.window();
-    if parent.label() != host(snapshot().mode) {
+    if parent.label() != host(current.mode) {
         return Err("网页窗口无效".into());
     }
-    let menu_height = 272.0;
-    let menu = if let Some(menu) = app.get_window(MENU) {
-        menu
+    let bounds = menu_bounds(current.bounds.as_ref().ok_or("网页尚未就绪")?, x, y);
+    update(&app, |state| {
+        state.menu_open = true;
+        state.menu_bounds = Some(bounds.clone());
+    });
+    if let Some(menu) = app.get_webview(MENU) {
+        if menu.window().label() != parent.label() {
+            menu.reparent(&parent).map_err(|error| error.to_string())?;
+        }
     } else {
-        let builder = WebviewWindowBuilder::new(
-            &app,
-            MENU,
-            WebviewUrl::App("index.html#/browser/menu".into()),
-        )
-        .title("网页操作")
-        .inner_size(368.0, menu_height)
-        .decorations(false)
-        .resizable(false)
-        .transparent(true)
-        .shadow(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .visible(false);
-        builder.build().map_err(|e| e.to_string())?;
-        app.get_window(MENU).ok_or("网页菜单尚未就绪")?
-    };
-    let origin = parent.inner_position().map_err(|e| e.to_string())?;
-    let scale = parent.scale_factor().map_err(|e| e.to_string())?;
-    menu.set_size(LogicalSize::new(368.0, menu_height))
-        .map_err(|e| e.to_string())?;
-    let mut left = origin.x + (x.max(0.0) * scale).round() as i32;
-    let mut top = origin.y + (y.max(0.0) * scale).round() as i32;
-    if let Some(monitor) = parent
-        .current_monitor()
-        .ok()
-        .flatten()
-        .filter(|_| !crate::background_ui_test())
-    {
-        let p = monitor.position();
-        let size = monitor.size();
-        left = left.clamp(p.x, p.x + size.width as i32 - (368.0 * scale) as i32);
-        top = top.clamp(p.y, p.y + size.height as i32 - (menu_height * scale) as i32);
+        update(&app, |state| state.menu_ready = false);
+        let origin = webview.url().map_err(|error| error.to_string())?;
+        let builder = WebviewBuilder::new(MENU, WebviewUrl::App("index.html#/browser/menu".into()))
+            .transparent(true)
+            .focused(false)
+            .on_navigation(move |url| {
+                url.scheme() == origin.scheme()
+                    && url.host_str() == origin.host_str()
+                    && url.port() == origin.port()
+            });
+        if let Err(error) = parent.add_child(
+            builder,
+            LogicalPosition::new(-10000.0, -10000.0),
+            bounds.rect().size,
+        ) {
+            hide_menu(&app);
+            return Err(error.to_string());
+        }
     }
-    menu.set_position(tauri::PhysicalPosition::new(left, top))
-        .map_err(|e| e.to_string())?;
-    update(&app, |s| s.menu_open = true);
-    menu.show().map_err(|e| e.to_string())?;
-    if !crate::background_ui_test() {
-        menu.set_focus().map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    display_menu(&app).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn menus_stay_inside_the_browser_viewport_even_in_a_narrow_pane() {
+        for (width, left) in [
+            (310.5, 602.5),
+            (310.2, 602.1),
+            (440.0, 602.5),
+            (900.0, 602.5),
+        ] {
+            let viewport = BrowserBounds {
+                x: left,
+                y: 82.0,
+                width,
+                height: 600.0,
+            };
+            for (x, y) in [(-1000.0, -1000.0), (5000.0, 5000.0), (720.0, 83.0)] {
+                let menu = menu_bounds(&viewport, x, y);
+                assert!(menu.x >= viewport.x && menu.y >= viewport.y);
+                assert!(menu.x + menu.width <= viewport.x + viewport.width);
+                assert!(menu.y + menu.height <= viewport.y + viewport.height);
+                assert!(menu.valid());
+            }
+        }
+    }
     #[test]
     fn fragment_navigation_does_not_wait_for_a_new_document_load() {
         let original = "https://example.com/book?q=1#first";

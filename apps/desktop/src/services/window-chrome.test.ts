@@ -11,9 +11,16 @@ beforeEach(() => {
   vi.clearAllMocks()
   document.documentElement.dataset.appearance = 'light'
   delete document.documentElement.dataset.readerPalette
+  delete document.documentElement.dataset.windowKind
 })
 
 describe('reader appearance isolation', () => {
+  it('opening an embedded browser menu leaves the parent window chrome unchanged', async () => {
+    document.documentElement.dataset.windowKind = 'web-browser-menu'
+    await syncApplicationWindowChrome()
+    expect(setTheme).not.toHaveBeenCalled()
+    expect(invoke).not.toHaveBeenCalled()
+  })
   it.each(['light', 'paper', 'night'] as const)('%s only changes reader window colors', async palette => {
     await setReaderWindowPalette(palette)
     expect(invoke).toHaveBeenCalledWith('set_window_palette', { palette })

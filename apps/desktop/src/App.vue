@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useRoute, useRouter } from 'vue-router'
 import GlobalMessage from './components/GlobalMessage.vue'
@@ -19,7 +20,8 @@ import SettingsWindowView from './views/SettingsWindowView.vue'
 
 const router = useRouter()
 const route = useRoute()
-const browserShell = isTauri() && getCurrentWindow().label.startsWith('web-browser')
+const browserShell = isTauri() && getCurrentWebview().label.startsWith('web-browser')
+const browserMenuShell = isTauri() && getCurrentWebview().label === 'web-browser-menu'
 const settingsShell = isTauri() && getCurrentWindow().label === 'settings'
 const historyShell = isTauri() && getCurrentWindow().label === 'release-history'
 const updateShell = isTauri() && getCurrentWindow().label === 'app-update'
@@ -85,7 +87,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
-  <template v-if="!overlayShell && !updateShell"><GlobalMessage /></template>
+  <template v-if="!overlayShell && !updateShell && !browserMenuShell"><GlobalMessage /></template>
   <OnlineVerificationStatus v-if="!auxiliaryShell" />
   <CloseBehaviorDialog v-if="!auxiliaryShell" />
 </template>
