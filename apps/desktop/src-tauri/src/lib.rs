@@ -480,6 +480,17 @@ pub fn run() {
                 let browser_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![floating_layer::show_floating_layer, floating_layer::hide_floating_layer, web_browser::open_web_browser, web_browser::get_web_browser_state, web_browser::set_web_browser_mode, web_browser::set_web_browser_bounds, web_browser::web_browser_action, web_browser::set_web_browser_zoom, web_browser::close_web_browser, web_browser::switch_web_browser_tab, web_browser::close_web_browser_tab, web_browser::show_web_browser_menu, web_browser::close_web_browser_menu];
                 return browser_handler(invoke);
             }
+            if invoke.message.webview_ref().label() == "app-update" {
+                let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
+                    updater::get_application_update_state, updater::check_application_update,
+                    updater::download_application_update, updater::cancel_application_update_download,
+                    updater::install_downloaded_application_update, updater::dismiss_application_update,
+                    floating_layer::show_floating_layer, floating_layer::hide_floating_layer,
+                    settings_window::open_release_history_window,
+                    set_window_palette
+                ];
+                return handler(invoke);
+            }
             if !matches!(invoke.message.webview_ref().label(), "main" | "settings") {
                 invoke.resolver.reject("网页窗口没有本地数据访问权限");
                 return true;
@@ -488,6 +499,7 @@ pub fn run() {
                 floating_layer::show_floating_layer,
                 floating_layer::hide_floating_layer,
                 settings_window::open_settings_window,
+                settings_window::open_application_update_window,
                 settings_window::open_release_history_window,
                 web_browser::set_web_browser_suspended,
                 web_browser::open_web_browser,
@@ -544,6 +556,7 @@ pub fn run() {
                 set_code_oss_wheel_injection,
                 set_window_palette,
                 updater::check_application_update,
+                updater::get_application_update_state,
                 updater::download_application_update,
                 updater::cancel_application_update_download,
                 updater::install_downloaded_application_update,
@@ -557,6 +570,10 @@ pub fn run() {
             handler(invoke)
         })
         .on_window_event(|window, event| {
+            if window.label() == "app-update" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                let app = window.app_handle();
+                let _ = updater::dismiss_application_update(app.clone(), app.state::<UpdateDownloadState>());
+            }
             web_browser::handle_window_event(window, event);
             floating_layer::handle_window_event(window, event);
             close_behavior::handle_window_event(window, event);

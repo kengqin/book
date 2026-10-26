@@ -4,7 +4,6 @@ import { invoke, isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { useRoute, useRouter } from 'vue-router'
-import GlobalUpdateStatus from './components/GlobalUpdateStatus.vue'
 import GlobalMessage from './components/GlobalMessage.vue'
 import OnlineVerificationStatus from './components/OnlineVerificationStatus.vue'
 import CloseBehaviorDialog from './components/CloseBehaviorDialog.vue'
@@ -23,8 +22,9 @@ const route = useRoute()
 const browserShell = isTauri() && getCurrentWindow().label.startsWith('web-browser')
 const settingsShell = isTauri() && getCurrentWindow().label === 'settings'
 const historyShell = isTauri() && getCurrentWindow().label === 'release-history'
+const updateShell = isTauri() && getCurrentWindow().label === 'app-update'
 const overlayShell = isTauri() && ['app-message', 'app-tooltip', 'app-progress'].includes(getCurrentWindow().label)
-const auxiliaryShell = browserShell || settingsShell || overlayShell || historyShell
+const auxiliaryShell = browserShell || settingsShell || overlayShell || historyShell || updateShell
 const workspaceVersion = ref(0)
 const immersive = computed(() => route.meta.layout === 'reader')
 watch(immersive, suspended => {
@@ -38,7 +38,7 @@ let unlistenSettings: UnlistenFn | undefined
 
 onMounted(async () => {
   if (!isTauri()) return
-  if (browserShell || overlayShell || historyShell) return
+  if (browserShell || overlayShell || historyShell || updateShell) return
   if (settingsShell) { void initializeUpdateEvents().catch(cause => showGlobalError(cause, '更新服务初始化失败')); return }
   void initializeWebBrowser().catch(cause => showGlobalError(cause, '网页浏览器初始化失败'))
   void initializeOnlineLibrary().catch(cause => showGlobalError(cause, '在线书架初始化失败'))
@@ -68,7 +68,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <RouterView v-if="overlayShell || historyShell" />
+  <RouterView v-if="overlayShell || historyShell || updateShell" />
   <SettingsWindowView v-else-if="settingsShell" />
   <RouterView v-else-if="browserShell" />
   <div v-else class="desktop-frame">
@@ -85,15 +85,14 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
-  <GlobalUpdateStatus v-if="!browserShell && !overlayShell && !historyShell" />
-  <template v-if="!overlayShell"><GlobalMessage /></template>
+  <template v-if="!overlayShell && !updateShell"><GlobalMessage /></template>
   <OnlineVerificationStatus v-if="!auxiliaryShell" />
   <CloseBehaviorDialog v-if="!auxiliaryShell" />
 </template>
 
 <style scoped>
-.desktop-content-area { display: flex; min-width: 0; min-height: 0; overflow: hidden; padding: 0 6px 6px 0; }
-.desktop-content-area > .app-workspace { flex: 1; min-width: 0; border-radius: 10px; }
+.desktop-content-area { display: grid; grid-template-columns: minmax(0, 1fr) auto; min-width: 0; min-height: 0; overflow: hidden; padding: 0 6px 6px 0; }
+.desktop-content-area > .app-workspace { min-width: 0; min-height: 0; border-radius: 10px; }
 .app-shell--reader .desktop-content-area { padding: 0; }
-.app-shell--reader .app-workspace { border-radius: 0; }
+.app-shell--reader .app-workspace { border-radius: 0; scrollbar-gutter: auto; }
 </style>

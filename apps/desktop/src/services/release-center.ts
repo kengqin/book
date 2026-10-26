@@ -1,5 +1,5 @@
 import { getVersion } from '@tauri-apps/api/app'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { reactive, ref, toRefs } from 'vue'
 import { relaunch } from '@tauri-apps/plugin-process'
@@ -11,6 +11,7 @@ const UPDATER_MANIFEST_URL = `https://github.com/${OFFICIAL_REPOSITORY}/releases
 const AUTO_CHECK_KEY = 'novel-library:auto-check-updates'
 const BACKGROUND_CHECK_KEY = 'novel-library:background-check-updates'
 const AUTO_DOWNLOAD_KEY = 'novel-library:auto-download-updates'
+const IGNORED_UPDATE_KEY = 'novel-library:ignored-update-version'
 const RELEASE_MANIFEST_CACHE_KEY = 'novel-library:release-manifest-cache'
 const RELEASE_MANIFEST_CACHE_MAX_AGE = 60 * 60 * 1000
 const BACKGROUND_CHECK_INTERVAL = 60 * 60 * 1000
@@ -64,11 +65,15 @@ export interface AvailableUpdate {
   body?: string
 }
 
-interface DownloadProgressEvent {
-  status: 'started' | 'downloading' | 'downloaded' | 'cancelled' | 'error'
-  downloaded: number
-  total?: number
-  message?: string
+export interface NativeUpdateState {
+  revision: number
+  stage: UpdateStage
+  update: AvailableUpdate | null
+  downloadedBytes: number
+  totalBytes: number
+  message: string
+  error: string
+  promptDismissed: boolean
 }
 
 export type UpdateStage =
@@ -78,6 +83,7 @@ export type UpdateStage =
   | 'cancelling'
   | 'downloaded'
   | 'installing'
+  | 'installed'
   | 'published-but-not-ready'
   | 'manifest-error'
   | 'version-mismatch'
@@ -103,6 +109,8 @@ export const publishedUpdateVersion = ref<string | null>(null)
 export const latestReadyVersion = ref<string | null>(null)
 export const updateCompatibilityNote = ref('')
 export const updateRequiresBackup = ref(false)
+export const updatePromptDismissed = ref(false)
+export const ignoredUpdateVersion = ref(typeof localStorage === 'undefined' ? '' : localStorage.getItem(IGNORED_UPDATE_KEY) || '')
 export const updateTask = reactive<UpdateTaskState>({
   stage: 'idle',
   version: '',
@@ -127,6 +135,11 @@ let updateEventListener: Promise<UnlistenFn> | undefined
 let backgroundCheckTimer: number | undefined
 let downloadStarting = false
 let manifestRequest: Promise<ReleaseManifestResult> | undefined
+let nativeRevision = -1
+
+function updateBusy(stage = updateTask.stage) {
+  return ['downloading', 'cancelling', 'downloaded', 'installing', 'installed', 'install-error'].includes(stage)
+}
 
 function errorDetail(cause: unknown) {
   return cause instanceof Error ? cause.message : String(cause)
@@ -323,48 +336,69 @@ export async function getCurrentVersion() {
   return getVersion()
 }
 
+export async function openUpdateWindow(check = true) {
+  if (isTauri()) await invoke('open_application_update_window', { check })
+  else window.open(`${location.origin}${location.pathname}#/application-update?check=${check ? 1 : 0}`, 'novel-library-update', 'width=500,height=280')
+}
+
+function applyNativeUpdateState(snapshot: NativeUpdateState) {
+  if (snapshot.revision < nativeRevision) return
+  nativeRevision = snapshot.revision
+  updatePromptDismissed.value = Boolean(snapshot.promptDismissed)
+  availableUpdate.value = snapshot.update
+  publishedUpdateVersion.value = null
+  targetRelease = snapshot.update ? getCachedReleaseManifest().manifest.releases.find(release => release.version === snapshot.update!.version) || null : null
+  latestReadyVersion.value = snapshot.update?.version || latestReadyVersion.value
+  updateRequiresBackup.value = Boolean(targetRelease?.requiresBackup)
+  updateCompatibilityNote.value = targetRelease?.minimumSupportedVersion && snapshot.update && compareVersions(snapshot.update.currentVersion, targetRelease.minimumSupportedVersion) < 0
+    ? `当前版本低于直接升级基线 v${targetRelease.minimumSupportedVersion}，建议先导出完整备份。`
+    : targetRelease?.requiresBackup ? '此版本升级前需要先导出完整备份。' : ''
+  updateTask.stage = snapshot.stage
+  updateTask.version = snapshot.update?.version || ''
+  updateTask.downloadedBytes = snapshot.downloadedBytes
+  updateTask.totalBytes = snapshot.totalBytes
+  updateTask.progress = ['downloaded', 'installing', 'installed', 'install-error'].includes(snapshot.stage) ? 100
+    : snapshot.totalBytes > 0 ? Math.min(100, Math.round(snapshot.downloadedBytes / snapshot.totalBytes * 100)) : 0
+  updateTask.error = snapshot.error ? userMessageFor(snapshot.stage) : ''
+  updateTask.message = snapshot.message || (snapshot.stage === 'available' ? `发现新版本 ${snapshot.update?.version || ''}`
+    : snapshot.stage === 'downloading' ? `正在下载 v${snapshot.update?.version || ''}` : '')
+}
+
+export async function synchronizeUpdateTask() {
+  const snapshot = await invoke<NativeUpdateState>('get_application_update_state')
+  if (snapshot && typeof snapshot.revision === 'number' && typeof snapshot.stage === 'string') applyNativeUpdateState(snapshot)
+  return snapshot
+}
+
 export function initializeUpdateEvents() {
   if (!updateEventListener) {
-    updateEventListener = listen<DownloadProgressEvent>('application-update-download', ({ payload }) => {
-      updateTask.downloadedBytes = payload.downloaded
-      updateTask.totalBytes = payload.total || updateTask.totalBytes
-      if (payload.status === 'started') {
-        updateTask.stage = 'downloading'
-        updateTask.progress = 0
-        updateTask.message = `正在下载 v${availableUpdate.value?.version || updateTask.version}`
-      } else if (payload.status === 'downloading') {
-        updateTask.stage = 'downloading'
-        if (payload.total && payload.total > 0) {
-          updateTask.progress = Math.min(100, Math.round((payload.downloaded / payload.total) * 100))
-        }
-      } else if (payload.status === 'downloaded') {
-        updateTask.stage = 'downloaded'
-        updateTask.progress = 100
-        updateTask.message = '下载完成，等待安装'
-      } else if (payload.status === 'cancelled') {
-        updateTask.stage = 'available'
-        updateTask.progress = 0
-        updateTask.downloadedBytes = 0
-        updateTask.totalBytes = 0
-        updateTask.message = '下载已取消'
-      } else if (payload.status === 'error') {
-        setFailure(classifyFailure(payload.message || '', 'download-error'))
-      }
-    })
+    updateEventListener = (async () => {
+      const unlisten = await listen<NativeUpdateState>('application-update-state', ({ payload }) => applyNativeUpdateState(payload))
+      if (typeof window !== 'undefined') window.addEventListener('storage', event => {
+        if (event.key === IGNORED_UPDATE_KEY) ignoredUpdateVersion.value = event.newValue || ''
+      })
+      try { await synchronizeUpdateTask() }
+      catch (cause) { unlisten?.(); throw cause }
+      return unlisten
+    })().catch(cause => { updateEventListener = undefined; throw cause })
   }
   return updateEventListener
 }
 
 export async function checkForUpdates(silent = false) {
-  const busy = ['downloading', 'cancelling', 'downloaded', 'installing'].includes(updateTask.stage)
-  if (updateChecking.value || busy) return availableUpdate.value
+  if (updateChecking.value || updateBusy()) return availableUpdate.value
   updateChecking.value = true
   updateTask.error = ''
   if (!silent) updateTask.message = '正在检查更新...'
   let detectedVersion: string | null = null
   try {
+    await initializeUpdateEvents()
+    await synchronizeUpdateTask()
+    if (updateBusy()) return availableUpdate.value
     const currentVersion = await getCurrentVersion()
     const update = await invoke<AvailableUpdate | null>('check_application_update')
+    await synchronizeUpdateTask()
+    if (updateBusy()) return availableUpdate.value
     detectedVersion = update?.version || null
     updateTask.version = detectedVersion || ''
     publishedUpdateVersion.value = null
@@ -386,6 +420,7 @@ export async function checkForUpdates(silent = false) {
 
     latestReadyVersion.value = update.version
     const { manifest } = await loadReleaseManifest({ forceRefresh: !silent, requiredVersion: update.version })
+    if (updateBusy()) return availableUpdate.value
     targetRelease = manifest.releases.find((release) => release.version === update.version) || null
     updateRequiresBackup.value = Boolean(targetRelease?.requiresBackup)
     updateCompatibilityNote.value = targetRelease?.minimumSupportedVersion && compareVersions(currentVersion, targetRelease.minimumSupportedVersion) < 0
@@ -399,11 +434,16 @@ export async function checkForUpdates(silent = false) {
     updateTask.stage = 'available'
     updateTask.message = `发现新版本 ${readyUpdate.version}`
     updateTask.error = ''
-    if (silent && isAutoDownloadEnabled() && !targetRelease?.requiresBackup && !updateCompatibilityNote.value) {
+    if (silent && !updatePromptDismissed.value && ignoredUpdateVersion.value !== readyUpdate.version) {
+      await openUpdateWindow(false).catch(() => {})
+    }
+    if (silent && isAutoDownloadEnabled() && !updatePromptDismissed.value && ignoredUpdateVersion.value !== readyUpdate.version && !targetRelease?.requiresBackup && !updateCompatibilityNote.value) {
       void downloadAvailableUpdate(true)
     }
     return readyUpdate
   } catch (cause) {
+    await synchronizeUpdateTask().catch(() => {})
+    if (updateBusy()) return availableUpdate.value
     availableUpdate.value = null
     publishedUpdateVersion.value = null
     targetRelease = null
@@ -418,14 +458,21 @@ export async function checkForUpdates(silent = false) {
 }
 
 export async function downloadAvailableUpdate(automatic = false, backupConfirmed = false) {
-  const blocked = ['downloading', 'cancelling', 'downloaded', 'installing'].includes(updateTask.stage)
+  const blocked = updateBusy()
   if (!availableUpdate.value || blocked || downloadStarting) return
+  if (automatic && (updatePromptDismissed.value || ignoredUpdateVersion.value === availableUpdate.value.version)) return
   downloadStarting = true
   try {
     if (targetRelease?.requiresBackup) {
       if (automatic || !backupConfirmed) return
     }
     await initializeUpdateEvents()
+    await synchronizeUpdateTask()
+    if (!availableUpdate.value || updateBusy()) return
+    if (!automatic && ignoredUpdateVersion.value === availableUpdate.value.version) {
+      ignoredUpdateVersion.value = ''
+      localStorage.removeItem(IGNORED_UPDATE_KEY)
+    }
     updateTask.stage = 'downloading'
     updateTask.progress = 0
     updateTask.downloadedBytes = 0
@@ -434,8 +481,10 @@ export async function downloadAvailableUpdate(automatic = false, backupConfirmed
     updateTask.message = `正在下载 v${availableUpdate.value.version}`
     try {
       await invoke<boolean>('download_application_update')
+      await synchronizeUpdateTask()
     } catch (cause) {
-      setFailure(classifyFailure(cause, 'download-error'))
+      await synchronizeUpdateTask().catch(() => {})
+      if (!updateBusy()) setFailure(classifyFailure(cause, 'download-error'))
     }
   } finally {
     downloadStarting = false
@@ -448,6 +497,7 @@ export async function cancelUpdateDownload() {
   updateTask.message = '正在取消下载...'
   try {
     await invoke<boolean>('cancel_application_update_download')
+    await synchronizeUpdateTask()
   } catch {
     setFailure('download-error')
   }
@@ -465,6 +515,12 @@ export async function installDownloadedUpdate() {
     updateTask.message = '更新已下载，可重新安装'
     return
   }
+  updateTask.stage = 'installed'
+  await restartAfterUpdate()
+}
+
+export async function restartAfterUpdate() {
+  if (!['installed', 'relaunch-error'].includes(updateTask.stage)) return
   updateTask.message = '安装完成，正在重启...'
   try {
     await relaunch()
@@ -474,14 +530,14 @@ export async function installDownloadedUpdate() {
 }
 
 export async function dismissUpdate() {
-  if (['downloading', 'cancelling', 'downloaded', 'installing', 'install-error'].includes(updateTask.stage)) return
   await invoke('dismiss_application_update')
-  availableUpdate.value = null
-  publishedUpdateVersion.value = null
-  targetRelease = null
-  updateRequiresBackup.value = false
-  updateCompatibilityNote.value = ''
-  Object.assign(updateTask, {
-    stage: 'idle', version: '', progress: 0, message: '', error: '', downloadedBytes: 0, totalBytes: 0, retryCount: 0
-  })
+  await synchronizeUpdateTask()
+}
+
+export async function ignoreUpdate() {
+  const version = availableUpdate.value?.version
+  if (!version) return
+  ignoredUpdateVersion.value = version
+  localStorage.setItem(IGNORED_UPDATE_KEY, version)
+  await dismissUpdate()
 }

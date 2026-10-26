@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default permissions for the main desktop window",
-  "webviews": ["main", "settings"],
+  "webviews": ["main", "settings", "app-update"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

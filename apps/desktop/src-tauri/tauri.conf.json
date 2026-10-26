@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NovelLibrary",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "identifier": "com.kengqin.novellibrary",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -14,7 +14,7 @@
       {
         "label": "main",
         "title": "小说书库",
-        "width": 1240,
+        "width": 1080,
         "height": 760,
         "minWidth": 760,
         "minHeight": 560,
@@ -30,12 +30,19 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "resources": ["resources/ide-plugins/*"],
-    "targets": ["nsis"],
+    "resources": [
+      "resources/ide-plugins/*"
+    ],
+    "targets": [
+      "nsis"
+    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["SimpChinese", "English"],
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
         "installerIcon": "icons/icon.ico"
       }
     }
