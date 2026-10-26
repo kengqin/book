@@ -7,6 +7,7 @@ import { showGlobalError } from './services/global-message'
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
+    { path: '/application-update', component: () => import('./views/UpdateWindowView.vue') },
     { path: '/overlay/:kind', component: () => import('./views/FloatingLayerView.vue') },
     { path: '/browser/menu', component: () => import('./views/BrowserMenuView.vue'), meta: { layout: 'browser' } },
     { path: '/browser', component: () => import('./views/BrowserView.vue'), meta: { layout: 'browser' } },

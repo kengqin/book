@@ -1,6 +1,59 @@
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 #[tauri::command]
+pub async fn open_application_update_window(
+    app: AppHandle,
+    check: Option<bool>,
+) -> Result<(), String> {
+    static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _guard = LOCK.lock().await;
+    if let Some(window) = app.get_window("app-update") {
+        if check.unwrap_or(false) {
+            app.emit_to("app-update", "application-update-check", ())
+                .map_err(|error| error.to_string())?;
+        }
+        return crate::show_auxiliary_window(&window);
+    }
+    let origin = app
+        .get_webview("main")
+        .ok_or("主窗口尚未就绪")?
+        .url()
+        .map_err(|error| error.to_string())?;
+    let builder = WebviewWindowBuilder::new(
+        &app,
+        "app-update",
+        WebviewUrl::App(
+            format!(
+                "index.html#/application-update?check={}",
+                u8::from(check.unwrap_or(false))
+            )
+            .into(),
+        ),
+    )
+    .title("软件更新")
+    .inner_size(500.0, 280.0)
+    .min_inner_size(460.0, 250.0)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .decorations(false)
+    .visible(false)
+    .center()
+    .on_navigation(move |url| {
+        url.scheme() == origin.scheme()
+            && url.host_str() == origin.host_str()
+            && url.port() == origin.port()
+    });
+    #[cfg(windows)]
+    let builder = match app.get_window("main") {
+        Some(main) => builder.owner_raw(main.hwnd().map_err(|error| error.to_string())?),
+        None => builder,
+    };
+    builder.build().map_err(|error| error.to_string())?;
+    crate::show_auxiliary_window(&app.get_window("app-update").ok_or("更新窗口尚未就绪")?)
+}
+
+#[tauri::command]
 pub async fn open_release_history_window(
     app: AppHandle,
     webview: tauri::Webview,
