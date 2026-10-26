@@ -51,6 +51,63 @@ describe('automatic online parser', () => {
     expect(result.catalogUrl).toBe('https://example.com/book')
     expect(result.chapters.map(c => c.title)).toEqual(['第1章 远行','第2章 远行','第3章 远行','第4章 远行'])
   })
+  it('collects a long catalog beyond sixty pages instead of stopping at 1200 chapters', async () => {
+    const total = 1562
+    const fetch = vi.fn(async (url: string) => {
+      const page = Number(new URL(url).searchParams.get('page') || 1)
+      const start = (page - 1) * 20 + 1
+      const numbers = Array.from({ length: Math.min(20, total - start + 1) }, (_, index) => start + index)
+      return { url, html: directory(numbers, numbers.at(-1)! < total ? `/book?page=${page + 1}` : '') }
+    })
+    const partial = vi.fn()
+    const result = await discoverCatalog('https://example.com/book', fetch, undefined, partial)
+    expect(result.complete).toBe(true)
+    expect(result.chapters).toHaveLength(total)
+    expect(result.chapters.at(-1)?.title).toBe('第1562章 远行')
+    expect(fetch).toHaveBeenCalledTimes(79)
+    expect(partial.mock.calls[59][0]).toMatchObject({ complete: false, chapters: expect.any(Array) })
+    expect(partial.mock.calls[59][0].chapters).toHaveLength(1200)
+    expect(partial.mock.calls.at(-1)?.[0].complete).toBe(true)
+  }, 10000)
+  it('keeps a lone unnumbered chapter on the final catalog page', async () => {
+    const fetch = vi.fn(async (url: string) => ({ url, html: url.endsWith('/last')
+      ? '<h1>山河</h1><div class="catalog"><ul><li><a href="/3.html">新的旅程</a></li></ul></div>'
+      : directory([1, 2], '/last') }))
+    const result = await discoverCatalog('https://example.com/book', fetch)
+    expect(result.complete).toBe(true)
+    expect(result.chapters.map(chapter => chapter.title)).toEqual(['第1章 远行', '第2章 远行', '新的旅程'])
+  })
+  it('deduplicates overlapping catalog pages while accepting their new chapters', async () => {
+    const fetch = vi.fn(async (url: string) => ({ url, html: url.endsWith('/page2') ? directory([2, 3]) : directory([1, 2], '/page2') }))
+    const result = await discoverCatalog('https://example.com/book', fetch)
+    expect(result.complete).toBe(true)
+    expect(result.chapters.map(chapter => chapter.title)).toEqual(['第1章 远行', '第2章 远行', '第3章 远行'])
+  })
+  it('stops repeated directory content even when every next-page URL is different', async () => {
+    const fetch = vi.fn(async (url: string) => {
+      const page = Number(new URL(url).searchParams.get('page') || 1)
+      return { url, html: directory(page === 1 ? [1, 2] : [3, 4], `/book?page=${page + 1}`) }
+    })
+    const partial = vi.fn()
+    await expect(discoverCatalog('https://example.com/book', fetch, undefined, partial)).rejects.toThrow('未发现新章节')
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(partial).toHaveBeenCalledTimes(2)
+    expect(partial.mock.calls.at(-1)?.[0]).toMatchObject({ complete: false })
+    expect(partial.mock.calls.at(-1)?.[0].chapters).toHaveLength(4)
+  })
+  it('detects a redirect to an already visited catalog page', async () => {
+    const fetch = vi.fn(async (url: string) => ({ url: 'https://example.com/book', html: url.endsWith('/page2') ? directory([3, 4], '/page3') : directory([1, 2], '/page2') }))
+    await expect(discoverCatalog('https://example.com/book', fetch)).rejects.toThrow('循环')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+  it('bounds entry-page redirects that never reach a catalog', async () => {
+    const fetch = vi.fn(async (url: string) => {
+      const page = Number(new URL(url).pathname.split('/').at(-1))
+      return { url, html: `<h1>山河</h1><a href="/entry/${page + 1}">开始阅读</a>` }
+    })
+    await expect(discoverCatalog('https://example.com/entry/1', fetch)).rejects.toThrow('目录入口跳转过多')
+    expect(fetch.mock.calls.length).toBeLessThanOrEqual(60)
+  })
   it('exposes usable first chapters before the remaining directory has loaded', async () => {
     let release!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
