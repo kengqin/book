@@ -11,6 +11,7 @@ export function applicationWindowTheme(): Theme {
 
 export async function setWindowChrome(theme: Theme | null, palette: WindowPalette | null) {
   if (!isTauri()) return
+  if (document.documentElement.dataset.windowKind === 'web-browser-menu') return
   if (['app-message', 'app-tooltip', 'app-progress'].includes(getCurrentWindow().label)) return
   try {
     await getCurrentWindow().setTheme(theme)

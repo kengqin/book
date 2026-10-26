@@ -6,7 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { ArrowLeft, ArrowRight, CircleEllipsis, Copy, Minus, RefreshCw, Search, Square, X } from 'lucide-vue-next'
 import BrowserModeIcon from './BrowserModeIcon.vue'
 import BrowserTabs from './BrowserTabs.vue'
-import { browserAddressRequest, browserSideWidth, changeWebBrowserMode, closeWebBrowser, initializeWebBrowser, navigateWebPage, refreshWebBrowser, saveBrowserWidth, webBrowser, webBrowserAction } from '../services/web-browser'
+import { browserAddressRequest, browserSideWidth, changeWebBrowserMode, closeBrowserMenu, closeWebBrowser, initializeWebBrowser, navigateWebPage, refreshWebBrowser, saveBrowserWidth, webBrowser, webBrowserAction } from '../services/web-browser'
 const props = defineProps<{ standalone?: boolean }>()
 const panel = ref<HTMLElement>(), surface = ref<HTMLElement>(), addressInput = ref<HTMLInputElement>(), addressForm = ref<HTMLFormElement>()
 const address = ref(''), error = ref('')
@@ -39,10 +39,19 @@ function addressFocusOut(event: FocusEvent) {
 }
 function addressOutside(event: PointerEvent) {
   const target = event.target as Element
+  if (webBrowser.value.menuOpen && !target.closest('.browser-tools')) void closeBrowserMenu()
   if (editing.value && !target.closest('.browser-address,.browser-tab-title,.browser-search')) dismissAddress()
 }
 async function navigate() { busy.value = true; await action(async () => { await navigateWebPage(address.value); editing.value = false }); busy.value = false }
-function more(event: MouseEvent) { const r = (event.currentTarget as HTMLElement).getBoundingClientRect(); void action(() => invoke('show_web_browser_menu', { x: Math.max(0, r.right - 368), y: r.bottom + 1 })) }
+function more(event: MouseEvent) {
+  const r = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  void action(async () => {
+    const area = surface.value?.getBoundingClientRect()
+    if (!area) return
+    await invoke('set_web_browser_bounds', { bounds: { x: Math.max(0, area.x), y: Math.max(0, area.y), width: Math.max(1, area.width), height: Math.max(1, area.height) }, visible: true })
+    await invoke('show_web_browser_menu', { x: Math.max(0, r.right - 368), y: r.bottom + 1 })
+  })
+}
 function drag(event: PointerEvent) {
   if (event.button !== 0) return
   limits(); dragStart = event.clientX; dragWidth = browserSideWidth.value; resizing.value = true
@@ -59,6 +68,7 @@ function resizeKey(event: KeyboardEvent) {
 function startDragging(event: MouseEvent) { if (props.standalone && event.button === 0 && !(event.target as Element).closest('button,input,form,.browser-tabs')) void action(() => getCurrentWindow().startDragging()) }
 async function maximize() { await getCurrentWindow().toggleMaximize(); maximized.value = await getCurrentWindow().isMaximized() }
 function keys(event: KeyboardEvent) {
+  if (event.key === 'Escape' && webBrowser.value.menuOpen) { event.preventDefault(); void closeBrowserMenu(); return }
   if (event.key === 'Escape' && editing.value) { editing.value = false; return }
   if (!active() || !(event.ctrlKey || event.metaKey)) return
   if (event.key.toLowerCase() === 'l') { event.preventDefault(); void editAddress() }
@@ -144,7 +154,7 @@ onBeforeUnmount(() => {
 .browser-error { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; font-size: 12px; color: var(--ui-danger); background: var(--ui-surface-2); }
 .browser-error span { overflow-wrap: anywhere; }
 .web-browser-panel--side .web-browser-toolbar { gap: 8px; height: 46px; min-height: 46px; padding-inline: 12px; border-radius: 7px 7px 0 0; background: var(--ui-surface); }
-.web-browser-panel--side .web-browser-surface { margin: 0 4px 4px; }
+.web-browser-panel--side .web-browser-surface { margin: 0 0 4px 4px; }
 .web-browser-panel--side .browser-progress { top: 45px; left: 4px; right: 4px; }
 .web-browser-panel--side .browser-toolbar-space { display: block; }
 .web-browser-panel--side .is-editing :deep(.browser-tabs) { display: none; }

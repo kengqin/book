@@ -29,6 +29,7 @@ const emit = defineEmits<{ close: [] }>()
 const visible = computed(() => props.windowed || (availableUpdate.value || publishedUpdateVersion.value) && updateStage.value !== 'idle' && !updatePromptDismissed.value && ignoredUpdateVersion.value !== availableUpdate.value?.version)
 const isError = computed(() => ['manifest-error', 'version-mismatch', 'signature-error', 'download-error', 'install-error', 'relaunch-error'].includes(updateStage.value))
 const backupDialogOpen = ref(false)
+const checking = computed(() => updateChecking.value || props.windowed && !props.currentVersion && updateStage.value === 'idle')
 
 watch(updateError, value => {
   if (value && !props.windowed) showGlobalMessage(value, 'error', 6000)
@@ -65,7 +66,7 @@ async function ignore() { await ignoreUpdate(); if (props.windowed) emit('close'
       <button type="button" class="icon-button global-update-close" title="稍后更新" aria-label="关闭更新提示" @click="close"><X :size="16" /></button>
     </header>
     <div class="update-identity"><img v-if="windowed" :src="appIcon" alt="" /><div class="update-status-copy">
-    <p v-if="updateChecking">正在检查更新...</p>
+    <p v-if="checking">正在检查更新...</p>
     <p v-else-if="windowed && updateStage === 'idle'">{{ currentVersion ? `小说书库 v${currentVersion} 已是最新版` : '正在读取更新状态...' }}</p>
     <p v-else-if="updateStage === 'available'">发现新版本 v{{ availableUpdate?.version }}</p>
     <p v-else-if="updateStage === 'downloading'">正在下载 v{{ availableUpdate?.version }} <strong>{{ updateProgress }}%</strong></p>
@@ -78,10 +79,10 @@ async function ignore() { await ignoreUpdate(); if (props.windowed) emit('close'
     <p v-if="windowed && updateError" class="update-window-error">{{ updateError }}</p>
     <p v-else-if="windowed && updateCompatibilityNote" class="update-window-note">{{ updateCompatibilityNote }}</p>
     </div></div>
-    <div v-if="updateChecking || updateStage === 'downloading' || updateStage === 'cancelling'" class="global-update-progress" :class="{ 'update-check-progress': updateChecking }"><span :style="{ width: updateChecking ? '28%' : `${updateProgress}%` }" /></div>
+    <div v-if="checking || updateStage === 'downloading' || updateStage === 'cancelling'" class="global-update-progress" :class="{ 'update-check-progress': checking }"><span :style="{ width: checking ? '28%' : `${updateProgress}%` }" /></div>
     <footer class="global-update-actions">
-      <template v-if="!updateChecking && availableUpdate && !['installing', 'installed', 'relaunch-error'].includes(updateStage)"><button type="button" class="text-command" @click="close">稍后更新</button><button type="button" class="text-command" @click="ignore">忽略本次更新</button></template>
-      <button v-if="updateChecking" type="button" class="secondary-command" @click="close">取消</button>
+      <template v-if="!checking && availableUpdate && !['installing', 'installed', 'relaunch-error'].includes(updateStage)"><button type="button" class="text-command" @click="close">稍后更新</button><button type="button" class="text-command" @click="ignore">忽略本次更新</button></template>
+      <button v-if="checking" type="button" class="secondary-command" @click="close">取消</button>
       <button v-else-if="windowed && updateStage === 'idle'" type="button" class="primary-command" @click="close">我知道了</button>
       <button v-else-if="updateStage === 'available'" type="button" class="primary-command" @click="requestDownload"><Download :size="15" />下载更新</button>
       <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate"><RotateCw :size="15" />更新并重启</button>
@@ -93,4 +94,4 @@ async function ignore() { await ignoreUpdate(); if (props.windowed) emit('close'
   </aside>
   <UiConfirmDialog :open="backupDialogOpen" title="确认已完成完整备份？" description="此版本升级前要求导出完整数据备份。确认备份完成后才会开始下载安装包。" confirm-label="已备份，继续下载" @close="backupDialogOpen = false" @confirm="confirmDownload" />
 </template>
-<style scoped>.global-update-actions { display: flex; align-items: center; gap: 12px; white-space: nowrap; }.global-update-actions .text-command { color: var(--ui-text-2); font-size: 12px; }.global-update-actions .primary-command,.global-update-actions .secondary-command { margin-left: auto; font-size: 12px; }.global-update-status--window { position: static; width: 100%; min-height: 0; display: flex; flex-direction: column; gap: 16px; padding: 22px 24px 24px; border: 0; border-radius: 0; box-shadow: none; background: transparent; }.global-update-status--window .global-update-actions { margin-top: auto; }.update-identity { display: flex; align-items: center; gap: 16px; min-width: 0; }.update-identity img { width: 48px; height: 48px; flex: 0 0 48px; }.update-status-copy { min-width: 0; }.update-status-copy p { margin: 0; }.global-update-status--window .update-status-copy > p:first-child { font-size: 13px; font-weight: 600; }.update-status-copy .update-window-error,.update-status-copy .update-window-note { margin-top: 7px; font-size: 12px; line-height: 1.5; color: var(--ui-text-2); }.update-status-copy .update-window-error { color: var(--ui-danger); }.update-check-progress span { animation: update-check 1.2s ease-in-out infinite; }@keyframes update-check { from { transform: translateX(-110%); } to { transform: translateX(450%); } }</style>
+<style scoped>.global-update-actions { display: flex; align-items: center; gap: 12px; white-space: nowrap; }.global-update-actions .text-command { color: var(--ui-text-2); font-size: 12px; }.global-update-actions .primary-command,.global-update-actions .secondary-command { margin-left: auto; font-size: 12px; }.global-update-status--window { position: static; width: 100%; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 24px 14px; overflow-y: auto; border: 0; border-radius: 0; box-shadow: none; background: transparent; }.global-update-status--window .global-update-actions { flex-shrink: 0; margin-top: auto; }.global-update-status--window .update-identity,.global-update-status--window .global-update-progress { flex-shrink: 0; }.update-identity { display: flex; align-items: center; gap: 16px; min-width: 0; }.update-identity img { width: 48px; height: 48px; flex: 0 0 48px; }.update-status-copy { min-width: 0; overflow-wrap: anywhere; }.update-status-copy p { margin: 0; }.global-update-status--window .update-status-copy > p:first-child { font-size: 13px; font-weight: 600; }.update-status-copy .update-window-error,.update-status-copy .update-window-note { margin-top: 7px; font-size: 12px; line-height: 1.5; color: var(--ui-text-2); }.update-status-copy .update-window-error { color: var(--ui-danger); }.global-update-status--window .global-update-progress { overflow: hidden; border-radius: 999px; }.update-check-progress span { animation: update-check 1.2s ease-in-out infinite; }@keyframes update-check { from { transform: translateX(-110%); } to { transform: translateX(450%); } }</style>

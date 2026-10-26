@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { emitTo, listen } from '@tauri-apps/api/event'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { showGlobalMessage } from './global-message'
 
 export type WebBrowserMode = 'window' | 'side'
@@ -30,7 +30,7 @@ export function initializeWebBrowser() {
     listen<WebBrowserState>('web-browser-state', ({ payload }) => accept(payload)),
     listen('web-browser-edit-address', () => { browserAddressRequest.value++ }),
     listen('web-browser-copied', () => {
-      if (getCurrentWindow().label === (webBrowser.value.mode === 'side' ? 'main' : 'web-browser')) showGlobalMessage('链接已复制')
+      if (getCurrentWebview().label === (webBrowser.value.mode === 'side' ? 'main' : 'web-browser')) showGlobalMessage('链接已复制')
     })
   ]).then(async () => {
     // An unopened browser must not overwrite the saved preference on app startup.
