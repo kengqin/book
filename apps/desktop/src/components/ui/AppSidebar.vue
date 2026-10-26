@@ -15,14 +15,14 @@ const categories = [
   { to: '/library', label: '书架', icon: LibraryBig },
   { to: '/search', label: '搜索', icon: Search },
   { to: '/online', label: '在线找书', icon: Globe },
-  { to: '/tools/notes', label: '本地笔记', icon: NotebookPen },
-  { to: '/tools/ide-integration', label: 'IDE 插件', icon: Code2 }
+  { to: '/notes', label: '本地笔记', icon: NotebookPen },
+  { to: '/ide-integration', label: 'IDE 插件', icon: Code2 }
 ]
 const primaryCategories = categories.slice(0, 5)
 const extraCategories = categories.slice(5)
 const moreOpen = ref(false), moreAnchor = ref<HTMLElement>(), moreMenu = ref<HTMLElement>()
 const menuPosition = ref({ left: '52px', top: '0px' })
-const moreActive = computed(() => moreOpen.value || route.path === '/tools' || extraCategories.some(category => route.path.startsWith(category.to)))
+const moreActive = computed(() => moreOpen.value || extraCategories.some(category => route.path.startsWith(category.to)))
 let openTimer: ReturnType<typeof setTimeout> | undefined, closeTimer: ReturnType<typeof setTimeout> | undefined
 function clearTimers() { clearTimeout(openTimer); clearTimeout(closeTimer) }
 function keepOpen() { clearTimeout(closeTimer) }

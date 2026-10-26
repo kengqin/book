@@ -158,17 +158,6 @@ button { letter-spacing: 0; }
 .remember-close-choice span { font-size: 12px; }
 .close-dialog > footer { display: flex; align-items: center; justify-content: flex-end; gap: 9px; margin-top: 20px; }
 
-.tools-library-view { display: flex; flex-direction: column; }
-.tools-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 340px)); gap: 12px; margin-top: 24px; }
-.tool-library-item { min-height: 96px; display: grid; grid-template-columns: 48px minmax(0, 1fr) 20px; align-items: center; gap: 14px; padding: 16px; color: #25312d; text-align: left; border: 1px solid #cbd1ca; background: #fff; cursor: pointer; }
-.tool-library-item:hover { border-color: #849a91; box-shadow: inset 3px 0 #27665d; }
-.tool-library-icon { width: 48px; height: 48px; display: grid; place-items: center; color: #f3dfac; background: #263631; }
-.tool-library-copy { min-width: 0; display: grid; gap: 5px; }
-.tool-library-copy strong { font-family: "Noto Serif SC", SimSun, serif; font-size: 15px; }
-.tool-library-copy small { color: #728078; font-size: 10px; }
-.tool-library-item > svg { color: #77847d; }
-.tool-library-footer { display: flex; align-items: center; gap: 7px; margin-top: auto; padding-top: 30px; color: #89948f; font-size: 10px; }
-.ide-integration-view > .text-command { margin: 18px 0 8px; }
 .ide-plugin-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding: 4px 0 0; color: #748079; font-size: 10px; }
 .ide-plugin-search { min-width: 220px; display: flex; align-items: center; gap: 8px; padding: 0 10px; color: #78847e; border: 1px solid #c8cec7; background: #fff; }
 .ide-plugin-search input { min-width: 0; width: 100%; height: 34px; color: #28352f; border: 0; outline: 0; background: transparent; font-size: 11px; }
@@ -223,8 +212,6 @@ button { letter-spacing: 0; }
 .note-index > header strong { font-size: 12px; white-space: nowrap; }
 .note-index > header span { min-width: 16px; color: #718079; font-size: 9px; }
 .note-index > header .icon-button { width: 28px; height: 30px; }
-.note-index-heading .icon-button { margin-right: 2px; border-color: transparent; background: transparent; }
-.note-index-heading .icon-button:hover { border-color: #c8cec7; background: #fff; }
 .note-index-actions { flex: 0 0 auto; }
 .note-index-actions .primary-icon { color: #fff; border-color: #27665d; background: #27665d; }
 .note-search { flex: 0 0 38px; display: flex; align-items: center; gap: 8px; margin: 10px 11px; padding: 0 10px; color: #78837e; border: 1px solid #c8cec7; background: #fff; }
