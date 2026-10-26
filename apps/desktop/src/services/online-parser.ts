@@ -16,6 +16,7 @@ const chapterPattern = /^(?:第\s*[零〇一二三四五六七八九十百千万
 const clean = (text: string | null | undefined) => (text || '').replace(/\s+/gu, ' ').trim()
 const directoryLabel = (text: string) => /^(?:(?:回到|返回|回|查看|全部|完整|章节|小说|本书|书籍))*(?:章节)?目录(?:页)?$|^(?:查看|展开)?(?:全部|完整|所有)?章节列表$|^全部章节$/u.test(text.replace(/\s+/gu, '').replace(/^[【\[].{0,12}?[】\]]/u, '').replace(/[.…·>›»→]+$/u, ''))
 const directoryContainer = '[class*="chapter"],[id*="chapter"],[class*="catalog"],[id*="catalog"],[class*="directory"],[class*="volume-list"],[class*="volume_list"],#list'
+const MAX_CATALOG_ENTRY_PAGES = 60
 
 export function httpUrl(value: string, base?: string): string | undefined {
   try {
@@ -53,7 +54,7 @@ export function normalizedChapterTitle(title: string) {
   return title.replace(/(?:[（(\[【]\s*第?\s*\d+\s*[/／]\s*\d+\s*页?\s*[)）\]】]|第\s*\d+\s*页|[_|｜].*)/gu, '').replace(/\s+/gu, '').trim()
 }
 
-export function parseOnlinePage(html: string, url: string, options: { allowShortContinuation?: boolean } = {}): ParsedPage {
+export function parseOnlinePage(html: string, url: string, options: { allowShortContinuation?: boolean; allowSingleChapterCatalog?: boolean } = {}): ParsedPage {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const meta = (...names: string[]) => {
     for (const name of names) {
@@ -136,7 +137,8 @@ export function parseOnlinePage(html: string, url: string, options: { allowShort
     const formatted = links.filter(a => chapterPattern.test(a.title)).length
     return formatted >= 2 || coherent && directoryContext ? [{ container, links }] : []
   })
-  const dominant = directories.filter(group => group.links.length >= 3).sort((a, b) => b.links.length - a.links.length)[0]
+  const minimumDirectoryGroup = options.allowSingleChapterCatalog ? 1 : 3
+  const dominant = directories.filter(group => group.links.length >= minimumDirectoryGroup).sort((a, b) => b.links.length - a.links.length)[0]
   const directoryRoot = (container: Element) => {
     let root = container
     for (let element: Element | null = container; element; element = element.parentElement) {
@@ -145,7 +147,7 @@ export function parseOnlinePage(html: string, url: string, options: { allowShort
     return root
   }
   const selectedGroups = dominant ? directories.filter(group => directoryRoot(group.container) === directoryRoot(dominant.container)
-    && !directories.some(other => other !== group && other.links.length >= 3 && group.container.contains(other.container))) : []
+    && !directories.some(other => other !== group && other.links.length >= minimumDirectoryGroup && group.container.contains(other.container))) : []
   const selected = dominant ? selectedGroups.flatMap(group => group.links) : candidatesForDirectory.filter(a => sameOrigin(a.url!) && chapterPattern.test(a.title))
   const unlinkedChapterCount = selectedGroups.reduce((count, { container }) => count + Array.from(container.querySelectorAll('li,dd')).filter(row =>
     clean(row.textContent) && !isSectionHeading(row) && !row.querySelector('a,button,input,select,li,dd') && !/^(?:上一页|下一页|首页|尾页|\d+)$/u.test(clean(row.textContent))).length, 0)
@@ -210,16 +212,17 @@ export function parseOnlinePage(html: string, url: string, options: { allowShort
   const bookTitle = meta('og:novel:book_name', 'novel:book_name') || (chapterPattern.test(title) ? '' : title.replace(/(?:最新章节|全文阅读|章节目录|无弹窗).*$/u, '').replace(/[_|｜-].*$/u, '').trim())
   const countText = clean(doc.querySelector('.catalogue_desc,.catalog-desc,.catalog-count,[class*="chapter-count"]')?.textContent) || Array.from(doc.querySelectorAll('h2,h3,dt')).map(el => clean(el.textContent)).find(text => /目录|章节列表/u.test(text) && /共\s*[\d,]+\s*[章回]/u.test(text)) || ''
   const declaredChapterCount = Number(countText.match(/共\s*([\d,]+)\s*[章回]/u)?.[1]?.replace(/,/gu, '')) || undefined
+  const minimumCatalogLinks = options.allowSingleChapterCatalog ? 1 : 2
   return {
     title, bookTitle, author: meta('og:novel:author', 'author') || clean(doc.querySelector('[itemprop="author"],.book-info_author,.book-author,.author')?.textContent).replace(/^作\s*者\s*[:：]?\s*/u, ''), description: meta('og:description', 'description'),
-    chapters: chapters.length >= 2 ? chapters : [], content,
+    chapters: chapters.length >= minimumCatalogLinks ? chapters : [], content,
     declaredChapterCount,
     declaredWordCount,
     unlinkedChapterCount: !content && unlinkedChapterCount || undefined,
     catalogUrl: directory?.url,
     readingUrl: reading?.url,
     firstCatalogUrl: !content && firstCatalogUrl && sameOrigin(firstCatalogUrl) ? firstCatalogUrl : undefined,
-    nextCatalogUrl: !content && chapters.length >= 2 ? next?.url : undefined,
+    nextCatalogUrl: !content && chapters.length >= minimumCatalogLinks ? next?.url : undefined,
     nextPageUrl: content ? (next || continuedChapter)?.url : undefined,
     pageNumber, pageCount
   }
@@ -232,14 +235,23 @@ export async function discoverCatalog(url: string, fetchPage: FetchPage, progres
   if (!initial) throw new Error('请输入完整的 HTTP/HTTPS 网页链接')
   let current = initial
   const visited = new Set<string>()
+  const knownChapters = new Set<string>()
   let result: OnlineCatalog | undefined
   let rewound = false
-  for (let i = 0; i < 60; i++) {
+  // Real catalogs can have hundreds of pages. Bound only the search for an
+  // entry; once chapters are found, require forward progress until the last page.
+  for (let i = 0; ; i++) {
+    if (!result && i >= MAX_CATALOG_ENTRY_PAGES) throw new Error('目录入口跳转过多，未能找到可靠的完整目录')
     if (visited.has(current)) throw new Error('目录分页出现循环，已停止继续解析')
     visited.add(current)
     progress({ pages: i + 1, chapters: result?.chapters.length || 0, stage: 'fetching' })
     const page = await fetchPage(current)
-    const parsed = parseOnlinePage(page.html, page.url)
+    const resolved = httpUrl(page.url)
+    if (resolved && resolved !== current) {
+      if (visited.has(resolved)) throw new Error('目录分页出现循环，已停止继续解析')
+      visited.add(resolved)
+    }
+    const parsed = parseOnlinePage(page.html, page.url, { allowSingleChapterCatalog: Boolean(result) })
     if (parsed.chapters.length && !parsed.content) {
       if (!result && parsed.catalogUrl && parsed.catalogUrl !== page.url && !visited.has(parsed.catalogUrl)) {
         current = parsed.catalogUrl
@@ -267,8 +279,11 @@ export async function discoverCatalog(url: string, fetchPage: FetchPage, progres
       }
       if (!result) result = { title: parsed.bookTitle || parsed.title, author: parsed.author, description: parsed.description, catalogUrl: page.url, chapters: [], warnings: [] }
       if (parsed.unlinkedChapterCount) result.warnings.push(`目录中有 ${parsed.unlinkedChapterCount} 项未提供可访问链接，已跳过`)
-      const known = new Set(result.chapters.map(c => c.url))
-      result.chapters.push(...parsed.chapters.filter(c => !known.has(c.url)))
+      const additions = parsed.chapters.filter(chapter => !knownChapters.has(chapter.url))
+      if (!additions.length && parsed.nextCatalogUrl && visited.has(parsed.nextCatalogUrl)) throw new Error('目录分页出现循环，已停止继续解析')
+      if (!additions.length) throw new Error('目录分页未发现新章节，可能返回了重复页面，已保留现有目录')
+      for (const chapter of additions) knownChapters.add(chapter.url)
+      result.chapters.push(...additions)
       progress({ pages: i + 1, chapters: result.chapters.length, stage: 'catalog' })
       await partial({ ...result, chapters: [...result.chapters], complete: !parsed.nextCatalogUrl })
       if (!parsed.nextCatalogUrl) return { ...result, complete: true }
@@ -285,7 +300,6 @@ export async function discoverCatalog(url: string, fetchPage: FetchPage, progres
       throw new Error('未能可靠识别目录或正文。网页可能需要登录、动态加载，或使用了暂不支持的结构，请换一个来源')
     }
   }
-  throw new Error('目录超过 60 页，已停止继续解析')
 }
 
 export async function extractChapter(url: string, fetchPage: FetchPage, chapterUrls?: ReadonlySet<string>): Promise<string> {
