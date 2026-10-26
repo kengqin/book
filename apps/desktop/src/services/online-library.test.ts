@@ -42,6 +42,8 @@ beforeEach(() => {
         if (!target.chapters[index]) target.chapters.push({ ...chapter, number: index + 1, status: 'pending', error: '' })
       }
       target.lastChecked = Date.now()
+      target.catalogComplete = args.input.complete !== false
+      target.error = ''
       return target.bookId
     }
     throw new Error(`Unexpected command: ${command}`)
@@ -126,6 +128,30 @@ describe('online library task lifecycle', () => {
     await vi.runAllTimersAsync()
     expect((await recovery).name).toBe('AbortError')
     expect(native.invoke.mock.calls.some(([command]) => command === 'save_online_catalog')).toBe(false)
+  })
+  it('retries a catalog stopped at sixty pages and downloads only its uncached chapters', async () => {
+    native.books = [{ ...book(120), catalogComplete: false, state: 'failed', error: '目录超过 60 页，已停止继续解析' }]
+    for (const chapter of native.books[0].chapters) chapter.status = 'cached'
+    native.fetch = async url => {
+      const address = new URL(url)
+      if (address.pathname !== '/book') return { url, html: html(Number(address.pathname.slice(1))) }
+      const page = Number(address.searchParams.get('page') || 1)
+      const numbers = [page * 2 - 1, page * 2]
+      return { url, html: '<h1>山河</h1><div id="list">' + numbers.map(number => `<a href="/${number}">第${number}章</a>`).join('')
+        + '</div>' + (page < 61 ? `<a href="/book?page=${page + 1}">下一页</a>` : '') }
+    }
+    const service = await import('./online-library')
+    await import('./online-discovery')
+    await service.refreshOnlineBooks()
+    const task = service.downloadOnlineBook('book-1')
+    await vi.runAllTimersAsync()
+    await task
+    expect(native.books[0]).toMatchObject({ state: 'complete', catalogComplete: true, error: '' })
+    expect(native.books[0].chapters).toHaveLength(122)
+    expect(native.books[0].chapters.every((chapter: any) => chapter.status === 'cached')).toBe(true)
+    const requested = native.invoke.mock.calls.filter(([command]) => command === 'fetch_online_page').map(([, args]) => new URL(args.url))
+    expect(requested.filter(url => url.pathname === '/book')).toHaveLength(61)
+    expect(requested.filter(url => url.pathname !== '/book').map(url => url.pathname)).toEqual(['/121', '/122'])
   })
   it('loads a browser session after a direct Baidu request requires verification', async () => {
     native.tauri = true
