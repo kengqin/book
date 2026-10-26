@@ -66,7 +66,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
       <span>{{ selected?.label || '请选择' }}</span>
       <ChevronDown :size="15" aria-hidden="true" />
     </button>
-    <div v-if="open" class="ui-select-menu" role="listbox" :aria-label="label">
+    <Transition name="ui-select-popup">
+    <div v-if="open" class="ui-select-menu" role="listbox" :aria-label="label" @keydown.esc.stop="open = false; root?.querySelector('button')?.focus()">
       <button
         v-for="option in options"
         :key="option.value"
@@ -81,5 +82,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', closeOnOutside
         <Check v-if="option.value === modelValue" :size="15" aria-hidden="true" />
       </button>
     </div>
+    </Transition>
   </div>
 </template>
+<style scoped>
+.ui-select-popup-enter-active,.ui-select-popup-leave-active { transition: opacity 120ms ease-out, transform 120ms ease-out; transform-origin: top right; }
+.ui-select-popup-enter-from,.ui-select-popup-leave-to { opacity: 0; transform: translateY(-3px) scale(.98); }
+@media (prefers-reduced-motion: reduce) { .ui-select-popup-enter-active,.ui-select-popup-leave-active { transition: none; } }
+</style>

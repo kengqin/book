@@ -1,29 +1,31 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { Check, ChevronRight, Copy, ExternalLink, RefreshCw, Type } from 'lucide-vue-next'
 import { closeBrowserMenu, copyBrowserLink, initializeWebBrowser, webBrowser, webBrowserAction, zoomWebPage } from '../services/web-browser'
 const error = ref('')
 const zoomOpen = ref(false)
-watch(() => webBrowser.value.menuOpen, () => { zoomOpen.value = false; clearTimeout(zoomTimer); clearTimeout(closeTimer); zoomTimer = undefined })
-let closeTimer: ReturnType<typeof setTimeout> | undefined, zoomTimer: ReturnType<typeof setTimeout> | undefined
-function keepMenu() { clearTimeout(closeTimer) }
-function leaveMenu() { clearTimeout(closeTimer); closeTimer = setTimeout(() => { zoomOpen.value = false; void closeBrowserMenu() }, 160) }
+const keyboardZoom = ref(false)
+watch(() => webBrowser.value.menuOpen, () => { zoomOpen.value = false; keyboardZoom.value = false; clearTimeout(zoomTimer); zoomTimer = undefined })
+let zoomTimer: ReturnType<typeof setTimeout> | undefined
+function openZoom(keyboard = false) { clearTimeout(zoomTimer); zoomTimer = undefined; keyboardZoom.value = keyboard; zoomOpen.value = true }
+function closeZoom() { clearTimeout(zoomTimer); zoomTimer = undefined; keyboardZoom.value = false; zoomOpen.value = false }
 function trackPointer(event: PointerEvent) {
+  keyboardZoom.value = false
   const element = event.target as Element
-  if (element.closest('.browser-menu')) keepMenu(); else leaveMenu()
   if (element.closest('[data-zoom-trigger],.browser-zoom-menu')) { clearTimeout(zoomTimer); zoomTimer = undefined }
   else if (zoomOpen.value && !zoomTimer) zoomTimer = setTimeout(() => { zoomOpen.value = false; zoomTimer = undefined }, 120)
 }
 function outside(event: PointerEvent) { if (!(event.target as Element).closest('.browser-menu')) void closeBrowserMenu() }
 async function run(work: () => Promise<unknown>) { try { await work(); await closeBrowserMenu() } catch (cause) { error.value = String(cause) } }
 const keys = (event: KeyboardEvent) => { if (event.key === 'Escape') void closeBrowserMenu() }
-onMounted(() => { void initializeWebBrowser(); window.addEventListener('keydown', keys); window.addEventListener('blur', closeBrowserMenu); document.addEventListener('pointerdown', outside, true) })
-onBeforeUnmount(() => { window.removeEventListener('keydown', keys); window.removeEventListener('blur', closeBrowserMenu); document.removeEventListener('pointerdown', outside, true); clearTimeout(closeTimer); clearTimeout(zoomTimer) })
+onMounted(() => { void initializeWebBrowser().then(() => invoke('web_browser_menu_ready')).catch(cause => { error.value = String(cause) }); window.addEventListener('keydown', keys); document.addEventListener('pointerdown', outside, true) })
+onBeforeUnmount(() => { window.removeEventListener('keydown', keys); document.removeEventListener('pointerdown', outside, true); clearTimeout(zoomTimer) })
 </script>
-<template><div class="browser-menu-shell" @pointerleave="leaveMenu" @pointerenter="keepMenu" @pointermove="trackPointer"><div class="browser-menu" role="menu" aria-label="网页操作">
+<template><div class="browser-menu-shell" @pointerleave="!keyboardZoom && closeZoom()" @pointermove="trackPointer"><div class="browser-menu" role="menu" aria-label="网页操作">
   <button type="button" role="menuitem" @click="run(() => webBrowserAction('reload'))"><RefreshCw :size="14" /><span>刷新</span><kbd>Ctrl+R</kbd></button>
   <button type="button" role="menuitem" @click="run(copyBrowserLink)"><Copy :size="14" /><span>复制链接</span></button>
-  <button type="button" role="menuitem" data-zoom-trigger aria-haspopup="menu" :aria-expanded="zoomOpen" @pointerenter="zoomOpen = true" @keydown.right.prevent="zoomOpen = true" @keydown.left.prevent="zoomOpen = false"><Type :size="14" /><span>调整文字大小</span><kbd>{{ Math.round((webBrowser.zoomFactor || 1) * 100) }}%</kbd><ChevronRight :size="12" /></button>
+  <button type="button" role="menuitem" data-zoom-trigger aria-haspopup="menu" :aria-expanded="zoomOpen" @pointerenter="openZoom()" @keydown.right.prevent="openZoom(true)" @keydown.left.prevent="closeZoom"><Type :size="14" /><span>调整文字大小</span><kbd>{{ Math.round((webBrowser.zoomFactor || 1) * 100) }}%</kbd><ChevronRight :size="12" /></button>
   <div v-if="zoomOpen" class="browser-zoom-menu" role="menu" aria-label="调整文字大小">
     <button type="button" role="menuitem" @click="run(() => zoomWebPage('reset'))"><span>标准大小</span><Check v-if="Math.abs((webBrowser.zoomFactor || 1) - 1) < .01" :size="13" /></button>
     <button type="button" role="menuitem" :disabled="(webBrowser.zoomFactor || 1) <= .5" @click="run(() => zoomWebPage('out'))">缩小</button>
@@ -47,5 +49,6 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', keys); window.remo
 .browser-zoom-menu > button { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 31px; padding: 0 11px; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: left; font-size: 12px; cursor: pointer; }
 .browser-zoom-menu > button:hover { background: var(--ui-hover); }
 .browser-zoom-menu > button:disabled { opacity: .35; cursor: default; }
+@media (max-width: 355px) { .browser-zoom-menu { top: 110px; right: 6px; } }
 @keyframes zoom-menu-in { from { opacity: 0; transform: translateX(4px); } to { opacity: 1; transform: translateX(0); } }
 </style>

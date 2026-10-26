@@ -164,7 +164,7 @@ onMounted(async () => {
       </div>
     </div>
 
-    <footer class="update-footer"><button type="button" class="text-command update-history-link" @click="openHistoryWindow">更新历史</button></footer>
+    <footer class="update-footer"><button type="button" class="update-history-link" @click="openHistoryWindow">更新历史</button></footer>
     </template>
     <section v-if="historyOnly" class="release-history">
       <header><small class="manifest-status">{{ historyRefreshing ? '正在同步...' : manifestSource === 'remote' ? '在线记录' : manifestSource === 'cached' ? '本地缓存' : '内置记录' }}</small><button type="button" class="text-command" :disabled="historyRefreshing" @click="refreshReleaseHistory"><RefreshCw :size="13" :class="{ spinning: historyRefreshing }" />刷新</button></header>

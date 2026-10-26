@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "web-browser-menu",
+  "description": "Events for the local menu embedded in the browser window. It cannot change the parent window chrome.",
+  "webviews": ["web-browser-menu"],
+  "permissions": ["core:event:default"]
+}

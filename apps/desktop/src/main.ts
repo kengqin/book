@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import App from './App.vue'
 import { router } from './router'
 import { syncApplicationWindowChrome } from './services/window-chrome'
@@ -14,8 +15,8 @@ window.addEventListener('contextmenu', event => event.preventDefault(), true)
 
 const app = createApp(App).use(router)
 const overlayShell = isTauri() && ['app-message', 'app-tooltip', 'app-progress'].includes(getCurrentWindow().label)
-const browserShell = isTauri() && (getCurrentWindow().label.startsWith('web-browser') || ['settings', 'release-history', 'app-update'].includes(getCurrentWindow().label) || overlayShell)
-if (browserShell) document.documentElement.dataset.windowKind = getCurrentWindow().label
+const browserShell = isTauri() && (getCurrentWebview().label.startsWith('web-browser') || ['settings', 'release-history', 'app-update'].includes(getCurrentWindow().label) || overlayShell)
+if (browserShell) document.documentElement.dataset.windowKind = getCurrentWebview().label
 const stopPageTurn = browserShell ? () => {} : startPageTurn()
 app.mount('#app')
 if (!overlayShell) { initializeTooltips(); initializeScrollbars() }

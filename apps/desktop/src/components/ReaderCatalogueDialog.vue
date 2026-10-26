@@ -80,7 +80,7 @@ input { width: 100%; min-width: 0; color: inherit; border: 0; outline: 0; backgr
 .catalogue-list button[aria-current] small { opacity: 1; }
 button:hover { background: var(--ui-hover); }
 button:focus-visible { outline: 2px solid color-mix(in srgb, currentColor 45%, var(--catalogue-surface)); outline-offset: -2px; }
-.catalogue-tools label:focus-within { background: var(--ui-hover); border-color: color-mix(in srgb, currentColor 22%, var(--catalogue-surface)); box-shadow: 0 0 0 2px var(--ui-hover); }
+.catalogue-tools label:focus-within { background: var(--ui-hover); border-color: color-mix(in srgb, currentColor 22%, var(--catalogue-surface)); box-shadow: none; }
 .catalogue-empty { grid-column: 1 / -1; text-align: center; padding: 36px; opacity: .6; }
 @media (max-width: 600px) { .catalogue-list { grid-template-columns: 1fr; } .catalogue-tools, header { padding-inline: 16px; } }
 </style>

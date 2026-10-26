@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "web-browser-toolbar",
   "description": "Window controls for the local browser toolbar. Remote page webviews have no capabilities.",
-  "webviews": ["web-browser", "web-browser-menu"],
+  "webviews": ["web-browser"],
   "permissions": [
     "core:event:default",
     "core:window:allow-close",
