@@ -14,7 +14,7 @@ window.addEventListener('contextmenu', event => event.preventDefault(), true)
 
 const app = createApp(App).use(router)
 const overlayShell = isTauri() && ['app-message', 'app-tooltip', 'app-progress'].includes(getCurrentWindow().label)
-const browserShell = isTauri() && (getCurrentWindow().label.startsWith('web-browser') || ['settings', 'release-history'].includes(getCurrentWindow().label) || overlayShell)
+const browserShell = isTauri() && (getCurrentWindow().label.startsWith('web-browser') || ['settings', 'release-history', 'app-update'].includes(getCurrentWindow().label) || overlayShell)
 if (browserShell) document.documentElement.dataset.windowKind = getCurrentWindow().label
 const stopPageTurn = browserShell ? () => {} : startPageTurn()
 app.mount('#app')

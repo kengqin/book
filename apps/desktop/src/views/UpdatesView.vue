@@ -5,13 +5,11 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { ArrowUpRight, Download, RefreshCw, ShieldAlert } from 'lucide-vue-next'
 import {
   availableUpdate,
-  checkForUpdates,
-  cancelUpdateDownload,
+  openUpdateWindow,
+  initializeUpdateEvents,
   compareVersions,
-  downloadAvailableUpdate,
   getCurrentVersion,
   getCachedReleaseManifest,
-  installDownloadedUpdate,
   isAutoCheckEnabled,
   isAutoDownloadEnabled,
   isBackgroundCheckEnabled,
@@ -21,12 +19,8 @@ import {
   setAutoCheckEnabled,
   setAutoDownloadEnabled,
   setBackgroundCheckEnabled,
-  updateChecking,
   updateError,
   updateMessage,
-  updateProgress,
-  updateRequiresBackup,
-  updateStage,
   type ReleaseEntry,
   type ReleaseManifestSource
 } from '../services/release-center'
@@ -53,7 +47,6 @@ const historyRefreshing = ref(false)
 const checkingFromView = ref(false)
 const historicalInstallVersion = ref<string | null>(null)
 const downgradeRelease = ref<ReleaseEntry | null>(null)
-const backupDialogOpen = ref(false)
 
 const visibleReleases = computed(() => {
   const ceiling = latestReadyVersion.value || (currentVersion.value === '0.0.0'
@@ -104,19 +97,6 @@ function confirmHistoricalInstall() {
   if (release) void openHistoricalInstaller(release)
 }
 
-function requestDownload() {
-  if (updateRequiresBackup.value) {
-    backupDialogOpen.value = true
-    return
-  }
-  void downloadAvailableUpdate()
-}
-
-function confirmDownload() {
-  backupDialogOpen.value = false
-  void downloadAvailableUpdate(false, true)
-}
-
 async function openRelease(release: ReleaseEntry) {
   try {
     await openUrl(release.releaseUrl)
@@ -140,7 +120,7 @@ async function checkForUpdatesFromView() {
   if (checkingFromView.value) return
   checkingFromView.value = true
   try {
-    await checkForUpdates(false)
+    await openUpdateWindow(true)
   } finally {
     checkingFromView.value = false
   }
@@ -149,7 +129,7 @@ async function checkForUpdatesFromView() {
 onMounted(async () => {
   currentVersion.value = await getCurrentVersion()
   if (props.historyOnly) await refreshReleaseHistory()
-  else await checkForUpdates(true)
+  else await initializeUpdateEvents()
 })
 </script>
 
@@ -164,14 +144,10 @@ onMounted(async () => {
         <span>v{{ currentVersion }}</span>
       </div>
       <div class="header-actions">
-        <button v-if="availableUpdate && (updateStage === 'available' || updateStage === 'download-error')" type="button" class="primary-command" @click="requestDownload">下载更新</button>
-        <button v-else-if="updateStage === 'downloading'" type="button" class="secondary-command" @click="cancelUpdateDownload">取消下载</button>
-        <button v-else-if="updateStage === 'downloaded' || updateStage === 'install-error'" type="button" class="primary-command" @click="installDownloadedUpdate">安装并重启</button>
-        <button v-else type="button" class="secondary-command" :disabled="checkingFromView || updateChecking || ['cancelling', 'installing'].includes(updateStage)" @click="checkForUpdatesFromView">{{ checkingFromView || updateChecking ? '正在检查' : '检查更新' }}</button>
+        <button type="button" class="secondary-command" :disabled="checkingFromView" @click="checkForUpdatesFromView">检查更新</button>
       </div>
     </section>
     <p class="update-feedback" role="status"><template v-if="availableUpdate">可更新至 v{{ availableUpdate.version }}</template><template v-else-if="publishedUpdateVersion">新版本 v{{ publishedUpdateVersion }} 已发布</template><template v-else-if="updateError">暂时无法检查更新，请稍后重试</template><template v-else>{{ updateMessage }}</template></p>
-    <div v-if="updateStage === 'downloading' || updateStage === 'cancelling'" class="update-progress"><span :style="{ width: `${updateProgress}%` }" /></div>
 
     <div class="auto-update-list">
       <div class="auto-update-setting">
@@ -213,7 +189,6 @@ onMounted(async () => {
         </div>
       </article>
     </section>
-    <UiConfirmDialog :open="backupDialogOpen" title="确认已完成完整备份？" description="此版本升级前要求导出完整数据备份。确认备份完成后才会开始下载安装包。" confirm-label="已备份，继续下载" @close="backupDialogOpen = false" @confirm="confirmDownload" />
     <UiConfirmDialog :open="Boolean(downgradeRelease)" danger title="安装历史版本？" :description="`将从 ${currentVersion} 降级到 ${downgradeRelease?.version || ''}。旧版本可能无法读取新版数据库，请先在设置中导出完整备份。`" confirm-label="继续安装" @close="downgradeRelease = null" @confirm="confirmHistoricalInstall" />
   </section>
 </template>

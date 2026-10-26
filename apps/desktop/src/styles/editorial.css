@@ -238,7 +238,7 @@ html[data-reader-privacy] .window-titlebar { display: none; }
 .sidebar-resize-handle { position: absolute; z-index: 8; top: 0; right: -4px; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; outline: none; }
 .sidebar-resize-handle::after { content: ''; position: absolute; top: 12px; bottom: 12px; left: 3px; width: 2px; border-radius: 2px; background: var(--ui-accent); opacity: 0; transition: opacity 120ms ease; }
 .sidebar-resize-handle:hover::after, .sidebar-resize-handle:focus-visible::after, .app-shell--resizing .sidebar-resize-handle::after { opacity: .55; }
-.app-workspace { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; color: var(--ui-text); background: var(--ui-app); scrollbar-color: var(--ui-scrollbar-thumb) transparent; scrollbar-width: thin; }
+.app-workspace { position: relative; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable both-edges; color: var(--ui-text); background: var(--ui-app); scrollbar-color: var(--ui-scrollbar-thumb) transparent; scrollbar-width: thin; }
 .app-workspace::-webkit-scrollbar { width: 10px; background: transparent; }
 .app-workspace::-webkit-scrollbar-track { background: transparent; }
 .app-workspace::-webkit-scrollbar-thumb { min-height: 42px; border: 1px solid transparent; border-radius: 999px; background: var(--ui-scrollbar-thumb); background-clip: padding-box; }
@@ -282,7 +282,7 @@ html[data-reader-privacy] .window-titlebar { display: none; }
 .empty-library h2 { color: var(--ui-text); font-family: inherit; }
 .empty-library .primary-command { margin-top: 8px; }
 
-.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 210px)); gap: 28px 22px; }
+.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 28px 22px; }
 .workspace-header .icon-button { border-color: transparent; background: transparent; }
 .workspace-header .icon-button:hover:not(:disabled) { border-color: transparent; background: var(--ui-hover); }
 .book-card { min-width: 0; padding: 5px; border: 1px solid transparent; border-radius: 12px; transition: background-color 140ms ease-out; }
@@ -987,7 +987,7 @@ html[data-reader-privacy] .app-workspace::-webkit-scrollbar { display: none; }
 .privacy-reader-chapter-controls button:focus-visible { outline: 1px solid currentColor; outline-offset: 1px; }
 
 @media (max-width: 1050px) {
-  .book-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 195px)); }
+  .book-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
   .book-detail-header { grid-template-columns: 140px minmax(180px, 1fr) minmax(286px, 320px); gap: 24px; }
   .book-detail-seal { width: 140px; min-width: 140px; }
 }
