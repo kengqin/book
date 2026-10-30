@@ -65,6 +65,9 @@ export async function verifyPublishedRelease({
   ])
   const normalizedSignature = assertSignature(signature)
   assertTargetManifest(target, { repository, version: normalized, installerName, signature: normalizedSignature })
+  if (target.url !== `${base}/${installerName}`) {
+    await fetchRequired(fetchImpl, target.url, { method: 'HEAD' })
+  }
   const actualHash = sha256Bytes(Buffer.from(installerBytes))
   if (release.sha256 && actualHash !== release.sha256.toLowerCase()) throw new Error('公开安装包 SHA256 与版本目录不一致')
   if (!checksumText.toLowerCase().includes(`${actualHash}  ${installerName.toLowerCase()}`)) {

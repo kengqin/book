@@ -3,7 +3,7 @@ import localManifest from '../data/mobile-releases.json'
 import { Capacitor } from '@capacitor/core'
 import { ApkInstaller } from '../native/apk-installer'
 
-export const MOBILE_UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/kengqin/book/main/releases/mobile-releases.json'
+export const MOBILE_UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/kengqin/library-manage/main/releases/mobile-releases.json'
 export const MOBILE_APP_ID = 'com.kengqin.novellibrary.mobile'
 
 export interface MobileUpdateCheckOptions {

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const repoRoot = path.resolve(import.meta.dirname, '../..')
-const repository = 'kengqin/book'
+const repository = 'kengqin/library-manage'
 const appId = 'com.kengqin.novellibrary.mobile'
 
 function argument(name) {

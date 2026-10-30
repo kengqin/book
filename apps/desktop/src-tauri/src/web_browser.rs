@@ -142,7 +142,7 @@ fn ensure_shell(app: &AppHandle, mode: BrowserMode) -> Result<(), String> {
         window
     } else {
         WebviewWindowBuilder::new(app, SHELL, WebviewUrl::App("index.html#/browser".into()))
-            .title("网页浏览 · 小说书库")
+            .title("网页浏览 · library-manage")
             .inner_size(1120.0, 780.0)
             .min_inner_size(620.0, 440.0)
             .decorations(false)

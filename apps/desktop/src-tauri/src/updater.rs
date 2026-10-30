@@ -121,12 +121,17 @@ fn emit_state(app: &AppHandle, snapshot: ApplicationUpdateState) {
 
 fn allowed_download_url(url: &tauri::Url, version: &str) -> bool {
     let version = version.strip_prefix('v').unwrap_or(version);
-    let expected_prefix = format!("/kengqin/book/releases/download/v{version}/");
     url.scheme() == "https"
         && url.host_str() == Some("github.com")
-        && url.path().starts_with(&expected_prefix)
-        && url.path()[expected_prefix.len()..].ends_with("-setup.exe")
-        && !url.path()[expected_prefix.len()..].contains('/')
+        // Published signed manifests may still refer to the repository's old name.
+        && ["kengqin/library-manage", "kengqin/book"]
+            .iter()
+            .any(|repository| {
+                let prefix = format!("/{repository}/releases/download/v{version}/");
+                url.path().strip_prefix(&prefix).is_some_and(|filename| {
+                    filename.ends_with("-setup.exe") && !filename.contains('/')
+                })
+            })
         && url.query().is_none()
         && url.fragment().is_none()
 }
@@ -345,12 +350,16 @@ mod tests {
     use super::*;
     #[test]
     fn only_accepts_installer_from_the_expected_official_tag() {
-        let valid = tauri::Url::parse("https://github.com/kengqin/book/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe").unwrap();
-        let wrong_tag = tauri::Url::parse("https://github.com/kengqin/book/releases/download/v0.4.1/NovelLibrary_0.4.0_x64-setup.exe").unwrap();
-        let wrong_host = tauri::Url::parse("https://example.com/kengqin/book/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe").unwrap();
+        let valid = tauri::Url::parse("https://github.com/kengqin/library-manage/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe").unwrap();
+        let wrong_tag = tauri::Url::parse("https://github.com/kengqin/library-manage/releases/download/v0.4.1/NovelLibrary_0.4.0_x64-setup.exe").unwrap();
+        let wrong_host = tauri::Url::parse("https://example.com/kengqin/library-manage/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe").unwrap();
+        let legacy = tauri::Url::parse("https://github.com/kengqin/book/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe").unwrap();
+        let wrong_repository = tauri::Url::parse("https://github.com/someone/library-manage/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe").unwrap();
         assert!(allowed_download_url(&valid, "0.4.0"));
+        assert!(allowed_download_url(&legacy, "0.4.0"));
         assert!(!allowed_download_url(&wrong_tag, "0.4.0"));
         assert!(!allowed_download_url(&wrong_host, "0.4.0"));
+        assert!(!allowed_download_url(&wrong_repository, "0.4.0"));
     }
     #[test]
     fn classifies_signature_failures_without_exposing_internal_paths() {

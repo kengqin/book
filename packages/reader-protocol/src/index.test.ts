@@ -12,7 +12,7 @@ function manifest() {
       title: '移动端首版',
       channel: 'stable' as const,
       published: true,
-      releaseUrl: 'https://github.com/kengqin/book/releases/tag/v1.2.0',
+      releaseUrl: 'https://github.com/kengqin/library-manage/releases/tag/v1.2.0',
       storeUrls: {
         android: 'https://play.google.com/store/apps/details?id=com.kengqin.novellibrary.mobile',
         ios: 'https://apps.apple.com/app/id123456789'
@@ -34,7 +34,7 @@ describe('mobile update protocol', () => {
     expect(isMobileUpdateManifest(manifest(), 'com.kengqin.novellibrary.mobile')).toBe(true)
     expect(isMobileUpdateManifest(manifest(), 'com.other.app')).toBe(false)
     expect(isMobileUpdateManifest({ ...manifest(), releases: [{ ...manifest().releases[0], storeUrls: { ios: 'https://example.com/update' } }] })).toBe(false)
-    expect(isMobileUpdateManifest({ ...manifest(), releases: [{ ...manifest().releases[0], releaseUrl: 'http://github.com/kengqin/book/releases/tag/v1.2.0' }] })).toBe(false)
+    expect(isMobileUpdateManifest({ ...manifest(), releases: [{ ...manifest().releases[0], releaseUrl: 'http://github.com/kengqin/library-manage/releases/tag/v1.2.0' }] })).toBe(false)
   })
 
   it('returns a platform-specific update and ignores older releases', () => {
@@ -54,7 +54,7 @@ describe('mobile update protocol', () => {
   it('supports direct Android APK and TestFlight fallback links', () => {
     const data = manifest()
     data.releases[0].storeUrls = {
-      androidApk: 'https://github.com/kengqin/book/releases/download/v1.2.0/novel-library.apk',
+      androidApk: 'https://github.com/kengqin/library-manage/releases/download/v1.2.0/novel-library.apk',
       iosTestFlight: 'https://testflight.apple.com/join/example'
     }
     data.releases[0].apkSha256 = 'b'.repeat(64)

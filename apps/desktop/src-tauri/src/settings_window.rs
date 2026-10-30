@@ -98,7 +98,7 @@ pub async fn open_release_history_window(
         "release-history",
         WebviewUrl::App("index.html#/settings/history".into()),
     )
-    .title("更新历史 · 小说书库")
+    .title("更新历史 · library-manage")
     .inner_size(640.0, 680.0)
     .min_inner_size(520.0, 400.0)
     .decorations(false)
@@ -140,7 +140,7 @@ pub async fn open_settings_window(app: AppHandle, section: Option<String>) -> Re
         "settings",
         WebviewUrl::App(format!("index.html#/settings/window?section={section}").into()),
     )
-    .title("设置 · 小说书库")
+    .title("设置 · library-manage")
     .inner_size(780.0, 600.0)
     .min_inner_size(680.0, 480.0)
     .decorations(false)

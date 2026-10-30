@@ -88,7 +88,7 @@ async function refreshStatus() {
 async function exportBackup() {
   const target = await save({
     defaultPath: `NovelLibrary-backup-${new Date().toISOString().slice(0, 10)}.json`,
-    filters: [{ name: '小说书库备份', extensions: ['json'] }]
+    filters: [{ name: 'library-manage 备份', extensions: ['json'] }]
   })
   if (!target) return
   busy.value = true
@@ -105,7 +105,7 @@ async function exportBackup() {
 async function importBackup() {
   const source = await open({
     multiple: false,
-    filters: [{ name: '小说书库备份', extensions: ['json'] }]
+    filters: [{ name: 'library-manage 备份', extensions: ['json'] }]
   })
   if (!source || Array.isArray(source)) return
   busy.value = true
@@ -121,7 +121,7 @@ async function importBackup() {
 }
 
 async function chooseDataDirectory() {
-  const directory = await open({ directory: true, multiple: false, title: '选择小说书库数据目录', defaultPath: status.value?.dataDirectory })
+  const directory = await open({ directory: true, multiple: false, title: '选择 library-manage 数据目录', defaultPath: status.value?.dataDirectory })
   if (!directory || Array.isArray(directory)) return
   queueSettingAction({
     title: '切换数据目录？',
@@ -148,7 +148,7 @@ async function resetDataDirectory() {
 
 async function chooseDatabaseFile() {
   const databasePath = await save({
-    title: '选择或新建小说书库数据库文件',
+    title: '选择或新建 library-manage 数据库文件',
     defaultPath: status.value?.databasePath || 'library.db',
     filters: [{ name: 'SQLite 数据库', extensions: ['db', 'sqlite', 'sqlite3'] }]
   })

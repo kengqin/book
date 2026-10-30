@@ -5,7 +5,8 @@ import { reactive, ref, toRefs } from 'vue'
 import { relaunch } from '@tauri-apps/plugin-process'
 import localManifest from '../../../../releases/releases.json'
 
-const OFFICIAL_REPOSITORY = 'kengqin/book'
+const OFFICIAL_REPOSITORY = 'kengqin/library-manage'
+const LEGACY_REPOSITORY = 'kengqin/book'
 const RELEASE_HISTORY_URL = `https://raw.githubusercontent.com/${OFFICIAL_REPOSITORY}/main/releases/releases.json`
 const UPDATER_MANIFEST_URL = `https://github.com/${OFFICIAL_REPOSITORY}/releases/latest/download/latest-windows-x86_64-nsis.json`
 const AUTO_CHECK_KEY = 'novel-library:auto-check-updates'
@@ -249,7 +250,7 @@ export function compareVersions(left: string, right: string) {
 export function isReleaseManifest(value: unknown): value is ReleaseManifest {
   if (!value || typeof value !== 'object') return false
   const manifest = value as Partial<ReleaseManifest>
-  if (manifest.schemaVersion !== 1 || manifest.repository !== OFFICIAL_REPOSITORY || !manifest.latest || !Array.isArray(manifest.releases)) return false
+  if (manifest.schemaVersion !== 1 || ![OFFICIAL_REPOSITORY, LEGACY_REPOSITORY].includes(manifest.repository || '') || !manifest.latest || !Array.isArray(manifest.releases)) return false
   try {
     parseSemver(manifest.latest)
   } catch {
