@@ -12,11 +12,11 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock, isTauri: () => true
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }))
 vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: relaunchMock }))
 vi.mock('../../../../releases/releases.json', () => ({ default: {
-  schemaVersion: 1, repository: 'kengqin/book', latest: '0.3.0',
+  schemaVersion: 1, repository: 'kengqin/library-manage', latest: '0.3.0',
   releases: [{ version: '0.3.0', date: '2026-07-16', title: 'Bundled', channel: 'stable', databaseSchema: 5,
     published: true, minimumSupportedVersion: '0.1.0', requiresBackup: false,
-    releaseUrl: 'https://github.com/kengqin/book/releases/tag/v0.3.0',
-    installerUrl: 'https://github.com/kengqin/book/releases/download/v0.3.0/NovelLibrary_0.3.0_x64-setup.exe',
+    releaseUrl: 'https://github.com/kengqin/library-manage/releases/tag/v0.3.0',
+    installerUrl: 'https://github.com/kengqin/library-manage/releases/download/v0.3.0/NovelLibrary_0.3.0_x64-setup.exe',
     sha256: '', sections: [{ title: 'Bundled', items: ['Current version'] }], upgradeNotes: [] }]
 } }))
 vi.stubGlobal('localStorage', {
@@ -44,7 +44,7 @@ import {
 function remoteManifest(latest = '0.3.1') {
   return {
     schemaVersion: 1,
-    repository: 'kengqin/book',
+    repository: 'kengqin/library-manage',
     latest,
     releases: [{
       version: latest,
@@ -55,8 +55,8 @@ function remoteManifest(latest = '0.3.1') {
       published: true,
       minimumSupportedVersion: '0.1.0',
       requiresBackup: false,
-      releaseUrl: `https://github.com/kengqin/book/releases/tag/v${latest}`,
-      installerUrl: `https://github.com/kengqin/book/releases/download/v${latest}/NovelLibrary_${latest}_x64-setup.exe`,
+      releaseUrl: `https://github.com/kengqin/library-manage/releases/tag/v${latest}`,
+      installerUrl: `https://github.com/kengqin/library-manage/releases/download/v${latest}/NovelLibrary_${latest}_x64-setup.exe`,
       sha256: 'a'.repeat(64),
       sections: [{ title: 'Fix', items: ['One'] }],
       upgradeNotes: []
@@ -78,6 +78,12 @@ function mockRemote(catalogLatest = '0.3.1') {
 }
 
 describe('release center update consistency', () => {
+  it('accepts release history cached before the repository rename', () => {
+    const legacy = JSON.parse(JSON.stringify(remoteManifest()).replaceAll('kengqin/library-manage', 'kengqin/book'))
+    expect(isReleaseManifest(legacy)).toBe(true)
+    expect(isReleaseManifest({ ...legacy, repository: 'someone/library-manage' })).toBe(false)
+  })
+
   beforeEach(() => {
     getVersionMock.mockReset()
     invokeMock.mockReset()
@@ -239,8 +245,8 @@ describe('release center update consistency', () => {
       channel: 'stable',
       databaseSchema: 3,
       published: true,
-      releaseUrl: 'https://github.com/kengqin/book/releases/tag/v0.2.0',
-      installerUrl: 'https://github.com/kengqin/book/releases/download/v0.2.0/NovelLibrary_0.2.0_x64-setup.exe',
+      releaseUrl: 'https://github.com/kengqin/library-manage/releases/tag/v0.2.0',
+      installerUrl: 'https://github.com/kengqin/library-manage/releases/download/v0.2.0/NovelLibrary_0.2.0_x64-setup.exe',
       sha256: 'b'.repeat(64),
       sections: [{ title: 'Legacy', items: ['One'] }],
       upgradeNotes: []

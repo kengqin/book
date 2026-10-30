@@ -67,7 +67,7 @@ onBeforeUnmount(() => unlistenResize?.())
   <header class="window-titlebar" @mousedown.left="startWindowDragging" @dblclick="toggleMaximizeWindow">
     <div class="window-titlebar-main">
       <div v-if="showBrand" class="window-titlebar-brand">
-        <strong>小说书库</strong>
+        <strong>library-manage</strong>
       </div>
       <div class="window-controls">
         <button type="button" title="最小化" aria-label="最小化" @dblclick.stop @click.stop="minimizeWindow"><Minus :size="16" /></button>

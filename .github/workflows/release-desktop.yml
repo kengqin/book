@@ -71,10 +71,10 @@ jobs:
               echo "v${TAG#v} is already a formal Release and cannot be overwritten" >&2
               exit 1
             fi
-            gh release edit "$TAG" --title "NovelLibrary $TAG" --notes-file release-notes.md
+            gh release edit "$TAG" --title "library-manage $TAG" --notes-file release-notes.md
             pub_date=$(jq -r '.createdAt' <<<"$state")
           else
-            gh release create "$TAG" --verify-tag --draft --title "NovelLibrary $TAG" --notes-file release-notes.md
+            gh release create "$TAG" --verify-tag --draft --title "library-manage $TAG" --notes-file release-notes.md
             pub_date=$(gh release view "$TAG" --json createdAt --jq '.createdAt')
           fi
           echo "pub_date=$pub_date" >> "$GITHUB_OUTPUT"

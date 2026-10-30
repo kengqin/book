@@ -111,7 +111,7 @@ pub async fn fetch_search_browser(
             None => builder,
         };
         builder
-            .title("网页搜索 · 小说书库")
+            .title("网页搜索 · library-manage")
             .inner_size(1050.0, 740.0)
             .min_inner_size(760.0, 560.0)
             .center()

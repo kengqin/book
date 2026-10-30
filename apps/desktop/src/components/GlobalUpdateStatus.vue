@@ -67,7 +67,7 @@ async function ignore() { await ignoreUpdate(); if (props.windowed) emit('close'
     </header>
     <div class="update-identity"><img v-if="windowed" :src="appIcon" alt="" /><div class="update-status-copy">
     <p v-if="checking">正在检查更新...</p>
-    <p v-else-if="windowed && updateStage === 'idle'">{{ currentVersion ? `小说书库 v${currentVersion} 已是最新版` : '正在读取更新状态...' }}</p>
+    <p v-else-if="windowed && updateStage === 'idle'">{{ currentVersion ? `library-manage v${currentVersion} 已是最新版` : '正在读取更新状态...' }}</p>
     <p v-else-if="updateStage === 'available'">发现新版本 v{{ availableUpdate?.version }}</p>
     <p v-else-if="updateStage === 'downloading'">正在下载 v{{ availableUpdate?.version }} <strong>{{ updateProgress }}%</strong></p>
     <p v-else-if="updateStage === 'cancelling'">正在取消下载...</p>

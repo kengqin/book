@@ -9,9 +9,9 @@
       "title": "移动端首个可测试版本",
       "channel": "stable",
       "published": true,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/mobile-v0.1.0",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/mobile-v0.1.0",
       "storeUrls": {
-        "androidApk": "https://github.com/kengqin/book/releases/download/mobile-v0.1.0/novel-library-mobile-0.1.0.apk"
+        "androidApk": "https://github.com/kengqin/library-manage/releases/download/mobile-v0.1.0/novel-library-mobile-0.1.0.apk"
       },
       "apkSha256": "b0e83ff6abcbb28f83f83e7afb197aabf68f8f2887ebc03469975e8b5da73fb0",
       "sections": [

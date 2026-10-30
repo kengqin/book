@@ -85,7 +85,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
     let mut tray = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
-        .tooltip("小说书库")
+        .tooltip("library-manage")
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => show_main_window(app),

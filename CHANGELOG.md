@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-10-30
+
+### 优化
+
+- 桌面标题栏、系统窗口标题、托盘提示和相关应用提示统一为 library-manage。
+- 仓库、官方发布链接和更新服务迁移到 kengqin/library-manage，在线站点使用 /library-manage/ 路径。
+
+### 修复
+
+- 保留旧仓库下载地址与缓存版本清单的兼容能力，使现有客户端仍可检查、下载和安装更新。
+- 仓库改名时仅迁移历史发布记录的仓库地址，继续保护版本、安装包文件名、校验值和发布说明。
+
+### 升级说明
+
+- 数据库 Schema 保持为 6，现有书库、阅读进度、笔记、在线缓存、数据目录和个人设置无需迁移。
+- 安装器和应用标识保持兼容，可直接覆盖升级；新版启动后显示 library-manage 名称。
+
 ## [0.7.4] - 2026-10-26
 
 ### 修复
@@ -676,11 +693,11 @@
 - 默认数据目录为 `%APPDATA%\NovelLibrary`。
 - 当前数据库 schema 为 `2`；安装旧版本前应先导出备份。
 
-[0.4.0]: https://github.com/kengqin/book/releases/tag/v0.4.0
-[0.3.2]: https://github.com/kengqin/book/releases/tag/v0.3.2
-[0.3.1]: https://github.com/kengqin/book/releases/tag/v0.3.1
-[0.3.0]: https://github.com/kengqin/book/releases/tag/v0.3.0
-[0.2.0]: https://github.com/kengqin/book/releases/tag/v0.2.0
-[0.1.2]: https://github.com/kengqin/book/releases/tag/v0.1.2
-[0.1.1]: https://github.com/kengqin/book/releases/tag/v0.1.1
-[0.1.0]: https://github.com/kengqin/book/releases/tag/v0.1.0
+[0.4.0]: https://github.com/kengqin/library-manage/releases/tag/v0.4.0
+[0.3.2]: https://github.com/kengqin/library-manage/releases/tag/v0.3.2
+[0.3.1]: https://github.com/kengqin/library-manage/releases/tag/v0.3.1
+[0.3.0]: https://github.com/kengqin/library-manage/releases/tag/v0.3.0
+[0.2.0]: https://github.com/kengqin/library-manage/releases/tag/v0.2.0
+[0.1.2]: https://github.com/kengqin/library-manage/releases/tag/v0.1.2
+[0.1.1]: https://github.com/kengqin/library-manage/releases/tag/v0.1.1
+[0.1.0]: https://github.com/kengqin/library-manage/releases/tag/v0.1.0

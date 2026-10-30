@@ -18,7 +18,7 @@ if (!release) throw new Error(`版本清单中不存在 ${tag}`)
 const installerName = argument('installer-name') || release.installerUrl.split('/').at(-1)
 const sha256 = argument('sha256') || release.sha256
 const lines = [
-  `# NovelLibrary ${tag}`,
+  `# library-manage ${tag}`,
   '',
   `> ${release.title}`,
   '',
@@ -41,7 +41,7 @@ lines.push(
   `- 数据库 Schema：\`${release.databaseSchema}\``,
   `- SHA256：\`${sha256 || '以 Release 附件中的 .sha256 文件为准'}\``,
   '',
-  '完整历史记录请查看 [CHANGELOG.md](https://github.com/kengqin/book/blob/main/CHANGELOG.md)。',
+  '完整历史记录请查看 [CHANGELOG.md](https://github.com/kengqin/library-manage/blob/main/CHANGELOG.md)。',
   ''
 )
 
