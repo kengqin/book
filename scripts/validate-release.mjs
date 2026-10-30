@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import process from 'node:process'
-import { compareSemver, installerNameFromRelease, normalizeVersion, parseArguments } from './release/release-utils.mjs'
+import { compareSemver, installerNameFromRelease, normalizeVersion, parseArguments, validateReleaseHistory } from './release/release-utils.mjs'
 
 const root = new URL('../', import.meta.url)
 
@@ -49,26 +49,6 @@ function validateReleaseEntry(release, manifest) {
     }
     if (release.sha256 !== undefined && release.sha256 !== '' && !/^[a-f0-9]{64}$/i.test(release.sha256)) {
       throw new Error(`${prefix} SHA256 格式无效`)
-    }
-  }
-}
-
-function validateHistory(current, baseline) {
-  const comparableRelease = release => {
-    const copy = { ...release }
-    for (const key of ['minimumSupportedVersion', 'requiresBackup', 'upgradeNotes']) delete copy[key]
-    return copy
-  }
-  const currentByVersion = new Map(current.releases.map((release) => [release.version, release]))
-  for (const previous of baseline.releases) {
-    const retained = currentByVersion.get(previous.version)
-    if (!retained) throw new Error(`历史版本 v${previous.version} 被删除，版本记录只能新增`)
-    const previousComparable = comparableRelease(previous)
-    const retainedComparable = comparableRelease(retained)
-    const canRetireFailedLatest = previous.version === baseline.releases[0]?.version && previous.published && !retained.published
-    if (canRetireFailedLatest) previousComparable.published = false
-    if (JSON.stringify(retainedComparable) !== JSON.stringify(previousComparable)) {
-      throw new Error(`历史版本 v${previous.version} 被修改，已发布记录不可覆盖`)
     }
   }
 }
@@ -124,7 +104,7 @@ if (args['baseline-ref']) {
   } catch {
     throw new Error(`无法读取历史基线 ${args['baseline-ref']}:releases/releases.json`)
   }
-  validateHistory(releaseManifest, JSON.parse(baselineText))
+  validateReleaseHistory(releaseManifest, JSON.parse(baselineText))
 }
 
 console.log(`Release v${expected} validation passed (${releaseManifest.releases.length} immutable records).`)

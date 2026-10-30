@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
 import { buildTargetManifest } from './build-target-manifest.mjs'
 import { verifyPublishedRelease } from './verify-published-release.mjs'
+import { assertUpdaterDownloadUrl, installerDownloadUrl, updaterDownloadUrl } from './release-utils.mjs'
 
-const repository = 'kengqin/book'
+const repository = 'kengqin/library-manage'
 const version = '1.2.3'
 const installerName = 'NovelLibrary_1.2.3_x64-setup.exe'
 const signature = 'A'.repeat(80)
@@ -35,6 +36,23 @@ function releaseCatalog(sha256) {
 }
 
 describe('desktop release scripts', () => {
+  it('only permits the known repository alias for updater compatibility', () => {
+    const legacyUrl = updaterDownloadUrl(repository, version, installerName)
+    expect(legacyUrl).toBe(installerDownloadUrl('kengqin/book', version, installerName))
+    expect(() => assertUpdaterDownloadUrl(legacyUrl, repository, version, installerName)).not.toThrow()
+    expect(() => assertUpdaterDownloadUrl(legacyUrl, 'someone/library-manage', version, installerName)).toThrow()
+    expect(updaterDownloadUrl('someone/project', version, installerName)).toBe(installerDownloadUrl('someone/project', version, installerName))
+  })
+
+  it.each([
+    'https://example.com/kengqin/book/releases/download/v1.2.3/NovelLibrary_1.2.3_x64-setup.exe',
+    'https://github.com/kengqin/book/releases/download/v1.2.4/NovelLibrary_1.2.3_x64-setup.exe',
+    'https://github.com/kengqin/book/releases/download/v1.2.3/Other-setup.exe',
+    'https://github.com/kengqin/book/releases/download/v1.2.3/NovelLibrary_1.2.3_x64-setup.exe?redirect=1'
+  ])('rejects an altered compatibility download URL: %s', url => {
+    expect(() => assertUpdaterDownloadUrl(url, repository, version, installerName)).toThrow()
+  })
+
   it('generates target and legacy manifests from the same catalog entry', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'novel-release-'))
     const installer = join(directory, installerName)
@@ -63,7 +81,8 @@ describe('desktop release scripts', () => {
     })
 
     expect(result.target.version).toBe(version)
-    expect(result.target.url).toContain(`/v${version}/${installerName}`)
+    expect(result.target.url).toBe(installerDownloadUrl('kengqin/book', version, installerName))
+    expect(result.legacy.platforms['windows-x86_64-nsis'].url).toBe(result.target.url)
     expect(result.legacy.platforms['windows-x86_64-nsis'].signature).toBe(signature)
     expect(await readFile(checksumFile, 'utf8')).toContain(hash)
   })
@@ -109,11 +128,11 @@ describe('desktop release scripts', () => {
     })).rejects.toThrow('SHA256')
   })
 
-  it('verifies public assets, signatures, checksums, target metadata and latest alias together', async () => {
+  it.each([repository, 'kengqin/book'])('verifies public assets and updater URLs for %s', async (downloadRepository) => {
     const bytes = Buffer.from('public installer fixture')
     const hash = createHash('sha256').update(bytes).digest('hex')
     const catalog = releaseCatalog(hash)
-    const url = catalog.releases[0].installerUrl
+    const url = installerDownloadUrl(downloadRepository, version, installerName)
     const target = {
       version,
       notes: 'Release test',
@@ -155,6 +174,7 @@ describe('desktop release scripts', () => {
     })
 
     expect(result.sha256).toBe(hash)
+    if (downloadRepository !== repository) expect(fetchImpl).toHaveBeenCalledWith(url, { method: 'HEAD' })
     expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('/releases/latest/download/latest.json'), {})
   })
 })

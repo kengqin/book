@@ -55,6 +55,48 @@ export function installerDownloadUrl(repository, version, installerName) {
   return `https://github.com/${repository}/releases/download/v${normalizeVersion(version)}/${installerName}`
 }
 
+// Old clients pin installer downloads to the repository name used when installed.
+export function updaterDownloadUrl(repository, version, installerName) {
+  const compatibleRepository = repository === 'kengqin/library-manage' ? 'kengqin/book' : repository
+  return installerDownloadUrl(compatibleRepository, version, installerName)
+}
+
+export function assertUpdaterDownloadUrl(url, repository, version, installerName) {
+  const canonical = installerDownloadUrl(repository, version, installerName)
+  const compatible = updaterDownloadUrl(repository, version, installerName)
+  if (url !== canonical && url !== compatible) throw new Error(`更新安装包 URL 必须是官方固定版本地址：${compatible}`)
+}
+
+export function validateReleaseHistory(current, baseline) {
+  const comparableRelease = release => {
+    const copy = { ...release }
+    for (const key of ['minimumSupportedVersion', 'requiresBackup', 'upgradeNotes']) delete copy[key]
+    return copy
+  }
+  const currentByVersion = new Map(current.releases.map((release) => [release.version, release]))
+  for (const previous of baseline.releases) {
+    const retained = currentByVersion.get(previous.version)
+    if (!retained) throw new Error(`历史版本 v${previous.version} 被删除，版本记录只能新增`)
+    const previousComparable = comparableRelease(previous)
+    const retainedComparable = comparableRelease(retained)
+    // A repository rename only changes the URL prefix, never the tag or asset name.
+    if (baseline.repository !== current.repository) {
+      const oldPrefix = `https://github.com/${baseline.repository}/releases/`
+      const newPrefix = `https://github.com/${current.repository}/releases/`
+      for (const key of ['releaseUrl', 'installerUrl']) {
+        if (typeof previousComparable[key] === 'string' && previousComparable[key].startsWith(oldPrefix)) {
+          previousComparable[key] = newPrefix + previousComparable[key].slice(oldPrefix.length)
+        }
+      }
+    }
+    const canRetireFailedLatest = previous.version === baseline.releases[0]?.version && previous.published && !retained.published
+    if (canRetireFailedLatest) previousComparable.published = false
+    if (JSON.stringify(retainedComparable) !== JSON.stringify(previousComparable)) {
+      throw new Error(`历史版本 v${previous.version} 被修改，已发布记录不可覆盖`)
+    }
+  }
+}
+
 export function assertOfficialDownloadUrl(url, repository, version, installerName) {
   const expected = installerDownloadUrl(repository, version, installerName)
   if (url !== expected) throw new Error(`安装包 URL 必须是版本固定地址：${expected}`)
@@ -92,7 +134,7 @@ export function assertTargetManifest(manifest, { repository, version, installerN
   if (manifest.version !== expectedVersion) throw new Error('目标 Manifest 版本与 Tag 不一致')
   if (!manifest.notes || typeof manifest.notes !== 'string') throw new Error('目标 Manifest 缺少更新说明')
   if (!manifest.pub_date || Number.isNaN(Date.parse(manifest.pub_date))) throw new Error('目标 Manifest 发布时间无效')
-  assertOfficialDownloadUrl(manifest.url, repository, expectedVersion, installerName)
+  assertUpdaterDownloadUrl(manifest.url, repository, expectedVersion, installerName)
   if (manifest.signature !== assertSignature(signature)) throw new Error('目标 Manifest 签名与 .sig 文件不一致')
 }
 
@@ -102,7 +144,7 @@ export function assertLegacyManifest(manifest, { repository, version, installerN
   for (const key of ['windows-x86_64', TARGET_KEY]) {
     const platform = manifest.platforms?.[key]
     if (!platform) throw new Error(`latest.json 缺少平台 ${key}`)
-    assertOfficialDownloadUrl(platform.url, repository, expectedVersion, installerName)
+    assertUpdaterDownloadUrl(platform.url, repository, expectedVersion, installerName)
     if (platform.signature !== assertSignature(signature)) throw new Error(`${key} 签名与 .sig 文件不一致`)
   }
 }

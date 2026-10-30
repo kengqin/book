@@ -12,7 +12,7 @@ function validManifest() {
       title: '测试更新',
       channel: 'stable',
       published: true,
-      releaseUrl: 'https://github.com/kengqin/book/releases/tag/v0.2.0',
+      releaseUrl: 'https://github.com/kengqin/library-manage/releases/tag/v0.2.0',
       storeUrls: { android: 'https://play.google.com/store/apps/details?id=com.kengqin.novellibrary.mobile' },
       sections: []
     }]

@@ -437,7 +437,7 @@ pub fn run() {
             close_behavior::setup_tray(app)?;
             let database = if isolated.is_some() {
                 if let Some(window) = app.get_window("main") {
-                    window.set_title("小说书库 · 联网验证")?;
+                    window.set_title("library-manage · 联网验证")?;
                     if background_ui_test() { window.set_position(tauri::PhysicalPosition::new(-20000, -20000))?; }
                 }
                 DatabaseState::initialize(data_directory.clone())?

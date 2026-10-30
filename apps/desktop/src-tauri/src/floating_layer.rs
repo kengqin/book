@@ -140,7 +140,7 @@ pub async fn show_floating_layer(
                 .into(),
             ),
         )
-        .title("小说书库提示")
+        .title("library-manage 提示")
         .inner_size(kind.width(), 260.0)
         .decorations(false)
         .transparent(true)

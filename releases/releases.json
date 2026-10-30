@@ -1,8 +1,41 @@
 {
   "schemaVersion": 1,
-  "repository": "kengqin/book",
-  "latest": "0.7.4",
+  "repository": "kengqin/library-manage",
+  "latest": "0.7.5",
   "releases": [
+    {
+      "version": "0.7.5",
+      "date": "2026-10-30",
+      "title": "library-manage 命名与仓库迁移",
+      "channel": "stable",
+      "databaseSchema": 6,
+      "published": true,
+      "minimumSupportedVersion": "0.6.20",
+      "requiresBackup": false,
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.7.5",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.7.5/NovelLibrary_0.7.5_x64-setup.exe",
+      "sha256": "",
+      "sections": [
+        {
+          "title": "优化",
+          "items": [
+            "桌面标题栏、系统窗口标题、托盘提示和相关应用提示统一为 library-manage",
+            "仓库、官方发布链接和更新服务迁移到 kengqin/library-manage，在线站点使用 /library-manage/ 路径"
+          ]
+        },
+        {
+          "title": "修复",
+          "items": [
+            "保留旧仓库下载地址与缓存版本清单的兼容能力，使现有客户端仍可检查、下载和安装更新",
+            "仓库改名时仅迁移历史发布记录的仓库地址，继续保护版本、安装包文件名、校验值和发布说明"
+          ]
+        }
+      ],
+      "upgradeNotes": [
+        "数据库 Schema 保持为 6，现有书库、阅读进度、笔记、在线缓存、数据目录和个人设置无需迁移",
+        "安装器和应用标识保持兼容，可直接覆盖升级；新版启动后显示 library-manage 名称"
+      ]
+    },
     {
       "version": "0.7.4",
       "date": "2026-10-26",
@@ -12,8 +45,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.20",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.7.4",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.7.4/NovelLibrary_0.7.4_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.7.4",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.7.4/NovelLibrary_0.7.4_x64-setup.exe",
       "sha256": "18c2be9249e9d0b243e7123b4831f9398e0eb971f432df34e25878c66b09cd39",
       "sections": [
         {
@@ -46,8 +79,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.20",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.7.3",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.7.3/NovelLibrary_0.7.3_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.7.3",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.7.3/NovelLibrary_0.7.3_x64-setup.exe",
       "sha256": "476d6d76d5f669d251818c85d5b3c5e3e877c206ee368219b8f47ea9633195fa",
       "sections": [
         {
@@ -85,8 +118,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.20",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.7.2",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.7.2/NovelLibrary_0.7.2_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.7.2",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.7.2/NovelLibrary_0.7.2_x64-setup.exe",
       "sha256": "7f1fdf937121bb84f78d865030bfc9643e0a1ebe5d1b3073bb099c99be1a010f",
       "sections": [
         {
@@ -125,8 +158,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.20",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.7.1",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.7.1/NovelLibrary_0.7.1_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.7.1",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.7.1/NovelLibrary_0.7.1_x64-setup.exe",
       "sha256": "08325bd5a2762fa060ab27883569433f3c275947af3fc1c0f0c2bab16b3b3b25",
       "sections": [
         {
@@ -152,8 +185,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.20",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.7.0",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.7.0/NovelLibrary_0.7.0_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.7.0",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.7.0/NovelLibrary_0.7.0_x64-setup.exe",
       "sha256": "f8607a2552b49d9cc071b78696d0092e6460c35898afd464c375e655887e8db3",
       "sections": [
         {
@@ -201,8 +234,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.19",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.20",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.20/NovelLibrary_0.6.20_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.20",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.20/NovelLibrary_0.6.20_x64-setup.exe",
       "sha256": "b8090b55be85a8b241c4909e31e41ad8f0188b91f744b00b66b702a4bc372fd4",
       "sections": [
         {
@@ -234,8 +267,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.18",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.19",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.19/NovelLibrary_0.6.19_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.19",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.19/NovelLibrary_0.6.19_x64-setup.exe",
       "sha256": "0f626b9dd5e269f380f9fa5627c4f30c9eb4483614bd3a8a8e158befd7102175",
       "sections": [
         {
@@ -265,8 +298,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.17",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.18",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.18/NovelLibrary_0.6.18_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.18",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.18/NovelLibrary_0.6.18_x64-setup.exe",
       "sha256": "9267ccf4aee000ee292314866923d4a6e1be3ef6ac1d91c491daff35e7ed2e84",
       "sections": [
         {
@@ -303,8 +336,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.16",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.17",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.17/NovelLibrary_0.6.17_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.17",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.17/NovelLibrary_0.6.17_x64-setup.exe",
       "sha256": "ae4863babbecc2c23c6a4c369ca3a99467036bf318f1fce872707b13bd567aef",
       "sections": [
         {
@@ -327,8 +360,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.15",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.16",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.16/NovelLibrary_0.6.16_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.16",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.16/NovelLibrary_0.6.16_x64-setup.exe",
       "sha256": "c7d6d86eee3ecfffb562bfc9ef7f76144743b59d2b192887d2c78c4377e495af",
       "sections": [
         {
@@ -351,8 +384,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.14",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.15",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.15/NovelLibrary_0.6.15_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.15",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.15/NovelLibrary_0.6.15_x64-setup.exe",
       "sha256": "d14164e595e41c55462d4c781e8282fe61cd0bebee638a9b5d2c82fbffabb314",
       "sections": [
         {
@@ -377,8 +410,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.13",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.14",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.14/NovelLibrary_0.6.14_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.14",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.14/NovelLibrary_0.6.14_x64-setup.exe",
       "sha256": "718e8cb8f87602a56e027670f50fb8c2275554f307f539db36ed024d34eb9464",
       "sections": [
         {
@@ -416,8 +449,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.12",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.13",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.13/NovelLibrary_0.6.13_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.13",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.13/NovelLibrary_0.6.13_x64-setup.exe",
       "sha256": "b5225cdee33887f169d47aeb961f204c00f6f7cad8711c885f3894b0dc1abe60",
       "sections": [
         {
@@ -449,8 +482,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.11",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.12",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.12/NovelLibrary_0.6.12_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.12",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.12/NovelLibrary_0.6.12_x64-setup.exe",
       "sha256": "e1e4958bd92e4ceaffcc4c2a6e01bb0f2d0b45a5b9a155dcaae632f369198769",
       "sections": [
         {
@@ -481,8 +514,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.10",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.11",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.11/NovelLibrary_0.6.11_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.11",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.11/NovelLibrary_0.6.11_x64-setup.exe",
       "sha256": "f94152d4e1e594b30e058cc0a2e8c7afe13c1111efdb636cccef5f1b43c701ce",
       "sections": [
         {
@@ -506,8 +539,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.9",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.10",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.10/NovelLibrary_0.6.10_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.10",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.10/NovelLibrary_0.6.10_x64-setup.exe",
       "sha256": "dc0d5f3b0ee0976ae0817cf3a445b157f10d540148565e1cbd8704ff82d2502f",
       "sections": [
         {
@@ -531,8 +564,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.8",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.9",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.9/NovelLibrary_0.6.9_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.9",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.9/NovelLibrary_0.6.9_x64-setup.exe",
       "sha256": "0a4f16903bc190abe56acc670b9169cd942beb4ace4228c86a4b43f7dbd441ee",
       "sections": [
         {
@@ -564,8 +597,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.7",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.8",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.8/NovelLibrary_0.6.8_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.8",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.8/NovelLibrary_0.6.8_x64-setup.exe",
       "sha256": "e1c0c0e8049aeffe96f0cc0692ea8d014cb85bf3f900f749984c03aec66a07c1",
       "sections": [
         {
@@ -589,8 +622,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.6",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.7",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.7/NovelLibrary_0.6.7_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.7",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.7/NovelLibrary_0.6.7_x64-setup.exe",
       "sha256": "65961a6407ca4c5bf0df13fdba15298fa9d4b195a496f31969c23139e90aa1a2",
       "sections": [
         {
@@ -623,8 +656,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.5",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.6",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.6/NovelLibrary_0.6.6_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.6",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.6/NovelLibrary_0.6.6_x64-setup.exe",
       "sha256": "35de387b6d1960c90265f22b2e558fe0f139eb2c603ca98397cd4c927f86f328",
       "sections": [
         {
@@ -658,8 +691,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.4",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.5",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.5/NovelLibrary_0.6.5_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.5",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.5/NovelLibrary_0.6.5_x64-setup.exe",
       "sha256": "3573e0342d84741a51e5ebe8b66bea65f7b5946f2cc834b1213a4423e3af4759",
       "sections": [
         {
@@ -699,8 +732,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.3",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.4",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.4/NovelLibrary_0.6.4_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.4",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.4/NovelLibrary_0.6.4_x64-setup.exe",
       "sha256": "bbbd0a1cec99e73d63e595add4dee0fe1416f3e2ec75c03f5c14bd3e2774fa8e",
       "sections": [
         {
@@ -731,8 +764,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.2",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.3",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.3/NovelLibrary_0.6.3_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.3",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.3/NovelLibrary_0.6.3_x64-setup.exe",
       "sha256": "0393b7792e1eafb02f54fc134346b12602d70453f1296431d7d6b57283c6cad2",
       "sections": [
         {
@@ -772,8 +805,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.1",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.2",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.2/NovelLibrary_0.6.2_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.2",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.2/NovelLibrary_0.6.2_x64-setup.exe",
       "sha256": "94b26d5722e7088e1045e97f3e6cafb84ec8bdd5f7ea21ebf97d2c8c8bbcfd31",
       "sections": [
         {
@@ -804,8 +837,8 @@
       "published": true,
       "minimumSupportedVersion": "0.6.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.1",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.1/NovelLibrary_0.6.1_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.1",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.1/NovelLibrary_0.6.1_x64-setup.exe",
       "sha256": "ab6c10916d5dae3410b4fe22025ad2b89035e94d955bc363afcaaef9e43ec308",
       "sections": [
         {
@@ -837,8 +870,8 @@
       "published": true,
       "minimumSupportedVersion": "0.5.6",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.6.0",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.6.0/NovelLibrary_0.6.0_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.6.0",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.6.0/NovelLibrary_0.6.0_x64-setup.exe",
       "sha256": "c9a1d9782c3cc108102309ac760f4cf71f8d568c4fb347ce896ec3ef50f9adff",
       "sections": [
         {
@@ -877,8 +910,8 @@
       "published": true,
       "minimumSupportedVersion": "0.5.5",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.6",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.6/NovelLibrary_0.5.6_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.5.6",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.5.6/NovelLibrary_0.5.6_x64-setup.exe",
       "sha256": "f9aa21c1260331e31508c2fb1b926b6a16db4b70348bc6c7857ef449f3cd85c8",
       "sections": [
         {
@@ -911,8 +944,8 @@
       "published": true,
       "minimumSupportedVersion": "0.5.4",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.5",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.5/NovelLibrary_0.5.5_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.5.5",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.5.5/NovelLibrary_0.5.5_x64-setup.exe",
       "sha256": "d110d0e7a679e7880c4856aa2ff5f06cbb2d4f89ace6bb98e5681f7daa3e1d6c",
       "sections": [
         {
@@ -937,8 +970,8 @@
       "published": true,
       "minimumSupportedVersion": "0.5.2",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.4",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.4/NovelLibrary_0.5.4_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.5.4",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.5.4/NovelLibrary_0.5.4_x64-setup.exe",
       "sha256": "27e0100d359685559dcc0ef6bddf13b97369d3edde43d8bd6dd20f239450da1b",
       "sections": [
         {
@@ -963,8 +996,8 @@
       "published": false,
       "minimumSupportedVersion": "0.5.2",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.3",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.3/NovelLibrary_0.5.3_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.5.3",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.5.3/NovelLibrary_0.5.3_x64-setup.exe",
       "sha256": "262c8ad99e91a643e13b12d1720f24481912c5e01e94cf4659ee70eca4f5daea",
       "sections": [
         {
@@ -996,8 +1029,8 @@
       "published": true,
       "minimumSupportedVersion": "0.5.1",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.2",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.2/NovelLibrary_0.5.2_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.5.2",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.5.2/NovelLibrary_0.5.2_x64-setup.exe",
       "sha256": "01fd32be695377db03bf7215508fc9d53bfb8c2027c1ef50cae172e31ef1addc",
       "sections": [
         {
@@ -1020,8 +1053,8 @@
       "published": true,
       "minimumSupportedVersion": "0.5.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.1",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.1/NovelLibrary_0.5.1_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.5.1",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.5.1/NovelLibrary_0.5.1_x64-setup.exe",
       "sha256": "98047b960cb5cbafa67cb666983f9a6be68369abc61ac0ae05b349b9b5edd136",
       "sections": [
         {
@@ -1045,8 +1078,8 @@
       "published": true,
       "minimumSupportedVersion": "0.4.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.5.0",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.5.0/NovelLibrary_0.5.0_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.5.0",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.5.0/NovelLibrary_0.5.0_x64-setup.exe",
       "sha256": "64f1f10fc64b992f8240509d7e438f1870a18a2aae7092eb28cd83115e38912e",
       "sections": [
         {
@@ -1079,8 +1112,8 @@
       "published": true,
       "minimumSupportedVersion": "0.3.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.4.0",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.4.0",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.4.0/NovelLibrary_0.4.0_x64-setup.exe",
       "sha256": "1259850a585f4cbf7c0584b3c3fd6ca44f62c3138bed20eecf64353678a29f88",
       "sections": [
         {
@@ -1123,8 +1156,8 @@
       "published": true,
       "minimumSupportedVersion": "0.3.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.2",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.2/NovelLibrary_0.3.2_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.3.2",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.3.2/NovelLibrary_0.3.2_x64-setup.exe",
       "sha256": "32d5b224c32fda22447e7b5bdbc62d2a881cd5948eda644f2ac5d127adfa70f9",
       "sections": [
         {
@@ -1157,8 +1190,8 @@
       "published": true,
       "minimumSupportedVersion": "0.3.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.1",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.1/NovelLibrary_0.3.1_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.3.1",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.3.1/NovelLibrary_0.3.1_x64-setup.exe",
       "sha256": "94bb4572709ecf0ae2868849365493e6d84b22bd5bdc3dd2ffcbaac894e32996",
       "sections": [
         {
@@ -1190,8 +1223,8 @@
       "published": true,
       "minimumSupportedVersion": "0.2.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.3.0",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.3.0/NovelLibrary_0.3.0_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.3.0",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.3.0/NovelLibrary_0.3.0_x64-setup.exe",
       "sha256": "14540b47987e5be275c6ec4c87e88fd64845701090ff83eba533276b13929613",
       "sections": [
         {
@@ -1233,8 +1266,8 @@
       "published": true,
       "minimumSupportedVersion": "0.1.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.2.0",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.2.0/NovelLibrary_0.2.0_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.2.0",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.2.0/NovelLibrary_0.2.0_x64-setup.exe",
       "sha256": "ae6691a422acb1ca95bf27aa2bc849bd791a72301a0216cd67fa981f1286b939",
       "sections": [
         {
@@ -1265,8 +1298,8 @@
       "published": true,
       "minimumSupportedVersion": "0.1.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.2",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.2/NovelLibrary_0.1.2_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.1.2",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.1.2/NovelLibrary_0.1.2_x64-setup.exe",
       "sha256": "a73b708d6c484d3cdf02e5e7ee473a46c70e4f0a0b2ef0bb04bc136ebae14723",
       "sections": [
         {
@@ -1299,8 +1332,8 @@
       "published": true,
       "minimumSupportedVersion": "0.1.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.1",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.1/NovelLibrary_0.1.1_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.1.1",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.1.1/NovelLibrary_0.1.1_x64-setup.exe",
       "sha256": "9ad5247446149fea8b4d28aedb79e48b83b88f256d2bd98a83f1a4e8d86aae32",
       "sections": [
         {
@@ -1326,8 +1359,8 @@
       "published": true,
       "minimumSupportedVersion": "0.1.0",
       "requiresBackup": false,
-      "releaseUrl": "https://github.com/kengqin/book/releases/tag/v0.1.0",
-      "installerUrl": "https://github.com/kengqin/book/releases/download/v0.1.0/NovelLibrary_0.1.0_x64-setup.exe",
+      "releaseUrl": "https://github.com/kengqin/library-manage/releases/tag/v0.1.0",
+      "installerUrl": "https://github.com/kengqin/library-manage/releases/download/v0.1.0/NovelLibrary_0.1.0_x64-setup.exe",
       "sha256": "5a06917932eedfee57ec172f39d04582c05fa0930ddd3ebe3be3de9b03e387f3",
       "sections": [
         {

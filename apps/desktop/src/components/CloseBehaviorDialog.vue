@@ -64,7 +64,7 @@ onBeforeUnmount(() => {
           <h2 id="close-dialog-title">关闭窗口后要做什么？</h2>
           <button type="button" class="icon-button" title="取消关闭" :disabled="busy" @click="cancel"><X :size="20" /></button>
         </header>
-        <p>缩小到托盘后，IDE 插件仍可正常同步；直接退出后，需要重新打开小说书库才能继续同步。</p>
+        <p>缩小到托盘后，IDE 插件仍可正常同步；直接退出后，需要重新打开 library-manage 才能继续同步。</p>
         <label class="remember-close-choice"><input v-model="remember" type="checkbox" /><span>记住我的选择，下次不再询问</span></label>
         <footer>
           <button type="button" class="secondary-command danger-command" :disabled="busy" @click="choose('quit')">直接退出</button>

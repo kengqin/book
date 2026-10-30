@@ -1,4 +1,6 @@
-# 在线小说书库
+# library-manage
+
+在线小说书库。
 
 基于 VitePress 的多书阅读项目。Web、桌面端和移动端统一位于 `apps/`，跨端共享能力位于 `packages/`。每本书的内容与资料独立存放在 `apps/web/书库/<书名>/`。
 

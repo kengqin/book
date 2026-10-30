@@ -5,7 +5,7 @@ import {
   assertOfficialDownloadUrl,
   assertSignature,
   findRelease,
-  installerDownloadUrl,
+  updaterDownloadUrl,
   installerNameFromRelease,
   notesFromRelease,
   normalizeVersion,
@@ -22,7 +22,7 @@ export async function buildTargetManifest(options) {
   if (installerNameFromRelease(release) !== installerName) {
     throw new Error(`安装包文件名与版本目录不一致：${installerName}`)
   }
-  const url = installerDownloadUrl(manifest.repository, version, installerName)
+  const url = updaterDownloadUrl(manifest.repository, version, installerName)
   assertOfficialDownloadUrl(release.installerUrl, manifest.repository, version, installerName)
   const signature = assertSignature(options.signatureValue || await readFile(options.signature, 'utf8'))
 

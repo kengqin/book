@@ -13,9 +13,9 @@ function fixture() {
       title: '首版',
       channel: 'stable',
       published: true,
-      releaseUrl: `https://github.com/kengqin/book/releases/tag/${tag}`,
+      releaseUrl: `https://github.com/kengqin/library-manage/releases/tag/${tag}`,
       storeUrls: {
-        androidApk: `https://github.com/kengqin/book/releases/download/${tag}/novel-library-mobile-${version}.apk`
+        androidApk: `https://github.com/kengqin/library-manage/releases/download/${tag}/novel-library-mobile-${version}.apk`
       },
       apkSha256: '0'.repeat(64)
     }]
